@@ -1,0 +1,286 @@
+.header-content {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.header-icon {
+  width: 40px;
+  height: 40px;
+  border-radius: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.25rem;
+}
+
+.header-icon.entree {
+  background: rgba(34, 197, 94, 0.1);
+}
+
+.header-icon.sortie {
+  background: rgba(239, 68, 68, 0.1);
+}
+
+/* Search Container */
+.search-container {
+  position: relative;
+}
+
+.search-icon {
+  position: absolute;
+  left: 12px;
+  top: 50%;
+  transform: translateY(-50%);
+  font-size: 1rem;
+}
+
+.form-input.with-icon {
+  padding-left: 2.5rem;
+}
+
+.form-input.large {
+  font-size: 1.125rem;
+  padding: 0.75rem;
+}
+
+.search-dropdown {
+  position: absolute;
+  z-index: 10;
+  width: 100%;
+  margin-top: 4px;
+  background: white;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+  max-height: 240px;
+  overflow: auto;
+}
+
+.dropdown-item {
+  width: 100%;
+  padding: 0.75rem 1rem;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: none;
+  border: none;
+  border-bottom: 1px solid #f3f4f6;
+  text-align: left;
+  cursor: pointer;
+  transition: background 0.2s ease;
+}
+
+.dropdown-item:last-child {
+  border-bottom: none;
+}
+
+.dropdown-item:hover {
+  background: rgba(243, 244, 246, 0.5);
+}
+
+.dropdown-item .code {
+  color: #2563eb;
+  font-size: 0.875rem;
+  font-weight: 500;
+}
+
+.dropdown-item .name {
+  margin-left: 0.5rem;
+  color: #1f2937;
+}
+
+.dropdown-item .stock {
+  font-size: 0.875rem;
+  color: #6b7280;
+}
+
+.no-results {
+  padding: 0.75rem 1rem;
+  text-align: center;
+  color: #6b7280;
+  margin: 0;
+}
+
+/* Selected Product */
+.selected-product {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 1rem;
+  background: rgba(243, 244, 246, 0.5);
+  border-radius: 8px;
+}
+
+.product-icon {
+  font-size: 2.5rem;
+}
+
+.product-info {
+  flex: 1;
+}
+
+.product-name {
+  margin: 0;
+  font-weight: 500;
+  color: #1f2937;
+}
+
+.product-code {
+  margin: 0;
+  font-size: 0.875rem;
+  color: #2563eb;
+}
+
+.change-btn {
+  padding: 0.5rem 0.75rem;
+  background: none;
+  border: none;
+  color: #6b7280;
+  font-size: 0.875rem;
+  cursor: pointer;
+  transition: color 0.2s ease;
+}
+
+.change-btn:hover {
+  color: #1f2937;
+}
+
+/* Stock Preview */
+.stock-preview {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1rem;
+}
+
+.stock-box {
+  padding: 1rem;
+  background: #f3f4f6;
+  border-radius: 8px;
+  text-align: center;
+}
+
+.stock-box.success {
+  background: rgba(34, 197, 94, 0.1);
+}
+
+.stock-box.warning {
+  background: rgba(245, 158, 11, 0.1);
+}
+
+.stock-box.danger {
+  background: rgba(239, 68, 68, 0.1);
+}
+
+.stock-label {
+  margin: 0 0 0.25rem;
+  font-size: 0.875rem;
+  color: #6b7280;
+}
+
+.stock-value {
+  margin: 0;
+  font-size: 1.875rem;
+  font-weight: 700;
+  color: #1f2937;
+}
+
+.stock-box.success .stock-value {
+  color: #16a34a;
+}
+
+.stock-box.warning .stock-value {
+  color: #d97706;
+}
+
+.stock-box.danger .stock-value {
+  color: #dc2626;
+}
+
+.stock-unit {
+  margin: 0;
+  font-size: 0.75rem;
+  color: #6b7280;
+}
+
+/* Summary */
+.summary {
+  padding: 1rem;
+  border-radius: 8px;
+}
+
+.summary.success {
+  background: rgba(34, 197, 94, 0.1);
+  border: 1px solid rgba(34, 197, 94, 0.3);
+}
+
+.summary-title {
+  margin: 0 0 0.5rem;
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: #16a34a;
+}
+
+.summary-content {
+  font-size: 0.875rem;
+}
+
+.summary-content p {
+  margin: 0.25rem 0;
+  color: #1f2937;
+}
+
+.summary-content strong.success {
+  color: #16a34a;
+}
+
+.summary-content strong.danger {
+  color: #dc2626;
+}
+
+/* Buttons */
+.btn-success {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.625rem 1rem;
+  background: #16a34a;
+  border: none;
+  border-radius: 8px;
+  color: white;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.btn-success:hover {
+  background: #15803d;
+}
+
+.btn-success:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.btn-danger {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.625rem 1rem;
+  background: #dc2626;
+  border: none;
+  border-radius: 8px;
+  color: white;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.btn-danger:hover {
+  background: #b91c1c;
+}
+
+.btn-danger:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}

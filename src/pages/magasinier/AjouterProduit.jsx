@@ -1,6 +1,6 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Package, Save, X, ScanLine, Tag, Hash, Layers, AlertCircle, CheckCircle, Lightbulb } from 'lucide-react';
+import { Package, Save, X, QrCode, Tag, Hash, Layers, AlertCircle, CheckCircle, Lightbulb, Camera, StopCircle } from 'lucide-react';
 import SidebarMag from '../../components/magasinier/SidebarMag';
 import HeaderPage from '../../components/shared/HeaderPage';
 import LoadingSpinner from '../../components/shared/LoadingSpinner';
@@ -11,33 +11,29 @@ const categories = ['Informatique', 'Fournitures', 'Mobilier', 'Electronique', '
 const unites = ['Unite', 'Ramette', 'Boite', 'Carton', 'Kg', 'Litre', 'Metre'];
 
 const categorySuggestions = {
-  'cable': 'Informatique',
-  'hdmi': 'Informatique',
-  'usb': 'Informatique',
-  'souris': 'Informatique',
-  'clavier': 'Informatique',
-  'ecran': 'Informatique',
-  'papier': 'Fournitures',
-  'stylo': 'Fournitures',
-  'cartouche': 'Fournitures',
-  'encre': 'Fournitures',
-  'chaise': 'Mobilier',
-  'bureau': 'Mobilier',
-  'lampe': 'Electronique',
-  'tournevis': 'Outillage',
-  'marteau': 'Outillage'
+  'cable': 'Informatique', 'hdmi': 'Informatique', 'usb': 'Informatique',
+  'souris': 'Informatique', 'clavier': 'Informatique', 'ecran': 'Informatique',
+  'pc': 'Informatique', 'ordinateur': 'Informatique', 'imprimante': 'Informatique',
+  'papier': 'Fournitures', 'stylo': 'Fournitures', 'cartouche': 'Fournitures',
+  'encre': 'Fournitures', 'classeur': 'Fournitures', 'enveloppe': 'Fournitures',
+  'chaise': 'Mobilier', 'bureau': 'Mobilier', 'armoire': 'Mobilier', 'etagere': 'Mobilier',
+  'lampe': 'Electronique', 'ventilateur': 'Electronique', 'projecteur': 'Electronique',
+  'tournevis': 'Outillage', 'marteau': 'Outillage', 'pince': 'Outillage'
 };
 
 const AjouterProduit = ({ userName, onLogout }) => {
   const navigate = useNavigate();
   const toast = useToast();
+  const videoRef = useRef(null);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [showDoublonWarning, setShowDoublonWarning] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [suggestedCategory, setSuggestedCategory] = useState('');
+  const [showQrScanner, setShowQrScanner] = useState(false);
+  const [streamRef, setStreamRef] = useState(null);
   
   const [formData, setFormData] = useState({
-    codeBarres: '',
+    qrCode: '',
     nom: '',
     categorie: '',
     unite: 'Unite',
@@ -53,20 +49,54 @@ const AjouterProduit = ({ userName, onLogout }) => {
     return `${prefix}-${number}`;
   };
 
-  const handleScanBarcode = useCallback(() => {
-    const scannedCode = 'BC-' + Math.floor(Math.random() * 10000000);
-    setFormData(prev => ({ ...prev, codeBarres: scannedCode }));
-    toast.info('Code-barres scanne avec succes');
-    
-    if (Math.random() > 0.7) {
-      setShowDoublonWarning(true);
-      toast.warning('Un produit similaire a ete detecte');
+  const startQrScanner = useCallback(async () => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ 
+        video: { facingMode: 'environment' } 
+      });
+      setStreamRef(stream);
+      setShowQrScanner(true);
+      if (videoRef.current) {
+        videoRef.current.srcObject = stream;
+      }
+      toast.info('Camera activee - Presentez le QR Code');
+      
+      // Simulate QR scan after 3 seconds
+      setTimeout(() => {
+        const scannedCode = 'QR-' + Math.floor(Math.random() * 10000000);
+        setFormData(prev => ({ ...prev, qrCode: scannedCode }));
+        toast.success('QR Code scanne avec succes');
+        stopQrScanner(stream);
+        
+        if (Math.random() > 0.7) {
+          setShowDoublonWarning(true);
+          toast.warning('Un produit similaire a ete detecte');
+        }
+      }, 3000);
+    } catch (err) {
+      // Fallback: simulate scan without camera
+      const scannedCode = 'QR-' + Math.floor(Math.random() * 10000000);
+      setFormData(prev => ({ ...prev, qrCode: scannedCode }));
+      toast.info('QR Code simule (camera non disponible)');
+      
+      if (Math.random() > 0.7) {
+        setShowDoublonWarning(true);
+        toast.warning('Un produit similaire a ete detecte');
+      }
     }
   }, [toast]);
 
+  const stopQrScanner = useCallback((stream) => {
+    const s = stream || streamRef;
+    if (s) {
+      s.getTracks().forEach(track => track.stop());
+    }
+    setShowQrScanner(false);
+    setStreamRef(null);
+  }, [streamRef]);
+
   const handleNomChange = useCallback((value) => {
     setFormData(prev => ({ ...prev, nom: value }));
-    
     const lowerValue = value.toLowerCase();
     for (const [keyword, category] of Object.entries(categorySuggestions)) {
       if (lowerValue.includes(keyword)) {
@@ -87,9 +117,9 @@ const AjouterProduit = ({ userName, onLogout }) => {
 
   const validateForm = useCallback(() => {
     const newErrors = {};
-    if (!formData.codeBarres.trim()) newErrors.codeBarres = 'Code-barres requis';
+    if (!formData.qrCode.trim()) newErrors.qrCode = 'QR Code requis';
     if (!formData.nom.trim()) newErrors.nom = 'Nom requis';
-    if (formData.nom.length < 3) newErrors.nom = 'Le nom doit contenir au moins 3 caracteres';
+    if (formData.nom.trim().length > 0 && formData.nom.trim().length < 3) newErrors.nom = 'Le nom doit contenir au moins 3 caracteres';
     if (!formData.categorie) newErrors.categorie = 'Categorie requise';
     if (!formData.seuilMinimum || parseInt(formData.seuilMinimum) < 0) {
       newErrors.seuilMinimum = 'Seuil minimum valide requis';
@@ -106,15 +136,11 @@ const AjouterProduit = ({ userName, onLogout }) => {
     }
 
     setIsSubmitting(true);
-    
-    // Simulation de l'envoi
     await new Promise(resolve => setTimeout(resolve, 1200));
     
     const productCode = generateCode();
     console.log('Nouveau produit (en attente de validation):', { 
-      code: productCode,
-      ...formData,
-      statut: 'en_attente_validation'
+      code: productCode, ...formData, statut: 'en_attente_validation'
     });
     
     toast.success('Produit soumis pour validation avec succes');
@@ -157,12 +183,9 @@ const AjouterProduit = ({ userName, onLogout }) => {
                   <AlertCircle size={18} />
                   <div>
                     <strong>Produit similaire detecte</strong>
-                    <p>Un produit avec un code-barres similaire existe deja. Verifiez avant de continuer.</p>
+                    <p>Un produit avec un QR Code similaire existe deja. Verifiez avant de continuer.</p>
                   </div>
-                  <button 
-                    onClick={() => setShowDoublonWarning(false)}
-                    aria-label="Fermer l'alerte"
-                  >
+                  <button onClick={() => setShowDoublonWarning(false)} aria-label="Fermer l'alerte">
                     <X size={16} />
                   </button>
                 </div>
@@ -171,33 +194,49 @@ const AjouterProduit = ({ userName, onLogout }) => {
               <form onSubmit={handleSubmit} className="ajouter-form" noValidate>
                 <div className="form-section">
                   <h3>Identification</h3>
+                  
+                  {/* QR Code Scanner */}
                   <div className="form-group">
-                    <label htmlFor="codeBarres">
-                      <ScanLine size={16} />
-                      Code-barres
+                    <label htmlFor="qrCode">
+                      <QrCode size={16} />
+                      QR Code
                     </label>
                     <div className="input-with-btn">
                       <input
-                        id="codeBarres"
+                        id="qrCode"
                         type="text"
-                        value={formData.codeBarres}
-                        onChange={(e) => setFormData({ ...formData, codeBarres: e.target.value })}
-                        placeholder="Scanner ou saisir le code-barres"
-                        className={errors.codeBarres ? 'error' : ''}
-                        aria-invalid={errors.codeBarres ? 'true' : 'false'}
-                        aria-describedby={errors.codeBarres ? 'codeBarres-error' : undefined}
+                        value={formData.qrCode}
+                        onChange={(e) => setFormData({ ...formData, qrCode: e.target.value })}
+                        placeholder="Scanner ou saisir le QR Code"
+                        className={errors.qrCode ? 'error' : ''}
+                        aria-invalid={errors.qrCode ? 'true' : 'false'}
                       />
-                      <button type="button" className="scan-btn" onClick={handleScanBarcode}>
-                        <ScanLine size={18} />
-                        Scanner
-                      </button>
+                      {!showQrScanner ? (
+                        <button type="button" className="scan-btn" onClick={startQrScanner}>
+                          <Camera size={18} />
+                          Scanner QR
+                        </button>
+                      ) : (
+                        <button type="button" className="scan-btn scanning" onClick={() => stopQrScanner()}>
+                          <StopCircle size={18} />
+                          Arreter
+                        </button>
+                      )}
                     </div>
-                    {errors.codeBarres && (
-                      <span id="codeBarres-error" className="error-text" role="alert">
-                        {errors.codeBarres}
-                      </span>
+                    {errors.qrCode && (
+                      <span className="error-text" role="alert">{errors.qrCode}</span>
                     )}
                   </div>
+
+                  {showQrScanner && (
+                    <div className="qr-scanner-container">
+                      <video ref={videoRef} autoPlay playsInline className="qr-video" />
+                      <div className="qr-overlay">
+                        <div className="qr-frame"></div>
+                        <p>Presentez le QR Code devant la camera</p>
+                      </div>
+                    </div>
+                  )}
 
                   <div className="form-group">
                     <label htmlFor="nom">
@@ -212,15 +251,14 @@ const AjouterProduit = ({ userName, onLogout }) => {
                       placeholder="Ex: Cable HDMI 2m"
                       className={errors.nom ? 'error' : ''}
                       aria-invalid={errors.nom ? 'true' : 'false'}
-                      aria-describedby={errors.nom ? 'nom-error' : undefined}
                     />
                     {errors.nom && (
-                      <span id="nom-error" className="error-text" role="alert">{errors.nom}</span>
+                      <span className="error-text" role="alert">{errors.nom}</span>
                     )}
                     {suggestedCategory && (
                       <div className="category-suggestion">
                         <Lightbulb size={14} />
-                        <span>Categorie suggeree: <strong>{suggestedCategory}</strong></span>
+                        <span>Suggestion intelligente: <strong>{suggestedCategory}</strong></span>
                         <button type="button" onClick={applySuggestedCategory}>
                           Appliquer
                         </button>
@@ -242,8 +280,6 @@ const AjouterProduit = ({ userName, onLogout }) => {
                         value={formData.categorie}
                         onChange={(e) => setFormData({ ...formData, categorie: e.target.value })}
                         className={errors.categorie ? 'error' : ''}
-                        aria-invalid={errors.categorie ? 'true' : 'false'}
-                        aria-describedby={errors.categorie ? 'categorie-error' : undefined}
                       >
                         <option value="">Selectionner...</option>
                         {categories.map(cat => (
@@ -251,9 +287,7 @@ const AjouterProduit = ({ userName, onLogout }) => {
                         ))}
                       </select>
                       {errors.categorie && (
-                        <span id="categorie-error" className="error-text" role="alert">
-                          {errors.categorie}
-                        </span>
+                        <span className="error-text" role="alert">{errors.categorie}</span>
                       )}
                     </div>
                     <div className="form-group">
@@ -289,15 +323,11 @@ const AjouterProduit = ({ userName, onLogout }) => {
                       onChange={(e) => setFormData({ ...formData, seuilMinimum: e.target.value })}
                       placeholder="Ex: 10"
                       className={errors.seuilMinimum ? 'error' : ''}
-                      aria-invalid={errors.seuilMinimum ? 'true' : 'false'}
-                      aria-describedby="seuilMinimum-hint"
                     />
                     {errors.seuilMinimum && (
                       <span className="error-text" role="alert">{errors.seuilMinimum}</span>
                     )}
-                    <span id="seuilMinimum-hint" className="input-hint">
-                      Alerte declenchee quand le stock passe sous ce seuil
-                    </span>
+                    <span className="input-hint">Alerte declenchee quand le stock passe sous ce seuil</span>
                   </div>
                 </div>
 
@@ -316,20 +346,11 @@ const AjouterProduit = ({ userName, onLogout }) => {
                 </div>
 
                 <div className="form-actions">
-                  <button 
-                    type="button" 
-                    className="btn-cancel" 
-                    onClick={() => navigate('/magasinier')}
-                    disabled={isSubmitting}
-                  >
+                  <button type="button" className="btn-cancel" onClick={() => navigate('/magasinier')} disabled={isSubmitting}>
                     <X size={18} />
                     Annuler
                   </button>
-                  <button 
-                    type="submit" 
-                    className="btn-submit"
-                    disabled={isSubmitting}
-                  >
+                  <button type="submit" className="btn-submit" disabled={isSubmitting}>
                     <CheckCircle size={18} />
                     Soumettre pour validation
                   </button>

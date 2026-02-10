@@ -1,0 +1,417 @@
+/* ============================================
+   HoverCard - Beautiful Hover Effects
+   ============================================ */
+
+:root {
+  --hover-card-primary: #1976d2;
+  --hover-card-primary-dark: #1565c0;
+  --hover-card-accent: #ff6b6b;
+  --hover-card-success: #4caf50;
+  --hover-card-warning: #ff9800;
+  --hover-card-bg: #ffffff;
+  --hover-card-bg-dark: #1e1e1e;
+  --hover-card-text: #333333;
+  --hover-card-text-dark: #ffffff;
+  --hover-card-shadow: rgba(0, 0, 0, 0.15);
+  --hover-card-transition: 0.4s cubic-bezier(0.25, 0.46, 0.45, 0.94);
+}
+
+/* Base Card Styles */
+.hover-card {
+  position: relative;
+  border-radius: 16px;
+  background: var(--hover-card-bg);
+  overflow: hidden;
+  cursor: pointer;
+  transition: all var(--hover-card-transition);
+  box-shadow: 0 4px 20px var(--hover-card-shadow);
+}
+
+/* Size Variants */
+.hover-card--small {
+  width: 280px;
+  min-height: 180px;
+}
+
+.hover-card--medium {
+  width: 320px;
+  min-height: 220px;
+}
+
+.hover-card--large {
+  width: 380px;
+  min-height: 280px;
+}
+
+/* Variant: Default */
+.hover-card--default {
+  border: 1px solid rgba(0, 0, 0, 0.08);
+}
+
+.hover-card--default:hover {
+  transform: translateY(-8px);
+  box-shadow: 0 20px 40px rgba(0, 0, 0, 0.2);
+}
+
+/* Variant: Gradient */
+.hover-card--gradient {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  border: none;
+  color: white;
+}
+
+.hover-card--gradient .hover-card__title,
+.hover-card--gradient .hover-card__description {
+  color: white;
+}
+
+.hover-card--gradient:hover {
+  transform: translateY(-8px) scale(1.02);
+  box-shadow: 0 25px 50px rgba(102, 126, 234, 0.4);
+}
+
+/* Variant: Glass */
+.hover-card--glass {
+  background: rgba(255, 255, 255, 0.1);
+  backdrop-filter: blur(10px);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+}
+
+.hover-card--glass:hover {
+  background: rgba(255, 255, 255, 0.15);
+  transform: translateY(-8px) scale(1.02);
+  box-shadow: 0 25px 50px rgba(0, 0, 0, 0.3);
+}
+
+/* Image Styles */
+.hover-card__image-wrapper {
+  position: relative;
+  height: 140px;
+  overflow: hidden;
+}
+
+.hover-card__image {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  transition: transform 0.6s ease;
+}
+
+.hover-card:hover .hover-card__image {
+  transform: scale(1.15);
+}
+
+.hover-card__image-overlay {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(to bottom, transparent 0%, rgba(0, 0, 0, 0.3) 100%);
+}
+
+/* Icon Styles */
+.hover-card__icon-wrapper {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 2rem 0;
+}
+
+.hover-card__icon {
+  font-size: 3rem;
+  transition: transform var(--hover-card-transition);
+}
+
+.hover-card:hover .hover-card__icon {
+  transform: scale(1.2) rotate(5deg);
+}
+
+/* Content Styles */
+.hover-card__content {
+  padding: 1.5rem;
+  position: relative;
+  z-index: 1;
+}
+
+.hover-card__header {
+  text-align: center;
+  margin-bottom: 0.75rem;
+}
+
+.hover-card__title {
+  font-size: 1.25rem;
+  font-weight: 700;
+  color: var(--hover-card-text);
+  margin: 0;
+  transition: transform var(--hover-card-transition);
+}
+
+.hover-card:hover .hover-card__title {
+  transform: translateY(-2px);
+}
+
+/* Separator */
+.hover-card__separator {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  margin-top: 8px;
+  opacity: 0.6;
+}
+
+.hover-card__separator-line {
+  width: 30px;
+  height: 2px;
+  background: currentColor;
+  opacity: 0.5;
+  transition: all var(--hover-card-transition);
+}
+
+.hover-card__separator-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: currentColor;
+  transition: all var(--hover-card-transition);
+}
+
+.hover-card:hover .hover-card__separator-line {
+  width: 50px;
+  opacity: 1;
+}
+
+.hover-card:hover .hover-card__separator-dot {
+  transform: scale(1.5);
+}
+
+/* Description */
+.hover-card__description {
+  font-size: 0.9rem;
+  color: #666;
+  text-align: center;
+  margin: 0;
+  line-height: 1.5;
+  transition: all var(--hover-card-transition);
+}
+
+/* Reveal Section */
+.hover-card__reveal {
+  position: absolute;
+  inset: 0;
+  padding: 1.5rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0;
+  transform: translateY(20px);
+  transition: all var(--hover-card-transition);
+}
+
+.hover-card:hover .hover-card__reveal {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+.hover-card__reveal-bg {
+  position: absolute;
+  inset: 0;
+  background: inherit;
+  filter: blur(20px);
+  opacity: 0.9;
+  z-index: -1;
+}
+
+.hover-card__reveal-content {
+  text-align: center;
+  color: inherit;
+  font-size: 0.95rem;
+  line-height: 1.6;
+}
+
+/* Indicator Arrow */
+.hover-card__indicator {
+  position: absolute;
+  bottom: 1rem;
+  right: 1rem;
+  width: 36px;
+  height: 36px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  background: rgba(0, 0, 0, 0.05);
+  color: var(--hover-card-text);
+  transition: all var(--hover-card-transition);
+  transform: translateX(-10px) translateY(10px);
+  opacity: 0;
+}
+
+.hover-card__indicator svg {
+  width: 20px;
+  height: 20px;
+}
+
+.hover-card:hover .hover-card__indicator {
+  transform: translateX(0) translateY(0);
+  opacity: 1;
+}
+
+/* Variant-specific indicator colors */
+.hover-card--gradient .hover-card__indicator {
+  background: rgba(255, 255, 255, 0.2);
+  color: white;
+}
+
+.hover-card--glass .hover-card__indicator {
+  background: rgba(255, 255, 255, 0.2);
+  color: white;
+}
+
+/* ============================================
+   Hover Card Grid Layout
+   ============================================ */
+
+.hover-card-grid {
+  display: grid;
+  gap: 1.5rem;
+  padding: 2rem;
+}
+
+.hover-card-grid--2 {
+  grid-template-columns: repeat(2, 1fr);
+}
+
+.hover-card-grid--3 {
+  grid-template-columns: repeat(3, 1fr);
+}
+
+.hover-card-grid--4 {
+  grid-template-columns: repeat(4, 1fr);
+}
+
+.hover-card-grid--auto {
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+}
+
+/* Responsive Grid */
+@media (max-width: 1024px) {
+  .hover-card-grid--4 {
+    grid-template-columns: repeat(2, 1fr);
+  }
+  
+  .hover-card-grid--3 {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+@media (max-width: 768px) {
+  .hover-card-grid--4,
+  .hover-card-grid--3,
+  .hover-card-grid--2 {
+    grid-template-columns: 1fr;
+  }
+  
+  .hover-card--medium {
+    width: 100%;
+  }
+  
+  .hover-card--large {
+    width: 100%;
+  }
+}
+
+/* ============================================
+   Animated Card Variants
+   ============================================ */
+
+/* Slide Up Variant */
+.hover-card--slide-up {
+  overflow: hidden;
+}
+
+.hover-card--slide-up .hover-card__reveal {
+  top: 100%;
+  left: 0;
+  right: 0;
+  transform: translateY(0);
+}
+
+.hover-card--slide-up:hover .hover-card__reveal {
+  top: 0;
+  transform: translateY(0);
+}
+
+/* Flip Variant */
+.hover-card--flip {
+  perspective: 1000px;
+  transform-style: preserve-3d;
+}
+
+.hover-card--flip .hover-card__front,
+.hover-card--flip .hover-card__back {
+  backface-visibility: hidden;
+  transition: transform 0.8s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+}
+
+.hover-card--flip:hover .hover-card__front {
+  transform: rotateY(180deg);
+}
+
+.hover-card--flip:hover .hover-card__back {
+  transform: rotateY(0);
+}
+
+/* Scale & Glow Variant */
+.hover-card--glow:hover {
+  box-shadow: 
+    0 0 20px rgba(25, 118, 210, 0.4),
+    0 0 40px rgba(25, 118, 210, 0.2),
+    0 0 60px rgba(25, 118, 210, 0.1);
+}
+
+/* Border Gradient Variant */
+.hover-card--border-gradient {
+  background: white;
+  border: 2px solid transparent;
+  background-clip: padding-box;
+}
+
+.hover-card--border-gradient::before {
+  content: '';
+  position: absolute;
+  inset: -2px;
+  border-radius: 18px;
+  background: linear-gradient(135deg, #667eea, #764ba2, #f093fb, #667eea);
+  background-size: 300% 300%;
+  z-index: -1;
+  opacity: 0;
+  transition: opacity var(--hover-card-transition);
+}
+
+.hover-card--border-gradient:hover::before {
+  opacity: 1;
+  animation: gradient-rotate 3s ease infinite;
+}
+
+@keyframes gradient-rotate {
+  0%, 100% { background-position: 0% 50%; }
+  50% { background-position: 100% 50%; }
+}
+
+/* ============================================
+   Dark Mode Support
+   ============================================ */
+
+@media (prefers-color-scheme: dark) {
+  .hover-card--default {
+    background: var(--hover-card-bg-dark);
+    border-color: rgba(255, 255, 255, 0.1);
+  }
+  
+  .hover-card--default .hover-card__title {
+    color: var(--hover-card-text-dark);
+  }
+  
+  .hover-card--default .hover-card__description {
+    color: rgba(255, 255, 255, 0.7);
+  }
+}

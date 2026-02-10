@@ -70,6 +70,15 @@ const App = () => {
     return <SplashScreen onComplete={handleSplashComplete} />;
   }
 
+  const homePath =
+    userRole === 'magasinier'
+      ? '/magasinier'
+      : userRole === 'responsable'
+        ? '/responsable'
+        : userRole === 'demandeur'
+          ? '/demandeur'
+          : '/';
+
   return (
     <ToastProvider>
       <BrowserRouter>
@@ -118,6 +127,7 @@ const App = () => {
             </>
           ) : (
             <>
+              <Route path="/login/*" element={<Navigate to={homePath} replace />} />
               {userRole === 'magasinier' && (
                 <>
                   <Route path="/magasinier" element={<ProduitsMag userName={userName} onLogout={handleLogout} />} />

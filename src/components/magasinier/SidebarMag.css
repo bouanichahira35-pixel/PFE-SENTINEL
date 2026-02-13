@@ -43,8 +43,16 @@
 .sidebar-logo-text {
   display: flex;
   align-items: center;
+  justify-content: space-between;
+  width: 100%;
   gap: 0.5rem;
   animation: fadeInUp 0.3s ease-out;
+}
+
+.sidebar-logo-ident {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
 }
 
 .sidebar-logo-title {
@@ -52,6 +60,15 @@
   font-size: 1rem;
   color: #1565c0;
   letter-spacing: 1px;
+}
+
+.sidebar-user-name {
+  font-size: 0.75rem;
+  color: #4b5563;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 140px;
 }
 
 .sidebar-toggle-btn {
@@ -62,7 +79,7 @@
   font-size: 1.25rem;
   padding: 0.25rem;
   transition: all 0.3s ease;
-  margin-left: 0.5rem;
+  margin-left: 0.25rem;
 }
 
 .sidebar-toggle-btn:hover {

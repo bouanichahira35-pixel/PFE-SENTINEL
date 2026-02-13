@@ -3,8 +3,9 @@ import { Package, FileText, ChevronLeft, ChevronRight, LogOut } from 'lucide-rea
 import logoETAP from '../../assets/logoETAP.png';
 import './SidebarDem.css';
 
-const SidebarDem = ({ collapsed, onToggle, onLogout }) => {
+const SidebarDem = ({ collapsed, onToggle, onLogout, userName }) => {
   const location = useLocation();
+  const sessionUserName = userName || sessionStorage.getItem('userName') || localStorage.getItem('userName') || 'Utilisateur';
 
   const menuItems = [
     { icon: Package, label: 'Produits', path: '/demandeur' },
@@ -23,7 +24,10 @@ const SidebarDem = ({ collapsed, onToggle, onLogout }) => {
         <img src={logoETAP} alt="ETAP" className="sidebar-logo-img" />
         {!collapsed && (
           <div className="sidebar-logo-text">
-            <span className="sidebar-logo-title">DEMANDEUR</span>
+            <div className="sidebar-logo-ident">
+              <span className="sidebar-logo-title">DEMANDEUR</span>
+              <span className="sidebar-user-name">{sessionUserName}</span>
+            </div>
             <button onClick={onToggle} className="sidebar-toggle-btn">
               <ChevronLeft size={20} />
             </button>

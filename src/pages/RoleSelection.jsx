@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Package, LayoutDashboard, GraduationCap } from 'lucide-react';
 import logoETAP from '../assets/logoETAP.png';
@@ -7,6 +7,15 @@ import './RoleSelection.css';
 const RoleSelection = () => {
   const navigate = useNavigate();
   const [hoveredRole, setHoveredRole] = useState(null);
+  const [logoutMessage, setLogoutMessage] = useState('');
+
+  useEffect(() => {
+    const message = sessionStorage.getItem('logoutReason');
+    if (message) {
+      setLogoutMessage(message);
+      sessionStorage.removeItem('logoutReason');
+    }
+  }, []);
 
   const roles = [
     {
@@ -46,6 +55,11 @@ const RoleSelection = () => {
           <img src={logoETAP} alt="ETAP Logo" className="role-logo" />
           <h1 className="role-main-title">Systeme de Gestion de Stock</h1>
           <p className="role-subtitle">Selectionnez votre profil pour acceder a l'application</p>
+          {logoutMessage && (
+            <div className="role-session-alert">
+              {logoutMessage}
+            </div>
+          )}
         </div>
 
         <div className="role-cards">

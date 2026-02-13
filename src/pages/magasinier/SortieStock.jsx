@@ -85,6 +85,7 @@ const SortieStock = ({ userName, onLogout }) => {
         collapsed={sidebarCollapsed} 
         onToggle={() => setSidebarCollapsed(!sidebarCollapsed)}
         onLogout={onLogout}
+        userName={userName}
       />
       
       <div className="main-container">
@@ -290,3 +291,4 @@ const SortieStock = ({ userName, onLogout }) => {
 };
 
 export default SortieStock;
+

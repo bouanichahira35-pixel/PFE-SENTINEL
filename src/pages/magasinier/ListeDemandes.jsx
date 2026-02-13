@@ -90,6 +90,7 @@ const ListeDemandes = ({ userName, onLogout }) => {
         collapsed={sidebarCollapsed} 
         onToggle={() => setSidebarCollapsed(!sidebarCollapsed)}
         onLogout={onLogout}
+        userName={userName}
       />
       
       <div className="main-container">
@@ -209,3 +210,4 @@ const ListeDemandes = ({ userName, onLogout }) => {
 };
 
 export default ListeDemandes;
+

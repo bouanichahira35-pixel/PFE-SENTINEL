@@ -99,6 +99,7 @@ const ChatbotResp = ({ userName, onLogout }) => {
         collapsed={sidebarCollapsed} 
         onToggle={() => setSidebarCollapsed(!sidebarCollapsed)}
         onLogout={onLogout}
+        userName={userName}
       />
       
       <div className="main-container">
@@ -207,3 +208,4 @@ const ChatbotResp = ({ userName, onLogout }) => {
 };
 
 export default ChatbotResp;
+

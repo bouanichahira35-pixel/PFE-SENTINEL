@@ -34,6 +34,7 @@
          collapsed={sidebarCollapsed} 
          onToggle={() => setSidebarCollapsed(!sidebarCollapsed)}
          onLogout={onLogout}
+        userName={userName}
        />
        
        <div className="main-container">
@@ -123,3 +124,4 @@
  };
 
  export default VoirDetails;
+

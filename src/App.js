@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { ToastProvider } from "./components/shared/Toast";
 
 import SplashScreen from "./components/shared/SplashScreen";
@@ -30,38 +30,174 @@ import NotFound from "./pages/NotFound";
 
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 
+const SESSION_TIMEOUT_MS = 15 * 60 * 1000;
+const SESSION_STARTED_KEY = "sessionStartedAt";
+const LAST_ACTIVITY_KEY = "lastActivityAt";
+const LOGOUT_REASON_KEY = "logoutReason";
+
+function decodeJwtPayload(token) {
+  try {
+    const payloadPart = token.split(".")[1];
+    if (!payloadPart) return null;
+    const json = atob(payloadPart.replace(/-/g, "+").replace(/_/g, "/"));
+    return JSON.parse(json);
+  } catch {
+    return null;
+  }
+}
+
 const App = () => {
   const [showSplash, setShowSplash] = useState(true);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [userRole, setUserRole] = useState("");
   const [userName, setUserName] = useState("");
 
-  useEffect(() => {
-    const savedRole = localStorage.getItem("userRole");
-    const savedName = localStorage.getItem("userName");
-    if (savedRole && savedName) {
-      setUserRole(savedRole);
-      setUserName(savedName);
-      setIsAuthenticated(true);
+  const handleLogout = useCallback((reason = "") => {
+    setUserName("");
+    setUserRole("");
+    setIsAuthenticated(false);
+
+    if (reason) {
+      sessionStorage.setItem(LOGOUT_REASON_KEY, reason);
     }
+
+    sessionStorage.removeItem("token");
+    sessionStorage.removeItem("userName");
+    sessionStorage.removeItem("userRole");
+    sessionStorage.removeItem(SESSION_STARTED_KEY);
+    sessionStorage.removeItem(LAST_ACTIVITY_KEY);
+
+    localStorage.removeItem("token");
+    localStorage.removeItem("userName");
+    localStorage.removeItem("userRole");
   }, []);
+
+  useEffect(() => {
+    const token = sessionStorage.getItem("token") || localStorage.getItem("token");
+    const savedRole = sessionStorage.getItem("userRole") || localStorage.getItem("userRole");
+    const savedName = sessionStorage.getItem("userName") || localStorage.getItem("userName");
+
+    if (!token || !savedRole || !savedName) return;
+
+    const payload = decodeJwtPayload(token);
+    const expMs = payload?.exp ? payload.exp * 1000 : 0;
+
+    if (!expMs || Date.now() >= expMs) {
+      handleLogout("Session expirée. Veuillez vous reconnecter.");
+      return;
+    }
+
+    // Migrate old localStorage sessions to sessionStorage (logout when browser closes).
+    sessionStorage.setItem("token", token);
+    sessionStorage.setItem("userRole", savedRole);
+    sessionStorage.setItem("userName", savedName);
+    sessionStorage.setItem(
+      SESSION_STARTED_KEY,
+      sessionStorage.getItem(SESSION_STARTED_KEY) || String(Date.now())
+    );
+    sessionStorage.setItem(
+      LAST_ACTIVITY_KEY,
+      sessionStorage.getItem(LAST_ACTIVITY_KEY) || String(Date.now())
+    );
+
+    localStorage.removeItem("token");
+    localStorage.removeItem("userRole");
+    localStorage.removeItem("userName");
+
+    setUserRole(savedRole);
+    setUserName(savedName);
+    setIsAuthenticated(true);
+  }, [handleLogout]);
+
+  // Absolute JWT expiration timer.
+  useEffect(() => {
+    if (!isAuthenticated) return undefined;
+
+    const token = sessionStorage.getItem("token");
+    const payload = token ? decodeJwtPayload(token) : null;
+    const expMs = payload?.exp ? payload.exp * 1000 : 0;
+
+    if (!expMs) {
+      handleLogout("Session expirée. Veuillez vous reconnecter.");
+      return undefined;
+    }
+
+    const remaining = expMs - Date.now();
+    if (remaining <= 0) {
+      handleLogout("Session expirée. Veuillez vous reconnecter.");
+      return undefined;
+    }
+
+    const timer = setTimeout(() => {
+      handleLogout("Session expirée (15 min). Veuillez vous reconnecter.");
+    }, remaining);
+
+    return () => clearTimeout(timer);
+  }, [isAuthenticated, handleLogout]);
+
+  // Inactivity timeout timer (15 min max without activity).
+  useEffect(() => {
+    if (!isAuthenticated) return undefined;
+
+    let inactivityTimer;
+
+    const resetInactivityTimer = () => {
+      clearTimeout(inactivityTimer);
+      sessionStorage.setItem(LAST_ACTIVITY_KEY, String(Date.now()));
+      inactivityTimer = setTimeout(() => {
+        handleLogout("Déconnexion automatique après 15 min d'inactivité.");
+      }, SESSION_TIMEOUT_MS);
+    };
+
+    const events = ["mousemove", "mousedown", "keydown", "scroll", "touchstart", "click"];
+    events.forEach((eventName) => window.addEventListener(eventName, resetInactivityTimer));
+
+    resetInactivityTimer();
+
+    return () => {
+      clearTimeout(inactivityTimer);
+      events.forEach((eventName) => window.removeEventListener(eventName, resetInactivityTimer));
+    };
+  }, [isAuthenticated, handleLogout]);
+
+  // Safety guard: enforce max 15 min session age and max 15 min inactivity.
+  useEffect(() => {
+    if (!isAuthenticated) return undefined;
+
+    const interval = setInterval(() => {
+      const now = Date.now();
+      const startedAt = Number(sessionStorage.getItem(SESSION_STARTED_KEY) || 0);
+      const lastActivity = Number(sessionStorage.getItem(LAST_ACTIVITY_KEY) || 0);
+
+      if (!startedAt || !lastActivity) {
+        handleLogout("Session expirée. Veuillez vous reconnecter.");
+        return;
+      }
+
+      if (now - startedAt >= SESSION_TIMEOUT_MS || now - lastActivity >= SESSION_TIMEOUT_MS) {
+        handleLogout("Session expirée (15 min). Veuillez vous reconnecter.");
+      }
+    }, 5000);
+
+    return () => clearInterval(interval);
+  }, [isAuthenticated, handleLogout]);
 
   const handleSplashComplete = () => {
     setShowSplash(false);
   };
 
-  const handleLogin = (username, role) => {
-    setUserName(username);
-    setUserRole(role);
+  const handleLogin = (user, token) => {
+    setUserName(user.username);
+    setUserRole(user.role);
     setIsAuthenticated(true);
-    localStorage.setItem("userName", username);
-    localStorage.setItem("userRole", role);
-  };
 
-  const handleLogout = () => {
-    setUserName("");
-    setUserRole("");
-    setIsAuthenticated(false);
+    sessionStorage.setItem("token", token);
+    sessionStorage.setItem("userName", user.username);
+    sessionStorage.setItem("userRole", user.role);
+    sessionStorage.setItem(SESSION_STARTED_KEY, String(Date.now()));
+    sessionStorage.setItem(LAST_ACTIVITY_KEY, String(Date.now()));
+
+    localStorage.removeItem("token");
     localStorage.removeItem("userName");
     localStorage.removeItem("userRole");
   };

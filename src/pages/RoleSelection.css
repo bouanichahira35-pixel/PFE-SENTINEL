@@ -66,6 +66,18 @@
   margin: 0;
 }
 
+.role-session-alert {
+  margin: 1rem auto 0;
+  max-width: 560px;
+  background: #fff4e5;
+  border: 1px solid #f59e0b;
+  color: #92400e;
+  border-radius: 10px;
+  padding: 0.75rem 1rem;
+  font-size: 0.9rem;
+  font-weight: 500;
+}
+
 .role-cards {
   display: flex;
   gap: 1.5rem;

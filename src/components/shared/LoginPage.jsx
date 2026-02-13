@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { User, Lock, AlertTriangle } from 'lucide-react';
 import logoETAP from '../../assets/logoETAP.png';
+import { post } from '../../services/api';
 import './LoginPage.css';
 
 const LoginPage = ({ role, roleName, onLogin, redirectPath }) => {
@@ -23,21 +24,32 @@ const LoginPage = ({ role, roleName, onLogin, redirectPath }) => {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    setError('');
     setIsLoading(true);
 
-    setTimeout(() => {
-      if (formData.username && formData.password) {
-        onLogin(formData.username, role);
-        navigate(redirectPath);
-      } else {
+    try {
+      if (!formData.username || !formData.password) {
         setError('Veuillez remplir tous les champs');
+        return;
       }
+
+      const data = await post('/auth/login', {
+        identifier: formData.username,
+        password: formData.password,
+        role,
+      });
+
+      onLogin(data.user, data.token);
+      navigate(redirectPath);
+    } catch (err) {
+      setError(err.message || 'Erreur de connexion');
+    } finally {
       setIsLoading(false);
-    }, 1000);
+    }
   };
 
   const handleForgotPassword = () => {
-    navigate('/mot-de-passe-oublie');
+    navigate('/mot-de-passe-oublie', { state: { role } });
   };
 
   return (

@@ -3,8 +3,9 @@ import { Package, History, FileText, MessageCircle, Settings, ChevronLeft, Chevr
 import logoETAP from '../../assets/logoETAP.png';
 import './SidebarMag.css';
 
-const SidebarMag = ({ collapsed, onToggle, onLogout }) => {
+const SidebarMag = ({ collapsed, onToggle, onLogout, userName }) => {
   const location = useLocation();
+  const sessionUserName = userName || sessionStorage.getItem('userName') || localStorage.getItem('userName') || 'Utilisateur';
 
   const menuItems = [
     { icon: Package, label: 'Produits', path: '/magasinier' },
@@ -26,7 +27,10 @@ const SidebarMag = ({ collapsed, onToggle, onLogout }) => {
         <img src={logoETAP} alt="ETAP" className="sidebar-logo-img" />
         {!collapsed && (
           <div className="sidebar-logo-text">
-            <span className="sidebar-logo-title">MAGASINIER</span>
+            <div className="sidebar-logo-ident">
+              <span className="sidebar-logo-title">MAGASINIER</span>
+              <span className="sidebar-user-name">{sessionUserName}</span>
+            </div>
             <button onClick={onToggle} className="sidebar-toggle-btn">
               <ChevronLeft size={20} />
             </button>

@@ -5,9 +5,16 @@ import SidebarMag from '../../components/magasinier/SidebarMag';
 import HeaderPage from '../../components/shared/HeaderPage';
 import LoadingSpinner from '../../components/shared/LoadingSpinner';
 import { useToast } from '../../components/shared/Toast';
+import { post } from '../../services/api';
 import './AjouterProduit.css';
 
-const categories = ['Informatique', 'Fournitures', 'Mobilier', 'Electronique', 'Outillage', 'Autre'];
+const families = [
+  { value: 'economat', label: 'Economat' },
+  { value: 'produit_chimique', label: 'Produit chimique' },
+  { value: 'gaz', label: 'Gaz' },
+  { value: 'consommable_informatique', label: 'Consommable informatique' },
+  { value: 'consommable_laboratoire', label: 'Consommable laboratoire' },
+];
 const unites = ['Unite', 'Ramette', 'Boite', 'Carton', 'Kg', 'Litre', 'Metre'];
 
 const categorySuggestions = {
@@ -36,18 +43,19 @@ const AjouterProduit = ({ userName, onLogout }) => {
     qrCode: '',
     nom: '',
     categorie: '',
+    famille: '',
     unite: 'Unite',
     seuilMinimum: '',
+    stockInitial: '0',
+    emplacement: '',
+    chemicalClass: '',
+    physicalState: '',
+    gasPressure: '',
+    gasPurity: '',
     description: ''
   });
 
   const [errors, setErrors] = useState({});
-
-  const generateCode = () => {
-    const prefix = 'PRD';
-    const number = Math.floor(Math.random() * 900) + 100;
-    return `${prefix}-${number}`;
-  };
 
   const startQrScanner = useCallback(async () => {
     try {
@@ -121,6 +129,7 @@ const AjouterProduit = ({ userName, onLogout }) => {
     if (!formData.nom.trim()) newErrors.nom = 'Nom requis';
     if (formData.nom.trim().length > 0 && formData.nom.trim().length < 3) newErrors.nom = 'Le nom doit contenir au moins 3 caracteres';
     if (!formData.categorie) newErrors.categorie = 'Categorie requise';
+    if (!formData.famille) newErrors.famille = 'Famille requise';
     if (!formData.seuilMinimum || parseInt(formData.seuilMinimum) < 0) {
       newErrors.seuilMinimum = 'Seuil minimum valide requis';
     }
@@ -136,16 +145,48 @@ const AjouterProduit = ({ userName, onLogout }) => {
     }
 
     setIsSubmitting(true);
-    await new Promise(resolve => setTimeout(resolve, 1200));
-    
-    const productCode = generateCode();
-    console.log('Nouveau produit (en attente de validation):', { 
-      code: productCode, ...formData, statut: 'en_attente_validation'
-    });
-    
-    toast.success('Produit soumis pour validation avec succes');
-    setIsSubmitting(false);
-    navigate('/magasinier');
+    try {
+      const payload = {
+        name: formData.nom.trim(),
+        category_name: formData.categorie,
+        family: formData.famille,
+        description: formData.description,
+        seuil_minimum: Number(formData.seuilMinimum),
+        stock_initial_year: Number(formData.stockInitial || 0),
+        quantity_current: Number(formData.stockInitial || 0),
+        qr_code_value: formData.qrCode,
+        emplacement: formData.emplacement,
+        chemical_class: formData.chemicalClass,
+        physical_state: formData.physicalState,
+        gas_pressure: formData.gasPressure,
+        gas_purity: formData.gasPurity,
+        validation_status: 'pending',
+      };
+
+      await post('/products', payload);
+
+      toast.success('Produit soumis pour validation avec succes');
+      setFormData({
+        qrCode: '',
+        nom: '',
+        categorie: '',
+        famille: '',
+        unite: 'Unite',
+        seuilMinimum: '',
+        stockInitial: '0',
+        emplacement: '',
+        chemicalClass: '',
+        physicalState: '',
+        gasPressure: '',
+        gasPurity: '',
+        description: '',
+      });
+      navigate('/magasinier');
+    } catch (err) {
+      toast.error(err.message || "Echec de creation du produit");
+    } finally {
+      setIsSubmitting(false);
+    }
   }, [formData, validateForm, navigate, toast]);
 
   return (
@@ -154,6 +195,7 @@ const AjouterProduit = ({ userName, onLogout }) => {
         collapsed={sidebarCollapsed} 
         onToggle={() => setSidebarCollapsed(!sidebarCollapsed)}
         onLogout={onLogout}
+        userName={userName}
       />
       
       <div className="main-container">
@@ -271,6 +313,26 @@ const AjouterProduit = ({ userName, onLogout }) => {
                   <h3>Classification</h3>
                   <div className="form-row">
                     <div className="form-group">
+                      <label htmlFor="famille">
+                        <Layers size={16} />
+                        Famille
+                      </label>
+                      <select
+                        id="famille"
+                        value={formData.famille}
+                        onChange={(e) => setFormData({ ...formData, famille: e.target.value })}
+                        className={errors.famille ? 'error' : ''}
+                      >
+                        <option value="">Selectionner...</option>
+                        {families.map(f => (
+                          <option key={f.value} value={f.value}>{f.label}</option>
+                        ))}
+                      </select>
+                      {errors.famille && (
+                        <span className="error-text" role="alert">{errors.famille}</span>
+                      )}
+                    </div>
+                    <div className="form-group">
                       <label htmlFor="categorie">
                         <Layers size={16} />
                         Categorie
@@ -310,6 +372,32 @@ const AjouterProduit = ({ userName, onLogout }) => {
 
                 <div className="form-section">
                   <h3>Parametres de stock</h3>
+                  <div className="form-row">
+                    <div className="form-group">
+                      <label htmlFor="stockInitial">
+                        <Hash size={16} />
+                        Stock initial
+                      </label>
+                      <input
+                        id="stockInitial"
+                        type="number"
+                        min="0"
+                        value={formData.stockInitial}
+                        onChange={(e) => setFormData({ ...formData, stockInitial: e.target.value })}
+                        placeholder="Ex: 100"
+                      />
+                    </div>
+                    <div className="form-group">
+                      <label htmlFor="emplacement">Emplacement magasin</label>
+                      <input
+                        id="emplacement"
+                        type="text"
+                        value={formData.emplacement}
+                        onChange={(e) => setFormData({ ...formData, emplacement: e.target.value })}
+                        placeholder="Ex: Rayon A - Etagere 3"
+                      />
+                    </div>
+                  </div>
                   <div className="form-group">
                     <label htmlFor="seuilMinimum">
                       <Hash size={16} />
@@ -330,6 +418,62 @@ const AjouterProduit = ({ userName, onLogout }) => {
                     <span className="input-hint">Alerte declenchee quand le stock passe sous ce seuil</span>
                   </div>
                 </div>
+
+                {formData.famille === 'produit_chimique' && (
+                  <div className="form-section">
+                    <h3>Parametres produit chimique</h3>
+                    <div className="form-row">
+                      <div className="form-group">
+                        <label htmlFor="chemicalClass">Classe chimique</label>
+                        <input
+                          id="chemicalClass"
+                          type="text"
+                          value={formData.chemicalClass}
+                          onChange={(e) => setFormData({ ...formData, chemicalClass: e.target.value })}
+                          placeholder="Ex: Acide"
+                        />
+                      </div>
+                      <div className="form-group">
+                        <label htmlFor="physicalState">Etat physique</label>
+                        <input
+                          id="physicalState"
+                          type="text"
+                          value={formData.physicalState}
+                          onChange={(e) => setFormData({ ...formData, physicalState: e.target.value })}
+                          placeholder="Ex: Liquide"
+                        />
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {formData.famille === 'gaz' && (
+                  <div className="form-section">
+                    <h3>Parametres gaz</h3>
+                    <div className="form-row">
+                      <div className="form-group">
+                        <label htmlFor="gasPressure">Pression</label>
+                        <input
+                          id="gasPressure"
+                          type="text"
+                          value={formData.gasPressure}
+                          onChange={(e) => setFormData({ ...formData, gasPressure: e.target.value })}
+                          placeholder="Ex: 200 bar"
+                        />
+                      </div>
+                      <div className="form-group">
+                        <label htmlFor="gasPurity">Purete</label>
+                        <input
+                          id="gasPurity"
+                          type="text"
+                          value={formData.gasPurity}
+                          onChange={(e) => setFormData({ ...formData, gasPurity: e.target.value })}
+                          placeholder="Ex: 99.99%"
+                        />
+                      </div>
+                    </div>
+                  </div>
+                )}
 
                 <div className="form-section">
                   <h3>Informations complementaires</h3>
@@ -365,3 +509,4 @@ const AjouterProduit = ({ userName, onLogout }) => {
 };
 
 export default AjouterProduit;
+

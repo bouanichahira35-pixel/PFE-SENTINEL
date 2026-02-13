@@ -10,11 +10,14 @@ const userSchema = new mongoose.Schema({
   email: {
     type: String,
     required: true,
-    unique: true
+    unique: true,
+    lowercase: true,
+    trim: true
   },
   password_hash: {
     type: String,
-    required: true
+    required: true,
+    select: false
   },
   role: {
     type: String,
@@ -23,7 +26,8 @@ const userSchema = new mongoose.Schema({
   },
   telephone: {
     type: String,
-    required: true
+    required: true,
+    trim: true
   },
   image_profile: {
     type: String, // Lien vers l'image du profil

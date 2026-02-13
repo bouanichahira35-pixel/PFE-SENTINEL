@@ -1,26 +1,12 @@
-import { useState, useMemo, useCallback } from 'react';
+import { useState, useMemo, useCallback, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Package, Plus, Eye, ArrowDownToLine, ArrowUpFromLine, Filter, ChevronLeft, ChevronRight } from 'lucide-react';
 import SidebarMag from '../../components/magasinier/SidebarMag';
 import HeaderPage from '../../components/shared/HeaderPage';
 import LoadingSpinner from '../../components/shared/LoadingSpinner';
 import { useToast } from '../../components/shared/Toast';
+import { get } from '../../services/api';
 import './ProduitsMag.css';
-
-const mockProducts = [
-  { id: 1, code: 'PRD-001', nom: 'Cable HDMI 2m', categorie: 'Informatique', quantite: 150, seuilMin: 20, unite: 'Unite' },
-  { id: 2, code: 'PRD-002', nom: 'Souris sans fil', categorie: 'Informatique', quantite: 45, seuilMin: 15, unite: 'Unite' },
-  { id: 3, code: 'PRD-003', nom: 'Clavier mecanique', categorie: 'Informatique', quantite: 8, seuilMin: 10, unite: 'Unite' },
-  { id: 4, code: 'PRD-004', nom: 'Ecran 24 pouces', categorie: 'Informatique', quantite: 0, seuilMin: 5, unite: 'Unite' },
-  { id: 5, code: 'PRD-005', nom: 'Papier A4 500 feuilles', categorie: 'Fournitures', quantite: 200, seuilMin: 50, unite: 'Ramette' },
-  { id: 6, code: 'PRD-006', nom: 'Stylo bleu', categorie: 'Fournitures', quantite: 500, seuilMin: 100, unite: 'Unite' },
-  { id: 7, code: 'PRD-007', nom: 'Cartouche encre noire', categorie: 'Fournitures', quantite: 12, seuilMin: 15, unite: 'Unite' },
-  { id: 8, code: 'PRD-008', nom: 'Chaise de bureau', categorie: 'Mobilier', quantite: 25, seuilMin: 5, unite: 'Unite' },
-  { id: 9, code: 'PRD-009', nom: 'Bureau 120cm', categorie: 'Mobilier', quantite: 10, seuilMin: 3, unite: 'Unite' },
-  { id: 10, code: 'PRD-010', nom: 'Lampe LED', categorie: 'Electronique', quantite: 30, seuilMin: 10, unite: 'Unite' },
-];
-
-const categories = ['Informatique', 'Fournitures', 'Mobilier', 'Electronique', 'Outillage'];
 const ITEMS_PER_PAGE = 8;
 
 const ProduitsMag = ({ userName, onLogout }) => {
@@ -32,6 +18,32 @@ const ProduitsMag = ({ userName, onLogout }) => {
   const [statusFilter, setStatusFilter] = useState('all');
   const [currentPage, setCurrentPage] = useState(1);
   const [isLoading, setIsLoading] = useState(false);
+  const [products, setProducts] = useState([]);
+
+  const loadProducts = useCallback(async () => {
+    setIsLoading(true);
+    try {
+      const data = await get('/products');
+      const mapped = data.map((p) => ({
+        id: p._id,
+        code: p.code_product,
+        nom: p.name,
+        categorie: p.category?.name || '-',
+        quantite: Number(p.quantity_current || 0),
+        seuilMin: Number(p.seuil_minimum || 0),
+        unite: p.unite || 'Unite',
+      }));
+      setProducts(mapped);
+    } catch (err) {
+      toast.error(err.message || 'Erreur chargement produits');
+    } finally {
+      setIsLoading(false);
+    }
+  }, [toast]);
+
+  useEffect(() => {
+    loadProducts();
+  }, [loadProducts]);
 
   const getProductStatus = useCallback((quantite, seuilMin) => {
     if (quantite === 0) return 'rupture';
@@ -40,7 +52,7 @@ const ProduitsMag = ({ userName, onLogout }) => {
   }, []);
 
   const filteredProducts = useMemo(() => {
-    return mockProducts.filter(product => {
+    return products.filter(product => {
       const matchesSearch = 
         product.nom.toLowerCase().includes(searchQuery.toLowerCase()) ||
         product.code.toLowerCase().includes(searchQuery.toLowerCase());
@@ -55,11 +67,16 @@ const ProduitsMag = ({ userName, onLogout }) => {
   }, [searchQuery, categoryFilter, statusFilter, getProductStatus]);
 
   const statusCounts = useMemo(() => ({
-    all: mockProducts.length,
-    disponible: mockProducts.filter(p => getProductStatus(p.quantite, p.seuilMin) === 'disponible').length,
-    'sous-seuil': mockProducts.filter(p => getProductStatus(p.quantite, p.seuilMin) === 'sous-seuil').length,
-    rupture: mockProducts.filter(p => getProductStatus(p.quantite, p.seuilMin) === 'rupture').length,
-  }), [getProductStatus]);
+    all: products.length,
+    disponible: products.filter(p => getProductStatus(p.quantite, p.seuilMin) === 'disponible').length,
+    'sous-seuil': products.filter(p => getProductStatus(p.quantite, p.seuilMin) === 'sous-seuil').length,
+    rupture: products.filter(p => getProductStatus(p.quantite, p.seuilMin) === 'rupture').length,
+  }), [products, getProductStatus]);
+
+  const categories = useMemo(
+    () => Array.from(new Set(products.map((p) => p.categorie).filter(Boolean))),
+    [products]
+  );
 
   const totalPages = Math.ceil(filteredProducts.length / ITEMS_PER_PAGE);
   const paginatedProducts = useMemo(() => {
@@ -67,13 +84,10 @@ const ProduitsMag = ({ userName, onLogout }) => {
     return filteredProducts.slice(start, start + ITEMS_PER_PAGE);
   }, [filteredProducts, currentPage]);
 
-  const handleRefresh = useCallback(() => {
-    setIsLoading(true);
-    setTimeout(() => {
-      setIsLoading(false);
-      toast.success('Liste des produits actualisee');
-    }, 800);
-  }, [toast]);
+  const handleRefresh = useCallback(async () => {
+    await loadProducts();
+    toast.success('Liste des produits actualisee');
+  }, [loadProducts, toast]);
 
   const handleEntreeStock = useCallback((product) => {
     navigate('/magasinier/entree-stock', { state: { product } });
@@ -97,6 +111,7 @@ const ProduitsMag = ({ userName, onLogout }) => {
         collapsed={sidebarCollapsed} 
         onToggle={() => setSidebarCollapsed(!sidebarCollapsed)}
         onLogout={onLogout}
+        userName={userName}
       />
       
       <div className="main-container">
@@ -287,3 +302,4 @@ const ProduitsMag = ({ userName, onLogout }) => {
 };
 
 export default ProduitsMag;
+

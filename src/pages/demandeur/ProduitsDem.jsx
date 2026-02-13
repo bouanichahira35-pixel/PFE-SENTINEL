@@ -89,6 +89,7 @@ const ProduitsDem = ({ userName, onLogout }) => {
         collapsed={sidebarCollapsed} 
         onToggle={() => setSidebarCollapsed(!sidebarCollapsed)}
         onLogout={onLogout}
+        userName={userName}
       />
       
       <div className="main-container">
@@ -263,3 +264,4 @@ const ProduitsDem = ({ userName, onLogout }) => {
 };
 
 export default ProduitsDem;
+

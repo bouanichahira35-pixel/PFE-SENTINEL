@@ -3,6 +3,7 @@ const Notification = require('../models/Notification');
 const AIAlert = require('../models/AIAlert');
 const StockLot = require('../models/StockLot');
 const nodemailer = require('nodemailer');
+const { logSecurityEvent } = require('./securityAuditService');
 
 const transporter = nodemailer.createTransport({
   host: process.env.MAIL_HOST,
@@ -39,7 +40,21 @@ async function createNotificationsForResponsables({ title, message, type = 'warn
         subject: title,
         text: message,
       });
+      await logSecurityEvent({
+        event_type: 'email_sent',
+        role: 'responsable',
+        success: true,
+        details: 'Stock alert mail sent',
+        after: { recipients_count: emails.length, subject: title },
+      });
     } catch {
+      await logSecurityEvent({
+        event_type: 'email_failed',
+        role: 'responsable',
+        success: false,
+        details: 'Stock alert mail failed',
+        after: { recipients_count: emails.length, subject: title },
+      });
       // Keep app resilient if mail provider is unavailable.
     }
   }

@@ -2,7 +2,7 @@
 const express = require('express');
 const cors = require('cors');
 
-require('./db'); // Initialise la connexion Mongo (db.js)
+const mongoose = require('./db'); // Initialise la connexion Mongo (db.js)
 
 const app = express();
 
@@ -29,10 +29,32 @@ app.use(cors({
 })); // Autorise les appels depuis le front (CORS)
 app.use(express.json()); // Parse les JSON dans les requÃªtes
 
+app.get('/api/health', (req, res) => {
+  const stateMap = {
+    0: 'disconnected',
+    1: 'connected',
+    2: 'connecting',
+    3: 'disconnecting',
+  };
+  const readyState = mongoose.connection.readyState;
+  return res.json({
+    status: 'ok',
+    timestamp: new Date().toISOString(),
+    uptime_seconds: Math.floor(process.uptime()),
+    mongodb: {
+      ready_state: readyState,
+      status: stateMap[readyState] || 'unknown',
+      db_name: mongoose.connection.name || null,
+    },
+  });
+});
+
 // Routes API (on les remplira ensuite)
 app.use('/api/auth', require('./routes/auth'));
 app.use('/api/products', require('./routes/products'));
 app.use('/api/categories', require('./routes/categories'));
+app.use('/api/locations', require('./routes/locations'));
+app.use('/api/laboratories', require('./routes/laboratories'));
 app.use('/api/stock', require('./routes/stock'));
 app.use('/api/requests', require('./routes/requests'));
 app.use('/api/history', require('./routes/history'));

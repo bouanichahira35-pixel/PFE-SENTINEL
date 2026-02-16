@@ -103,6 +103,30 @@ router.get('/', requireAuth, async (req, res) => {
   }
 });
 
+router.get('/qr-check', requireAuth, async (req, res) => {
+  try {
+    const value = asOptionalString(req.query?.value);
+    const excludeId = asOptionalString(req.query?.exclude_id);
+
+    if (!value) {
+      return res.status(400).json({ error: 'value query param obligatoire' });
+    }
+
+    const filter = { qr_code_value: value };
+    if (excludeId && isValidObjectIdLike(excludeId)) {
+      filter._id = { $ne: excludeId };
+    }
+
+    const existing = await Product.findOne(filter).select('_id code_product name validation_status');
+    return res.json({
+      exists: Boolean(existing),
+      product: existing || null,
+    });
+  } catch (err) {
+    return res.status(500).json({ error: 'Failed to check qr code', details: err.message });
+  }
+});
+
 router.post('/', requireAuth, requirePermission(PERMISSIONS.PRODUCT_CREATE), async (req, res) => {
   try {
     const errors = [];
@@ -112,6 +136,8 @@ router.post('/', requireAuth, requirePermission(PERMISSIONS.PRODUCT_CREATE), asy
     }
     const name = asTrimmedString(req.body.name);
     if (!name) errors.push('name obligatoire');
+    const qrCodeValue = asOptionalString(req.body.qr_code_value);
+    if (!qrCodeValue) errors.push('qr_code_value obligatoire');
 
     if (req.body.category && !isValidObjectIdLike(req.body.category)) {
       errors.push('category doit etre un ObjectId valide');
@@ -142,6 +168,18 @@ router.post('/', requireAuth, requirePermission(PERMISSIONS.PRODUCT_CREATE), asy
 
     if (!category) return res.status(400).json({ error: 'category invalide' });
 
+    const existingQr = await Product.findOne({ qr_code_value: qrCodeValue }).select('_id code_product name');
+    if (existingQr) {
+      return res.status(409).json({
+        error: 'QR code deja utilise',
+        details: {
+          product_id: existingQr._id,
+          code_product: existingQr.code_product,
+          name: existingQr.name,
+        },
+      });
+    }
+
     const payload = {
       code_product: req.body.code_product || (await getNextProductCode()),
       name,
@@ -158,7 +196,7 @@ router.post('/', requireAuth, requirePermission(PERMISSIONS.PRODUCT_CREATE), asy
       quantity_current: quantityCurrent ?? 0,
       seuil_minimum: seuilMinimum ?? 0,
       status: computeStatus(quantityCurrent ?? 0, seuilMinimum ?? 0),
-      qr_code_value: asOptionalString(req.body.qr_code_value),
+      qr_code_value: qrCodeValue,
       image_product: asOptionalString(req.body.image_product),
       created_by: req.user.id,
       validation_status:
@@ -170,6 +208,9 @@ router.post('/', requireAuth, requirePermission(PERMISSIONS.PRODUCT_CREATE), asy
     const item = await Product.create(payload);
     res.status(201).json(item);
   } catch (err) {
+    if (err?.code === 11000 && err?.keyPattern?.qr_code_value) {
+      return res.status(409).json({ error: 'QR code deja utilise' });
+    }
     res.status(400).json({ error: 'Failed to create product', details: err.message });
   }
 });
@@ -274,6 +315,11 @@ router.put('/:id', requireAuth, requirePermission(PERMISSIONS.PRODUCT_UPDATE), a
         return;
       }
 
+      if (field === 'qr_code_value') {
+        product[field] = asOptionalString(req.body[field]);
+        return;
+      }
+
       product[field] = req.body[field];
     });
 
@@ -286,11 +332,33 @@ router.put('/:id', requireAuth, requirePermission(PERMISSIONS.PRODUCT_UPDATE), a
       return res.status(400).json({ error: 'Validation failed', details: errors });
     }
 
+    if (!product.qr_code_value) {
+      return res.status(400).json({ error: 'qr_code_value obligatoire' });
+    }
+
+    const duplicateQr = await Product.findOne({
+      _id: { $ne: product._id },
+      qr_code_value: product.qr_code_value,
+    }).select('_id code_product name');
+    if (duplicateQr) {
+      return res.status(409).json({
+        error: 'QR code deja utilise',
+        details: {
+          product_id: duplicateQr._id,
+          code_product: duplicateQr.code_product,
+          name: duplicateQr.name,
+        },
+      });
+    }
+
     product.status = computeStatus(product.quantity_current, product.seuil_minimum);
 
     await product.save();
     res.json(product);
   } catch (err) {
+    if (err?.code === 11000 && err?.keyPattern?.qr_code_value) {
+      return res.status(409).json({ error: 'QR code deja utilise' });
+    }
     res.status(400).json({ error: 'Failed to update product', details: err.message });
   }
 });

@@ -1,37 +1,72 @@
-import { useState } from 'react';
-import { FileText, Clock, CheckCircle, XCircle, Package, Calendar } from 'lucide-react';
+import { useState, useEffect, useMemo, useCallback } from 'react';
+import { Clock, CheckCircle, XCircle, Package, Calendar } from 'lucide-react';
 import SidebarDem from '../../components/demandeur/SidebarDem';
 import HeaderPage from '../../components/shared/HeaderPage';
+import LoadingSpinner from '../../components/shared/LoadingSpinner';
+import { useToast } from '../../components/shared/Toast';
+import { get } from '../../services/api';
 import './MesDemandes.css';
 
-const mockDemandes = [
-  { id: 'DEM-001', produit: 'Cable HDMI 2m', codeProduit: 'PRD-001', quantite: 10, date: '2026-02-01 09:30', statut: 'en_attente' },
-  { id: 'DEM-002', produit: 'Souris sans fil', codeProduit: 'PRD-002', quantite: 5, date: '2026-02-01 11:15', statut: 'validee' },
-  { id: 'DEM-003', produit: 'Papier A4 500 feuilles', codeProduit: 'PRD-005', quantite: 20, date: '2026-01-31 14:00', statut: 'validee' },
-  { id: 'DEM-004', produit: 'Clavier mecanique', codeProduit: 'PRD-003', quantite: 3, date: '2026-01-31 10:45', statut: 'rejetee' },
-];
-
 const MesDemandes = ({ userName, onLogout }) => {
+  const toast = useToast();
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
+  const [demandes, setDemandes] = useState([]);
+  const [isLoading, setIsLoading] = useState(false);
+
+  const loadDemandes = useCallback(async (showLoader = true, silent = false) => {
+    if (showLoader) setIsLoading(true);
+    try {
+      const items = await get('/requests');
+      const mapped = (items || []).map((r) => ({
+        id: r._id,
+        reference: `DEM-${String(r._id || '').slice(-6).toUpperCase()}`,
+        produit: r.product?.name || 'Produit',
+        codeProduit: r.product?.code_product || '-',
+        quantite: Number(r.quantity_requested || 0),
+        date: r.date_request ? new Date(r.date_request).toLocaleString('fr-FR') : '-',
+        statut: r.status || 'pending',
+      }));
+
+      mapped.sort((a, b) => String(b.id).localeCompare(String(a.id)));
+      setDemandes(mapped);
+    } catch (err) {
+      if (!silent) toast.error(err.message || 'Impossible de charger mes demandes');
+    } finally {
+      if (showLoader) setIsLoading(false);
+    }
+  }, [toast]);
+
+  useEffect(() => {
+    loadDemandes(true, false);
+  }, [loadDemandes]);
+
+  useEffect(() => {
+    const intervalId = setInterval(() => {
+      loadDemandes(false, true);
+    }, 10000);
+    return () => clearInterval(intervalId);
+  }, [loadDemandes]);
 
   const getStatutInfo = (statut) => {
     switch (statut) {
-      case 'en_attente':
+      case 'pending':
         return { label: 'En attente', className: 'statut-attente', icon: Clock };
-      case 'validee':
+      case 'accepted':
         return { label: 'Acceptee', className: 'statut-validee', icon: CheckCircle };
-      case 'rejetee':
+      case 'refused':
         return { label: 'Refusee', className: 'statut-rejetee', icon: XCircle };
       default:
         return { label: statut, className: '', icon: Clock };
     }
   };
 
-  const filteredDemandes = mockDemandes.filter(demande =>
-    demande.produit.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    demande.id.toLowerCase().includes(searchQuery.toLowerCase())
-  );
+  const filteredDemandes = useMemo(() => (
+    demandes.filter((demande) =>
+      demande.produit.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      demande.reference.toLowerCase().includes(searchQuery.toLowerCase())
+    )
+  ), [demandes, searchQuery]);
 
   return (
     <div className="app-layout">
@@ -48,9 +83,11 @@ const MesDemandes = ({ userName, onLogout }) => {
           title="Mes Demandes"
           searchValue={searchQuery}
           onSearchChange={setSearchQuery}
+          onRefresh={loadDemandes}
         />
         
         <main className="main-content">
+          {isLoading && <LoadingSpinner overlay text="Chargement de mes demandes..." />}
           <div className="mes-demandes-page">
             <div className="demandes-table-container">
               <table className="demandes-table">
@@ -69,7 +106,7 @@ const MesDemandes = ({ userName, onLogout }) => {
                     const StatutIcon = statutInfo.icon;
                     return (
                       <tr key={demande.id} style={{ animationDelay: `${index * 50}ms` }}>
-                        <td className="ref-cell">{demande.id}</td>
+                        <td className="ref-cell">{demande.reference}</td>
                         <td className="product-cell">
                           <Package size={16} />
                           <div>

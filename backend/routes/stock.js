@@ -176,65 +176,109 @@ router.post(
 
 router.put('/entries/:id', requireAuth, requirePermission(PERMISSIONS.STOCK_ENTRY_UPDATE), async (req, res) => {
   try {
-    const entry = await StockEntry.findById(req.params.id);
-    if (!entry) return res.status(404).json({ error: 'Stock entry not found' });
-    if (entry.canceled) return res.status(400).json({ error: 'Canceled entry cannot be updated' });
-
-    const oldQty = Number(entry.quantity || 0);
-    const newQty = Number(req.body.quantity);
-    if (!Number.isFinite(newQty) || newQty <= 0) {
-      return res.status(400).json({ error: 'Quantity must be a positive number' });
+    if (!isValidObjectIdLike(req.params.id)) {
+      return res.status(400).json({ error: 'entry id invalide' });
     }
 
-    const qtyDelta = newQty - oldQty;
-    const product = await Product.findById(entry.product);
-    if (!product) return res.status(404).json({ error: 'Linked product not found' });
-
-    const nextStock = Number(product.quantity_current || 0) + qtyDelta;
-    if (nextStock < 0) {
-      return res.status(400).json({ error: 'Stock would become negative' });
+    const newQty = asPositiveNumber(req.body.quantity);
+    if (Number.isNaN(newQty) || newQty === undefined) {
+      return res.status(400).json({ error: 'quantity must be a positive number' });
     }
 
-    Object.assign(entry, {
-      quantity: newQty,
-      unit_price: req.body.unit_price,
-      purchase_order_number: req.body.purchase_order_number,
-      purchase_voucher_number: req.body.purchase_voucher_number,
-      delivery_note_number: req.body.delivery_note_number,
-      delivery_date: req.body.delivery_date,
-      service_requester: req.body.service_requester,
-      supplier: req.body.supplier,
-      commercial_name: req.body.commercial_name,
-      reference_code: req.body.reference_code,
-      lot_number: req.body.lot_number,
-      inventory_number: req.body.inventory_number,
-      patrimoine_number: req.body.patrimoine_number,
-      beneficiary: req.body.beneficiary,
-      expiry_date: req.body.expiry_date,
-      chemical_status: req.body.chemical_status,
-      dangerous_product_attestation: req.body.dangerous_product_attestation,
-      contract_number: req.body.contract_number,
-      observation: req.body.observation,
-      attachments: sanitizeAttachments(req.body.attachments),
+    const parsedUnitPrice = asNonNegativeNumber(req.body.unit_price);
+    if (Number.isNaN(parsedUnitPrice)) {
+      return res.status(400).json({ error: 'unit_price doit etre un nombre >= 0' });
+    }
+    const parsedDeliveryDate = asDate(req.body.delivery_date);
+    if (parsedDeliveryDate === null) return res.status(400).json({ error: 'delivery_date invalide' });
+    const parsedExpiryDate = asDate(req.body.expiry_date);
+    if (parsedExpiryDate === null) return res.status(400).json({ error: 'expiry_date invalide' });
+    const parsedDateEntry = asDate(req.body.date_entry);
+    if (parsedDateEntry === null) return res.status(400).json({ error: 'date_entry invalide' });
+
+    const updatedEntry = await runInTransaction(async (session) => {
+      const entry = await StockEntry.findById(req.params.id).session(session);
+      if (!entry) throw new Error('Stock entry not found');
+      if (entry.canceled) throw new Error('Canceled entry cannot be updated');
+
+      const oldQty = Number(entry.quantity || 0);
+      const qtyDelta = Number(newQty) - oldQty;
+
+      const product = await Product.findById(entry.product).session(session);
+      if (!product) throw new Error('Linked product not found');
+      if (product.validation_status !== 'approved') {
+        throw new Error('Produit non valide. Validation responsable requise.');
+      }
+
+      const lot = await StockLot.findOne({ entry: entry._id }).session(session);
+      if (!lot) throw new Error("Lot d'entree introuvable");
+
+      const consumedFromLot = Math.max(0, Number(lot.quantity_initial || 0) - Number(lot.quantity_available || 0));
+      if (newQty < consumedFromLot) {
+        throw new Error('Impossible: quantite inferieure a la quantite deja consommee en FIFO');
+      }
+
+      const nextStock = Number(product.quantity_current || 0) + qtyDelta;
+      if (nextStock < 0) throw new Error('Stock would become negative');
+
+      Object.assign(entry, {
+        quantity: newQty,
+        unit_price: parsedUnitPrice,
+        purchase_order_number: asOptionalString(req.body.purchase_order_number),
+        purchase_voucher_number: asOptionalString(req.body.purchase_voucher_number),
+        delivery_note_number: asOptionalString(req.body.delivery_note_number),
+        delivery_date: parsedDeliveryDate,
+        service_requester: asOptionalString(req.body.service_requester),
+        supplier: asOptionalString(req.body.supplier),
+        commercial_name: asOptionalString(req.body.commercial_name),
+        reference_code: asOptionalString(req.body.reference_code),
+        lot_number: asOptionalString(req.body.lot_number),
+        inventory_number: asOptionalString(req.body.inventory_number),
+        patrimoine_number: asOptionalString(req.body.patrimoine_number),
+        beneficiary: asOptionalString(req.body.beneficiary),
+        expiry_date: parsedExpiryDate,
+        chemical_status: asOptionalString(req.body.chemical_status),
+        dangerous_product_attestation: asOptionalString(req.body.dangerous_product_attestation),
+        contract_number: asOptionalString(req.body.contract_number),
+        observation: asOptionalString(req.body.observation),
+        attachments: sanitizeAttachments(req.body.attachments),
+        date_entry: parsedDateEntry || entry.date_entry,
+      });
+      await entry.save({ session });
+
+      lot.quantity_initial = Number(newQty);
+      lot.quantity_available = Math.max(0, Number(newQty) - consumedFromLot);
+      lot.unit_price = parsedUnitPrice;
+      lot.lot_number = entry.lot_number || undefined;
+      lot.expiry_date = entry.expiry_date || undefined;
+      lot.date_entry = entry.date_entry || lot.date_entry;
+      lot.status = lot.quantity_available > 0 ? 'open' : 'empty';
+      await lot.save({ session });
+
+      product.quantity_current = nextStock;
+      product.status = computeProductStatus(product.quantity_current, product.seuil_minimum);
+      await product.save({ session });
+      await evaluateProductAlerts(product, session);
+
+      const historyPayload = {
+        action_type: 'entry',
+        user: req.user.id,
+        product: product._id,
+        quantity: newQty,
+        source: 'ui',
+        description: `Bon d'entree modifie (${entry.entry_number})`,
+      };
+      if (session) await History.create([historyPayload], { session });
+      else await History.create(historyPayload);
+
+      return entry;
     });
 
-    await entry.save();
-
-    product.quantity_current = nextStock;
-    product.status = computeProductStatus(product.quantity_current, product.seuil_minimum);
-    await product.save();
-
-    await History.create({
-      action_type: 'entry',
-      user: req.user.id,
-      product: product._id,
-      quantity: newQty,
-      source: 'ui',
-      description: `Bon d'entree modifie (${entry.entry_number})`,
-    });
-
-    res.json(entry);
+    res.json(updatedEntry);
   } catch (err) {
+    if (String(err?.message).includes('not found')) {
+      return res.status(404).json({ error: err.message });
+    }
     res.status(400).json({ error: 'Failed to update stock entry', details: err.message });
   }
 });
@@ -385,7 +429,7 @@ router.post('/exits', requireAuth, requirePermission(PERMISSIONS.STOCK_EXIT_CREA
         product: product._id,
         quantity_available: { $gt: 0 },
       })
-        .sort({ date_entry: 1, expiry_date: 1, createdAt: 1 })
+        .sort({ date_entry: 1, createdAt: 1 })
         .session(session);
 
       let remaining = quantity;
@@ -485,7 +529,7 @@ router.put('/exits/:id', requireAuth, requirePermission(PERMISSIONS.STOCK_EXIT_U
         product: product._id,
         quantity_available: { $gt: 0 },
       })
-        .sort({ date_entry: 1, expiry_date: 1, createdAt: 1 })
+        .sort({ date_entry: 1, createdAt: 1 })
         .session(session);
 
       let remaining = newQty;

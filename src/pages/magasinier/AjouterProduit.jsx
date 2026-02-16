@@ -1,21 +1,34 @@
-import { useState, useCallback, useRef } from 'react';
+import { useState, useCallback, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Package, Save, X, QrCode, Tag, Hash, Layers, AlertCircle, CheckCircle, Lightbulb, Camera, StopCircle } from 'lucide-react';
+import { Package, X, QrCode, Tag, Hash, Layers, AlertCircle, CheckCircle, Lightbulb, Camera, StopCircle, Keyboard } from 'lucide-react';
 import SidebarMag from '../../components/magasinier/SidebarMag';
 import HeaderPage from '../../components/shared/HeaderPage';
 import LoadingSpinner from '../../components/shared/LoadingSpinner';
 import { useToast } from '../../components/shared/Toast';
-import { post } from '../../services/api';
+import { get, post, uploadFile } from '../../services/api';
 import './AjouterProduit.css';
 
-const families = [
-  { value: 'economat', label: 'Economat' },
-  { value: 'produit_chimique', label: 'Produit chimique' },
-  { value: 'gaz', label: 'Gaz' },
-  { value: 'consommable_informatique', label: 'Consommable informatique' },
-  { value: 'consommable_laboratoire', label: 'Consommable laboratoire' },
-];
 const unites = ['Unite', 'Ramette', 'Boite', 'Carton', 'Kg', 'Litre', 'Metre'];
+const categories = ['Informatique', 'Fournitures', 'Mobilier', 'Electronique', 'Outillage', 'Laboratoire', 'Produit chimique', 'Gaz'];
+
+const CATEGORY_TO_FAMILY = {
+  Informatique: 'consommable_informatique',
+  Fournitures: 'economat',
+  Mobilier: 'economat',
+  Electronique: 'economat',
+  Outillage: 'economat',
+  Laboratoire: 'consommable_laboratoire',
+  'Produit chimique': 'produit_chimique',
+  Gaz: 'gaz',
+};
+
+const FAMILY_LABELS = {
+  economat: 'Economat',
+  produit_chimique: 'Produit chimique',
+  gaz: 'Gaz',
+  consommable_informatique: 'Consommable informatique',
+  consommable_laboratoire: 'Consommable laboratoire',
+};
 
 const categorySuggestions = {
   'cable': 'Informatique', 'hdmi': 'Informatique', 'usb': 'Informatique',
@@ -24,6 +37,8 @@ const categorySuggestions = {
   'papier': 'Fournitures', 'stylo': 'Fournitures', 'cartouche': 'Fournitures',
   'encre': 'Fournitures', 'classeur': 'Fournitures', 'enveloppe': 'Fournitures',
   'chaise': 'Mobilier', 'bureau': 'Mobilier', 'armoire': 'Mobilier', 'etagere': 'Mobilier',
+  'acide': 'Produit chimique', 'solvant': 'Produit chimique', 'reactif': 'Produit chimique',
+  'azote': 'Gaz', 'argon': 'Gaz', 'helium': 'Gaz',
   'lampe': 'Electronique', 'ventilateur': 'Electronique', 'projecteur': 'Electronique',
   'tournevis': 'Outillage', 'marteau': 'Outillage', 'pince': 'Outillage'
 };
@@ -32,11 +47,21 @@ const AjouterProduit = ({ userName, onLogout }) => {
   const navigate = useNavigate();
   const toast = useToast();
   const videoRef = useRef(null);
+  const scanLoopRef = useRef(null);
+  const detectorRef = useRef(null);
+  const zxingControlsRef = useRef(null);
+  const zxingReaderRef = useRef(null);
+  const detectionLockRef = useRef(false);
+  const qrInputRef = useRef(null);
+  const keyboardBufferRef = useRef('');
+  const keyboardTimeoutRef = useRef(null);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [showDoublonWarning, setShowDoublonWarning] = useState(false);
+  const [duplicateProduct, setDuplicateProduct] = useState(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [suggestedCategory, setSuggestedCategory] = useState('');
   const [showQrScanner, setShowQrScanner] = useState(false);
+  const [keyboardScanMode, setKeyboardScanMode] = useState(false);
   const [streamRef, setStreamRef] = useState(null);
   
   const [formData, setFormData] = useState({
@@ -56,41 +81,25 @@ const AjouterProduit = ({ userName, onLogout }) => {
   });
 
   const [errors, setErrors] = useState({});
+  const [fdsFile, setFdsFile] = useState(null);
 
-  const startQrScanner = useCallback(async () => {
+  const verifyQrCodeUniqueness = useCallback(async (value) => {
+    const qr = String(value || '').trim();
+    if (!qr) {
+      setShowDoublonWarning(false);
+      setDuplicateProduct(null);
+      return;
+    }
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({ 
-        video: { facingMode: 'environment' } 
-      });
-      setStreamRef(stream);
-      setShowQrScanner(true);
-      if (videoRef.current) {
-        videoRef.current.srcObject = stream;
+      const result = await get(`/products/qr-check?value=${encodeURIComponent(qr)}`);
+      const exists = Boolean(result?.exists);
+      setShowDoublonWarning(exists);
+      setDuplicateProduct(result?.product || null);
+      if (exists) {
+        toast.warning('QR code deja utilise par un autre produit');
       }
-      toast.info('Camera activee - Presentez le QR Code');
-      
-      // Simulate QR scan after 3 seconds
-      setTimeout(() => {
-        const scannedCode = 'QR-' + Math.floor(Math.random() * 10000000);
-        setFormData(prev => ({ ...prev, qrCode: scannedCode }));
-        toast.success('QR Code scanne avec succes');
-        stopQrScanner(stream);
-        
-        if (Math.random() > 0.7) {
-          setShowDoublonWarning(true);
-          toast.warning('Un produit similaire a ete detecte');
-        }
-      }, 3000);
     } catch (err) {
-      // Fallback: simulate scan without camera
-      const scannedCode = 'QR-' + Math.floor(Math.random() * 10000000);
-      setFormData(prev => ({ ...prev, qrCode: scannedCode }));
-      toast.info('QR Code simule (camera non disponible)');
-      
-      if (Math.random() > 0.7) {
-        setShowDoublonWarning(true);
-        toast.warning('Un produit similaire a ete detecte');
-      }
+      toast.error(err.message || 'Echec de verification du QR code');
     }
   }, [toast]);
 
@@ -99,9 +108,183 @@ const AjouterProduit = ({ userName, onLogout }) => {
     if (s) {
       s.getTracks().forEach(track => track.stop());
     }
+    if (scanLoopRef.current) {
+      cancelAnimationFrame(scanLoopRef.current);
+      scanLoopRef.current = null;
+    }
+    detectorRef.current = null;
+    if (zxingControlsRef.current?.stop) {
+      zxingControlsRef.current.stop();
+    }
+    zxingControlsRef.current = null;
+    if (zxingReaderRef.current?.reset) {
+      zxingReaderRef.current.reset();
+    }
+    zxingReaderRef.current = null;
+    detectionLockRef.current = false;
     setShowQrScanner(false);
     setStreamRef(null);
   }, [streamRef]);
+
+  const stopKeyboardScanMode = useCallback(() => {
+    setKeyboardScanMode(false);
+    keyboardBufferRef.current = '';
+    if (keyboardTimeoutRef.current) {
+      clearTimeout(keyboardTimeoutRef.current);
+      keyboardTimeoutRef.current = null;
+    }
+  }, []);
+
+  const handleDetectedQrCode = useCallback(async (value, stream) => {
+    const qrValue = String(value || '').trim();
+    if (!qrValue || detectionLockRef.current) return;
+    detectionLockRef.current = true;
+    setFormData((prev) => ({ ...prev, qrCode: qrValue }));
+    toast.success('QR Code detecte avec succes');
+    await verifyQrCodeUniqueness(qrValue);
+    stopQrScanner(stream);
+    stopKeyboardScanMode();
+  }, [stopQrScanner, toast, verifyQrCodeUniqueness]);
+
+  const startKeyboardFallback = useCallback((msg) => {
+    setKeyboardScanMode(true);
+    toast.info(msg || 'Mode fallback active: utilisez une douchette USB ou saisie manuelle.');
+  }, [toast]);
+
+  const startQrScanner = useCallback(async () => {
+    try {
+      if (!navigator?.mediaDevices?.getUserMedia) {
+        toast.error('Camera non disponible sur ce navigateur');
+        startKeyboardFallback('Mode fallback active: utilisez une douchette USB ou saisie manuelle.');
+        return;
+      }
+
+      if (window.BarcodeDetector) {
+        const detector = new window.BarcodeDetector({ formats: ['qr_code'] });
+        detectorRef.current = detector;
+
+        const stream = await navigator.mediaDevices.getUserMedia({
+          video: { facingMode: 'environment' }
+        });
+        setStreamRef(stream);
+        setShowQrScanner(true);
+        if (videoRef.current) {
+          videoRef.current.srcObject = stream;
+          await videoRef.current.play();
+        }
+        toast.info('Camera activee - Presentez le QR Code');
+
+        const scan = async () => {
+          if (!videoRef.current || !detectorRef.current) return;
+          try {
+            const barcodes = await detectorRef.current.detect(videoRef.current);
+            if (Array.isArray(barcodes) && barcodes.length > 0) {
+              const qrValue = barcodes[0]?.rawValue;
+              if (qrValue) {
+                await handleDetectedQrCode(qrValue, stream);
+                return;
+              }
+            }
+          } catch (err) {
+            // keep scanning loop alive on temporary detector errors
+          }
+          scanLoopRef.current = requestAnimationFrame(scan);
+        };
+
+        scanLoopRef.current = requestAnimationFrame(scan);
+        return;
+      }
+
+      // Universal camera fallback for browsers without BarcodeDetector.
+      const { BrowserMultiFormatReader } = await import('@zxing/browser');
+      const reader = new BrowserMultiFormatReader();
+      zxingReaderRef.current = reader;
+      setShowQrScanner(true);
+      await new Promise((resolve) => requestAnimationFrame(resolve));
+      if (!videoRef.current) throw new Error('Zone video indisponible');
+      const controls = await reader.decodeFromVideoDevice(
+        undefined,
+        videoRef.current,
+        async (result) => {
+          if (result?.getText) {
+            await handleDetectedQrCode(result.getText());
+          }
+        }
+      );
+      zxingControlsRef.current = controls;
+      toast.info('Fallback camera ZXing active - Presentez le QR Code');
+    } catch (err) {
+      toast.error('Impossible de demarrer le scan QR. Verifiez les permissions camera.');
+      stopQrScanner();
+      startKeyboardFallback('Fallback clavier active: utilisez une douchette USB ou saisie manuelle.');
+    }
+  }, [handleDetectedQrCode, startKeyboardFallback, stopQrScanner, toast]);
+
+  useEffect(() => () => {
+    stopQrScanner();
+    stopKeyboardScanMode();
+  }, [stopKeyboardScanMode, stopQrScanner]);
+
+  useEffect(() => {
+    const family = CATEGORY_TO_FAMILY[formData.categorie] || '';
+    if (family && family !== formData.famille) {
+      setFormData((prev) => ({ ...prev, famille: family }));
+    }
+    if (!family && formData.famille) {
+      setFormData((prev) => ({ ...prev, famille: '' }));
+    }
+  }, [formData.categorie, formData.famille]);
+
+  useEffect(() => {
+    if (formData.famille !== 'produit_chimique') {
+      setFormData((prev) => ({
+        ...prev,
+        chemicalClass: '',
+        physicalState: '',
+      }));
+      setFdsFile(null);
+    }
+    if (formData.famille !== 'gaz') {
+      setFormData((prev) => ({
+        ...prev,
+        gasPressure: '',
+        gasPurity: '',
+      }));
+    }
+  }, [formData.famille]);
+
+  useEffect(() => {
+    if (!keyboardScanMode) return undefined;
+
+    const onKeyDown = async (event) => {
+      if (!keyboardScanMode) return;
+
+      if (event.key === 'Enter') {
+        const scanned = keyboardBufferRef.current.trim();
+        keyboardBufferRef.current = '';
+        if (keyboardTimeoutRef.current) {
+          clearTimeout(keyboardTimeoutRef.current);
+          keyboardTimeoutRef.current = null;
+        }
+        if (scanned.length >= 3) {
+          await handleDetectedQrCode(scanned);
+        }
+        return;
+      }
+
+      if (event.key.length === 1) {
+        keyboardBufferRef.current += event.key;
+        if (keyboardTimeoutRef.current) clearTimeout(keyboardTimeoutRef.current);
+        keyboardTimeoutRef.current = setTimeout(() => {
+          keyboardBufferRef.current = '';
+          keyboardTimeoutRef.current = null;
+        }, 250);
+      }
+    };
+
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [handleDetectedQrCode, keyboardScanMode]);
 
   const handleNomChange = useCallback((value) => {
     setFormData(prev => ({ ...prev, nom: value }));
@@ -129,7 +312,7 @@ const AjouterProduit = ({ userName, onLogout }) => {
     if (!formData.nom.trim()) newErrors.nom = 'Nom requis';
     if (formData.nom.trim().length > 0 && formData.nom.trim().length < 3) newErrors.nom = 'Le nom doit contenir au moins 3 caracteres';
     if (!formData.categorie) newErrors.categorie = 'Categorie requise';
-    if (!formData.famille) newErrors.famille = 'Famille requise';
+    if (!formData.famille) newErrors.categorie = 'Categorie invalide pour la famille metier';
     if (!formData.seuilMinimum || parseInt(formData.seuilMinimum) < 0) {
       newErrors.seuilMinimum = 'Seuil minimum valide requis';
     }
@@ -143,9 +326,22 @@ const AjouterProduit = ({ userName, onLogout }) => {
       toast.error('Veuillez corriger les erreurs du formulaire');
       return;
     }
+    if (duplicateProduct) {
+      toast.error('Ce QR code existe deja. Utilisez un QR code unique.');
+      return;
+    }
 
     setIsSubmitting(true);
     try {
+      let fdsAttachment;
+      if (formData.famille === 'produit_chimique' && fdsFile) {
+        const uploadedFds = await uploadFile('/files/upload', fdsFile);
+        fdsAttachment = {
+          file_name: uploadedFds.file_name,
+          file_url: uploadedFds.file_url,
+        };
+      }
+
       const payload = {
         name: formData.nom.trim(),
         category_name: formData.categorie,
@@ -160,6 +356,7 @@ const AjouterProduit = ({ userName, onLogout }) => {
         physical_state: formData.physicalState,
         gas_pressure: formData.gasPressure,
         gas_purity: formData.gasPurity,
+        fds_attachment: fdsAttachment,
         validation_status: 'pending',
       };
 
@@ -181,13 +378,14 @@ const AjouterProduit = ({ userName, onLogout }) => {
         gasPurity: '',
         description: '',
       });
+      setFdsFile(null);
       navigate('/magasinier');
     } catch (err) {
       toast.error(err.message || "Echec de creation du produit");
     } finally {
       setIsSubmitting(false);
     }
-  }, [formData, validateForm, navigate, toast]);
+  }, [duplicateProduct, fdsFile, formData, navigate, toast, validateForm]);
 
   return (
     <div className="app-layout">
@@ -225,7 +423,10 @@ const AjouterProduit = ({ userName, onLogout }) => {
                   <AlertCircle size={18} />
                   <div>
                     <strong>Produit similaire detecte</strong>
-                    <p>Un produit avec un QR Code similaire existe deja. Verifiez avant de continuer.</p>
+                    <p>
+                      Ce QR code est deja utilise
+                      {duplicateProduct ? ` par ${duplicateProduct.code_product} (${duplicateProduct.name}).` : '.'}
+                    </p>
                   </div>
                   <button onClick={() => setShowDoublonWarning(false)} aria-label="Fermer l'alerte">
                     <X size={16} />
@@ -246,9 +447,15 @@ const AjouterProduit = ({ userName, onLogout }) => {
                     <div className="input-with-btn">
                       <input
                         id="qrCode"
+                        ref={qrInputRef}
                         type="text"
                         value={formData.qrCode}
-                        onChange={(e) => setFormData({ ...formData, qrCode: e.target.value })}
+                        onChange={(e) => {
+                          setFormData({ ...formData, qrCode: e.target.value });
+                          setDuplicateProduct(null);
+                          setShowDoublonWarning(false);
+                        }}
+                        onBlur={() => verifyQrCodeUniqueness(formData.qrCode)}
                         placeholder="Scanner ou saisir le QR Code"
                         className={errors.qrCode ? 'error' : ''}
                         aria-invalid={errors.qrCode ? 'true' : 'false'}
@@ -265,6 +472,26 @@ const AjouterProduit = ({ userName, onLogout }) => {
                         </button>
                       )}
                     </div>
+                    <div className="input-hint">
+                      {!keyboardScanMode ? (
+                        <button type="button" className="scan-btn" onClick={() => {
+                          setKeyboardScanMode(true);
+                          toast.info('Mode douchette USB actif. Scannez puis appuyez sur Entree.');
+                          if (qrInputRef.current) qrInputRef.current.focus();
+                        }}>
+                          <Keyboard size={16} />
+                          Mode douchette USB
+                        </button>
+                      ) : (
+                        <button type="button" className="scan-btn scanning" onClick={stopKeyboardScanMode}>
+                          <StopCircle size={16} />
+                          Arreter mode douchette
+                        </button>
+                      )}
+                    </div>
+                    {keyboardScanMode && (
+                      <span className="input-hint">Fallback actif: scanner USB/clavier capture le code QR.</span>
+                    )}
                     {errors.qrCode && (
                       <span className="error-text" role="alert">{errors.qrCode}</span>
                     )}
@@ -313,26 +540,6 @@ const AjouterProduit = ({ userName, onLogout }) => {
                   <h3>Classification</h3>
                   <div className="form-row">
                     <div className="form-group">
-                      <label htmlFor="famille">
-                        <Layers size={16} />
-                        Famille
-                      </label>
-                      <select
-                        id="famille"
-                        value={formData.famille}
-                        onChange={(e) => setFormData({ ...formData, famille: e.target.value })}
-                        className={errors.famille ? 'error' : ''}
-                      >
-                        <option value="">Selectionner...</option>
-                        {families.map(f => (
-                          <option key={f.value} value={f.value}>{f.label}</option>
-                        ))}
-                      </select>
-                      {errors.famille && (
-                        <span className="error-text" role="alert">{errors.famille}</span>
-                      )}
-                    </div>
-                    <div className="form-group">
                       <label htmlFor="categorie">
                         <Layers size={16} />
                         Categorie
@@ -351,6 +558,14 @@ const AjouterProduit = ({ userName, onLogout }) => {
                       {errors.categorie && (
                         <span className="error-text" role="alert">{errors.categorie}</span>
                       )}
+                    </div>
+                    <div className="form-group">
+                      <label htmlFor="famille_auto">
+                        <Layers size={16} />
+                        Famille metier (automatique)
+                      </label>
+                      <input id="famille_auto" type="text" readOnly value={FAMILY_LABELS[formData.famille] || ''} placeholder="Auto selon categorie" />
+                      <span className="input-hint">La famille est geree automatiquement pour eviter les incoherences.</span>
                     </div>
                     <div className="form-group">
                       <label htmlFor="unite">
@@ -443,6 +658,15 @@ const AjouterProduit = ({ userName, onLogout }) => {
                           placeholder="Ex: Liquide"
                         />
                       </div>
+                    </div>
+                    <div className="form-group">
+                      <label htmlFor="fdsFile">FDS (Fiche de donnees de securite)</label>
+                      <input
+                        id="fdsFile"
+                        type="file"
+                        accept=".pdf,.png,.jpg,.jpeg,.webp,.txt,.doc,.docx"
+                        onChange={(e) => setFdsFile(e.target.files?.[0] || null)}
+                      />
                     </div>
                   </div>
                 )}

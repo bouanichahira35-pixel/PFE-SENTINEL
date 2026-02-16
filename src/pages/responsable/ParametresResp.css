@@ -1,4 +1,4 @@
- .parametres-page {
+﻿ .parametres-page {
    display: grid;
    grid-template-columns: 280px 1fr;
    gap: 1.5rem;
@@ -396,3 +396,24 @@
      max-width: none;
    }
  }
+
+/* Users management (real data) */
+.users-header{display:flex;align-items:flex-start;justify-content:space-between;gap:1rem;}
+.users-subtitle{margin:0.25rem 0 0;color:hsl(var(--text-secondary));font-size:0.85rem;}
+.users-error{padding:0.75rem 1rem;border-radius:8px;background:#fee2e2;color:#991b1b;}
+.users-empty{padding:1rem;color:hsl(var(--text-secondary));}
+.user-meta{display:flex;align-items:center;gap:0.5rem;}
+.session-pill{padding:0.25rem 0.6rem;border-radius:999px;font-size:0.75rem;border:1px solid hsl(var(--border));background:hsl(var(--card-bg));color:hsl(var(--text-secondary));}
+.session-pill.on{background:#d1fae5;color:#065f46;border-color:#a7f3d0;}
+.session-pill.off{background:#f3f4f6;color:#374151;border-color:#e5e7eb;}
+.user-status.blocked{background:#fee2e2;color:#991b1b;}
+.user-actions{display:flex;gap:0.5rem;}
+.btn-user{padding:0.5rem 0.75rem;border-radius:8px;border:1px solid hsl(var(--border));background:hsl(var(--card-bg));cursor:pointer;font-size:0.8rem;}
+.btn-user.secondary:hover{background:hsl(var(--app-bg));}
+.btn-user.danger{background:#ef4444;color:#fff;border-color:#ef4444;}
+.btn-user.danger:hover{background:#dc2626;}
+.btn-user:disabled{opacity:0.5;cursor:not-allowed;}
+.btn-refresh{padding:0.6rem 0.9rem;border-radius:8px;border:1px solid hsl(var(--border));background:hsl(var(--app-bg));cursor:pointer;}
+.btn-refresh:hover{background:hsl(var(--border));}
+
+

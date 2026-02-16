@@ -13,6 +13,8 @@ const securityAuditSchema = new mongoose.Schema(
         'password_reset_verify',
         'password_reset_done',
         'token_rejected',
+        'email_sent',
+        'email_failed',
       ],
       required: true,
     },

@@ -1,26 +1,18 @@
-import { useState, useMemo, useCallback } from 'react';
+import { useState, useMemo, useCallback, useEffect } from 'react';
 import { Package, Send, X } from 'lucide-react';
 import SidebarDem from '../../components/demandeur/SidebarDem';
 import HeaderPage from '../../components/shared/HeaderPage';
 import LoadingSpinner from '../../components/shared/LoadingSpinner';
 import { useToast } from '../../components/shared/Toast';
+import { get, post } from '../../services/api';
 import './ProduitsDem.css';
-
-const mockProducts = [
-  { id: 1, code: 'PRD-001', nom: 'Cable HDMI 2m' },
-  { id: 2, code: 'PRD-002', nom: 'Souris sans fil' },
-  { id: 3, code: 'PRD-003', nom: 'Clavier mecanique' },
-  { id: 4, code: 'PRD-004', nom: 'Ecran 24 pouces' },
-  { id: 5, code: 'PRD-005', nom: 'Papier A4 500 feuilles' },
-  { id: 6, code: 'PRD-006', nom: 'Stylo bleu' },
-  { id: 7, code: 'PRD-007', nom: 'Cartouche encre noire' },
-  { id: 8, code: 'PRD-008', nom: 'Chaise de bureau' },
-];
 
 const ProduitsDem = ({ userName, onLogout }) => {
   const toast = useToast();
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
+  const [products, setProducts] = useState([]);
+  const [isLoadingProducts, setIsLoadingProducts] = useState(false);
   const [showModal, setShowModal] = useState(false);
   const [selectedProduct, setSelectedProduct] = useState(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -32,12 +24,35 @@ const ProduitsDem = ({ userName, onLogout }) => {
   });
   const [errors, setErrors] = useState({});
 
+  const loadProducts = useCallback(async () => {
+    setIsLoadingProducts(true);
+    try {
+      const items = await get('/products');
+      const mapped = (items || [])
+        .filter((p) => p.validation_status === 'approved')
+        .map((p) => ({
+          id: p._id,
+          code: p.code_product || '-',
+          nom: p.name || 'Produit',
+        }));
+      setProducts(mapped);
+    } catch (err) {
+      toast.error(err.message || 'Impossible de charger les produits');
+    } finally {
+      setIsLoadingProducts(false);
+    }
+  }, [toast]);
+
+  useEffect(() => {
+    loadProducts();
+  }, [loadProducts]);
+
   const filteredProducts = useMemo(() => {
-    return mockProducts.filter(product =>
+    return products.filter(product =>
       product.nom.toLowerCase().includes(searchQuery.toLowerCase()) ||
       product.code.toLowerCase().includes(searchQuery.toLowerCase())
     );
-  }, [searchQuery]);
+  }, [products, searchQuery]);
 
   const handleDemander = useCallback((product) => {
     setSelectedProduct(product);
@@ -63,17 +78,34 @@ const ProduitsDem = ({ userName, onLogout }) => {
       toast.error('Veuillez corriger les erreurs');
       return;
     }
+    if (!selectedProduct?.id) {
+      toast.error('Produit invalide');
+      return;
+    }
 
     setIsSubmitting(true);
-    await new Promise(resolve => setTimeout(resolve, 1000));
-    
-    console.log('Demande envoyee:', { product: selectedProduct, ...formData });
-    toast.success('Demande envoyee avec succes');
-    
-    setIsSubmitting(false);
-    setShowModal(false);
-    setSelectedProduct(null);
-    setFormData({ quantite: '', motif: '', urgence: 'normale', commentaire: '' });
+    try {
+      const noteParts = [
+        `Motif: ${formData.motif.trim()}`,
+        `Urgence: ${formData.urgence}`,
+        formData.commentaire.trim() ? `Commentaire: ${formData.commentaire.trim()}` : '',
+      ].filter(Boolean);
+
+      await post('/requests', {
+        product: selectedProduct.id,
+        quantity_requested: Number(formData.quantite),
+        note: noteParts.join(' | '),
+      });
+
+      toast.success('Demande envoyee avec succes');
+      setShowModal(false);
+      setSelectedProduct(null);
+      setFormData({ quantite: '', motif: '', urgence: 'normale', commentaire: '' });
+    } catch (err) {
+      toast.error(err.message || "Echec d'envoi de la demande");
+    } finally {
+      setIsSubmitting(false);
+    }
   }, [formData, selectedProduct, validateForm, toast]);
 
   const handleCloseModal = useCallback(() => {
@@ -101,6 +133,7 @@ const ProduitsDem = ({ userName, onLogout }) => {
         />
         
         <main className="main-content">
+          {isLoadingProducts && <LoadingSpinner overlay text="Chargement des produits..." />}
           <div className="products-dem-page">
             <div className="products-dem-table-container">
               <table className="products-dem-table" role="table">

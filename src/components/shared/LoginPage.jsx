@@ -1,6 +1,6 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { User, Lock, AlertTriangle } from 'lucide-react';
+import { User, Lock, AlertTriangle, Eye } from 'lucide-react';
 import logoETAP from '../../assets/logoETAP.png';
 import { post } from '../../services/api';
 import './LoginPage.css';
@@ -13,6 +13,14 @@ const LoginPage = ({ role, roleName, onLogin, redirectPath }) => {
   });
   const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
+  const revealTimerRef = useRef(null);
+
+  useEffect(() => {
+    return () => {
+      if (revealTimerRef.current) clearTimeout(revealTimerRef.current);
+    };
+  }, []);
 
   const handleChange = (e) => {
     setFormData({
@@ -28,21 +36,35 @@ const LoginPage = ({ role, roleName, onLogin, redirectPath }) => {
     setIsLoading(true);
 
     try {
-      if (!formData.username || !formData.password) {
+      const identifier = String(formData.username || '').trim();
+      const password = String(formData.password || '');
+
+      if (!identifier || !password) {
         setError('Veuillez remplir tous les champs');
         return;
       }
 
       const data = await post('/auth/login', {
-        identifier: formData.username,
-        password: formData.password,
+        identifier,
+        password,
         role,
       });
 
-      onLogin(data.user, data.token);
+      onLogin(data.user, data.token, data.refreshToken, data.session_id);
       navigate(redirectPath);
     } catch (err) {
-      setError(err.message || 'Erreur de connexion');
+      // UX: for security, keep the same generic message for invalid credentials.
+      const message = String(err.message || '');
+      if (
+        message.includes('Utilisateur introuvable') ||
+        message.includes('Mot de passe incorrect') ||
+        message.includes('Compte bloque') ||
+        message.includes('Role invalide')
+      ) {
+        setError('Mot de passe incorrect');
+      } else {
+        setError(message || 'Erreur de connexion');
+      }
     } finally {
       setIsLoading(false);
     }
@@ -50,6 +72,12 @@ const LoginPage = ({ role, roleName, onLogin, redirectPath }) => {
 
   const handleForgotPassword = () => {
     navigate('/mot-de-passe-oublie', { state: { role } });
+  };
+
+  const handleRevealPassword = () => {
+    setShowPassword(true);
+    if (revealTimerRef.current) clearTimeout(revealTimerRef.current);
+    revealTimerRef.current = setTimeout(() => setShowPassword(false), 2000);
   };
 
   return (
@@ -94,7 +122,7 @@ const LoginPage = ({ role, roleName, onLogin, redirectPath }) => {
               <div className="login-input-wrapper">
                 <Lock size={20} className="login-input-icon" />
                 <input
-                  type="password"
+                  type={showPassword ? 'text' : 'password'}
                   id="password"
                   name="password"
                   value={formData.password}
@@ -103,6 +131,15 @@ const LoginPage = ({ role, roleName, onLogin, redirectPath }) => {
                   className="login-input"
                   autoComplete="current-password"
                 />
+                <button
+                  type="button"
+                  className="login-password-peek"
+                  onClick={handleRevealPassword}
+                  aria-label="Afficher le mot de passe pendant 2 secondes"
+                  title="Afficher 2 secondes"
+                >
+                  <Eye size={18} />
+                </button>
               </div>
             </div>
 

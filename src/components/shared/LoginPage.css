@@ -125,6 +125,36 @@
   background: #ffffff;
 }
 
+.login-password-peek {
+  position: absolute;
+  right: 0.75rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2.25rem;
+  height: 2.25rem;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  background: #ffffff;
+  color: #6b7280;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.login-password-peek:hover {
+  color: #1565c0;
+  border-color: #cbd5e1;
+}
+
+.login-password-peek:active {
+  transform: scale(0.98);
+}
+
+.login-password-peek:focus {
+  outline: none;
+  box-shadow: 0 0 0 3px rgba(25, 118, 210, 0.12);
+}
+
 .login-input:focus {
   outline: none;
   border-color: #1976d2;

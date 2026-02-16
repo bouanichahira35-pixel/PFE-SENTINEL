@@ -1,61 +1,132 @@
-import { useState, useCallback } from 'react';
+﻿import { useEffect, useMemo, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
-import { Package, ArrowUpFromLine, Save, X, ScanLine, Calendar, User, Hash, AlertTriangle } from 'lucide-react';
+import { Package, ArrowUpFromLine, Save, X, ScanLine, Calendar, User, Hash, AlertTriangle, FileText, Building2 } from 'lucide-react';
 import SidebarMag from '../../components/magasinier/SidebarMag';
 import HeaderPage from '../../components/shared/HeaderPage';
 import LoadingSpinner from '../../components/shared/LoadingSpinner';
 import { useToast } from '../../components/shared/Toast';
+import { get, patch, post, uploadFile } from '../../services/api';
 import './EntreeStock.css';
 
 const SortieStock = ({ userName, onLogout }) => {
   const location = useLocation();
   const navigate = useNavigate();
   const toast = useToast();
+
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const product = location.state?.product;
-  const demandeInfo = location.state?.demandeInfo;
+  const [isLoadingProducts, setIsLoadingProducts] = useState(false);
+
+  const initialProduct = location.state?.product || null;
+  const demandeInfo = location.state?.demandeInfo || null;
+
+  const [productsIndex, setProductsIndex] = useState([]);
+  const [productInfo, setProductInfo] = useState(initialProduct);
+  const [errors, setErrors] = useState({});
+  const [attachmentFile, setAttachmentFile] = useState(null);
+  const [attachmentLabel, setAttachmentLabel] = useState('Bon de prelevement');
 
   const [formData, setFormData] = useState({
-    codeBarres: product?.code || '',
+    codeBarres: initialProduct?.code || '',
     quantite: demandeInfo?.quantite?.toString() || '',
-    destination: demandeInfo?.demandeur || '',
     dateSortie: new Date().toISOString().split('T')[0],
-    commentaire: ''
+    directionLaboratoire: demandeInfo?.direction || '',
+    beneficiaire: demandeInfo?.demandeur || '',
+    numeroBonPrelevementPapier: '',
+    commentaire: '',
   });
 
-  const [productInfo, setProductInfo] = useState(product || null);
-  const [errors, setErrors] = useState({});
+  useEffect(() => {
+    let ignore = false;
 
-  const handleScanBarcode = useCallback(() => {
-    if (!productInfo && formData.codeBarres) {
-      setProductInfo({
-        code: formData.codeBarres,
-        nom: 'Produit scanne',
-        categorie: 'Informatique',
-        quantite: 50,
-        seuil: 10,
-        unite: 'Unite'
-      });
-      toast.info('Produit identifie');
+    const loadProducts = async () => {
+      setIsLoadingProducts(true);
+      try {
+        const items = await get('/products');
+        if (ignore) return;
+
+        const mapped = items.map((p) => ({
+          id: p._id,
+          code: p.code_product,
+          nom: p.name,
+          categorie: p.category?.name || 'Sans categorie',
+          quantite: Number(p.quantity_current || 0),
+          seuil: Number(p.seuil_minimum || 0),
+          unite: 'Unite',
+        }));
+
+        setProductsIndex(mapped);
+
+        if (!initialProduct && formData.codeBarres) {
+          const found = mapped.find((x) => x.code === formData.codeBarres.trim().toUpperCase());
+          if (found) setProductInfo(found);
+        }
+      } catch (err) {
+        toast.error(err.message || 'Impossible de charger les produits');
+      } finally {
+        if (!ignore) setIsLoadingProducts(false);
+      }
+    };
+
+    loadProducts();
+    return () => {
+      ignore = true;
+    };
+  }, [initialProduct, formData.codeBarres, toast]);
+
+  const quantiteSortie = Number.parseInt(formData.quantite, 10) || 0;
+  const isInsufficientStock = useMemo(
+    () => Boolean(productInfo && quantiteSortie > productInfo.quantite),
+    [productInfo, quantiteSortie]
+  );
+  const newQuantity = useMemo(
+    () => (productInfo ? productInfo.quantite - quantiteSortie : 0),
+    [productInfo, quantiteSortie]
+  );
+
+  const handleScanBarcode = () => {
+    const code = formData.codeBarres.trim().toUpperCase();
+    if (!code) {
+      toast.error('Saisissez un code produit');
+      return;
     }
-  }, [productInfo, formData.codeBarres, toast]);
 
-  const validateForm = useCallback(() => {
+    const found = productsIndex.find((p) => p.code === code);
+    if (!found) {
+      setProductInfo(null);
+      toast.error('Produit introuvable pour ce code');
+      return;
+    }
+
+    setProductInfo(found);
+    setErrors((prev) => ({ ...prev, product: undefined }));
+    toast.success(`Produit identifie: ${found.nom}`);
+  };
+
+  const validateForm = () => {
     const newErrors = {};
+
     if (!productInfo) newErrors.product = 'Produit requis';
-    if (!formData.quantite || parseInt(formData.quantite) < 1) {
+
+    if (!formData.quantite || Number.parseInt(formData.quantite, 10) < 1) {
       newErrors.quantite = 'Quantite valide requise';
     }
-    if (!formData.destination.trim()) {
-      newErrors.destination = 'Destination requise';
+
+    if (!formData.directionLaboratoire.trim()) {
+      newErrors.directionLaboratoire = 'Direction / laboratoire requis';
     }
+
+    if (!formData.beneficiaire.trim()) {
+      newErrors.beneficiaire = 'Beneficiaire requis';
+    }
+
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
-  }, [productInfo, formData]);
+  };
 
-  const handleSubmit = useCallback(async (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
+
     if (!validateForm()) {
       toast.error('Veuillez corriger les erreurs');
       return;
@@ -67,44 +138,74 @@ const SortieStock = ({ userName, onLogout }) => {
     }
 
     setIsSubmitting(true);
-    await new Promise(resolve => setTimeout(resolve, 1000));
-    
-    console.log('Sortie stock:', { ...formData, product: productInfo, demandeId: demandeInfo?.id });
-    toast.success('Sortie de stock enregistree avec succes');
-    setIsSubmitting(false);
-    navigate('/magasinier');
-  }, [formData, productInfo, validateForm, navigate, toast, demandeInfo]);
 
-  const quantiteSortie = parseInt(formData.quantite) || 0;
-  const newQuantity = productInfo ? productInfo.quantite - quantiteSortie : 0;
-  const isInsufficientStock = productInfo && quantiteSortie > productInfo.quantite;
+    try {
+      const attachments = [];
+      if (attachmentFile) {
+        const uploaded = await uploadFile('/files/upload', attachmentFile);
+        attachments.push({
+          label: attachmentLabel || 'Document',
+          file_name: uploaded.file_name,
+          file_url: uploaded.file_url,
+        });
+      }
+
+      const createdExit = await post('/stock/exits', {
+        product: productInfo.id,
+        quantity: Number(formData.quantite),
+        date_exit: formData.dateSortie,
+        withdrawal_paper_number: formData.numeroBonPrelevementPapier || undefined,
+        direction_laboratory: formData.directionLaboratoire,
+        beneficiary: formData.beneficiaire,
+        demandeur: demandeInfo?.demandeurId || undefined,
+        note: formData.commentaire || undefined,
+        attachments,
+      });
+
+      if (demandeInfo?.id) {
+        try {
+          await patch(`/requests/${demandeInfo.id}/process`, { status: 'accepted' });
+        } catch {
+          toast.warning("Sortie creee, mais la demande n'a pas ete mise a jour automatiquement");
+        }
+      }
+
+      if (createdExit?.exit_number) {
+        toast.success(`Bon de prelevement ${createdExit.exit_number} enregistre avec succes`);
+      } else {
+        toast.success('Sortie de stock enregistree avec succes');
+      }
+
+      navigate('/magasinier/historique');
+    } catch (err) {
+      toast.error(err.message || 'Echec enregistrement sortie');
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
 
   return (
     <div className="app-layout">
-      <SidebarMag 
-        collapsed={sidebarCollapsed} 
+      <SidebarMag
+        collapsed={sidebarCollapsed}
         onToggle={() => setSidebarCollapsed(!sidebarCollapsed)}
         onLogout={onLogout}
         userName={userName}
       />
-      
+
       <div className="main-container">
-        <HeaderPage 
-          userName={userName}
-          title="Sortie de Stock"
-          showSearch={false}
-        />
-        
+        <HeaderPage userName={userName} title="Sortie de Stock" showSearch={false} />
+
         <main className="main-content">
-          {isSubmitting && <LoadingSpinner overlay text="Enregistrement..." />}
-          
+          {(isSubmitting || isLoadingProducts) && <LoadingSpinner overlay text="Chargement..." />}
+
           <div className="stock-operation-page">
             <div className="operation-card">
               <div className="operation-header exit">
                 <ArrowUpFromLine size={24} />
                 <h2>Nouvelle sortie de stock</h2>
                 {demandeInfo && (
-                  <span className="operation-badge">Demande {demandeInfo.id}</span>
+                  <span className="operation-badge">Demande {demandeInfo.reference || demandeInfo.id}</span>
                 )}
               </div>
 
@@ -130,6 +231,11 @@ const SortieStock = ({ userName, onLogout }) => {
                           Scanner
                         </button>
                       </div>
+                      {errors.product && (
+                        <span className="error-text" role="alert">
+                          {errors.product}
+                        </span>
+                      )}
                     </div>
                   </div>
                 </div>
@@ -151,7 +257,9 @@ const SortieStock = ({ userName, onLogout }) => {
                       </div>
                       <div className="info-item">
                         <span className="info-label">Stock disponible</span>
-                        <span className="info-value">{productInfo.quantite} {productInfo.unite}</span>
+                        <span className="info-value">
+                          {productInfo.quantite} {productInfo.unite}
+                        </span>
                       </div>
                       <div className="info-item">
                         <span className="info-label">Categorie</span>
@@ -162,7 +270,38 @@ const SortieStock = ({ userName, onLogout }) => {
                 )}
 
                 <div className="form-section">
-                  <h3>Quantite a sortir</h3>
+                  <h3>Bon de prelevement</h3>
+                  <div className="form-row">
+                    <div className="form-group">
+                      <label htmlFor="numeroBonPrelevementPapier">
+                        <FileText size={16} />
+                        N Bon prelevement (papier)
+                      </label>
+                      <input
+                        id="numeroBonPrelevementPapier"
+                        type="text"
+                        value={formData.numeroBonPrelevementPapier}
+                        onChange={(e) => setFormData({ ...formData, numeroBonPrelevementPapier: e.target.value })}
+                        placeholder="Ex: BP-CHIM-2026-001"
+                      />
+                    </div>
+                    <div className="form-group">
+                      <label htmlFor="dateSortie">
+                        <Calendar size={16} />
+                        Date de sortie
+                      </label>
+                      <input
+                        id="dateSortie"
+                        type="date"
+                        value={formData.dateSortie}
+                        onChange={(e) => setFormData({ ...formData, dateSortie: e.target.value })}
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                <div className="form-section">
+                  <h3>Consommation</h3>
                   <div className="form-row">
                     <div className="form-group">
                       <label htmlFor="quantite">
@@ -181,7 +320,9 @@ const SortieStock = ({ userName, onLogout }) => {
                         aria-invalid={errors.quantite || isInsufficientStock ? 'true' : 'false'}
                       />
                       {errors.quantite && (
-                        <span className="error-text" role="alert">{errors.quantite}</span>
+                        <span className="error-text" role="alert">
+                          {errors.quantite}
+                        </span>
                       )}
                       {isInsufficientStock && (
                         <span className="input-error" role="alert">
@@ -191,40 +332,46 @@ const SortieStock = ({ userName, onLogout }) => {
                       )}
                     </div>
                     <div className="form-group">
-                      <label htmlFor="dateSortie">
-                        <Calendar size={16} />
-                        Date de sortie
+                      <label htmlFor="directionLaboratoire">
+                        <Building2 size={16} />
+                        Direction / Laboratoire
                       </label>
                       <input
-                        id="dateSortie"
-                        type="date"
-                        value={formData.dateSortie}
-                        onChange={(e) => setFormData({ ...formData, dateSortie: e.target.value })}
+                        id="directionLaboratoire"
+                        type="text"
+                        value={formData.directionLaboratoire}
+                        onChange={(e) => setFormData({ ...formData, directionLaboratoire: e.target.value })}
+                        placeholder="Ex: DSP"
+                        className={errors.directionLaboratoire ? 'error' : ''}
                       />
+                      {errors.directionLaboratoire && (
+                        <span className="error-text" role="alert">
+                          {errors.directionLaboratoire}
+                        </span>
+                      )}
                     </div>
                   </div>
-                </div>
 
-                <div className="form-section">
-                  <h3>Destination</h3>
                   <div className="form-group">
-                    <label htmlFor="destination">
+                    <label htmlFor="beneficiaire">
                       <User size={16} />
-                      Beneficiaire / Destination
+                      Beneficiaire / Demandeur
                     </label>
                     <input
-                      id="destination"
+                      id="beneficiaire"
                       type="text"
-                      value={formData.destination}
-                      onChange={(e) => setFormData({ ...formData, destination: e.target.value })}
-                      placeholder="Nom du beneficiaire ou service"
-                      className={errors.destination ? 'error' : ''}
-                      aria-invalid={errors.destination ? 'true' : 'false'}
+                      value={formData.beneficiaire}
+                      onChange={(e) => setFormData({ ...formData, beneficiaire: e.target.value })}
+                      placeholder="Nom de la personne"
+                      className={errors.beneficiaire ? 'error' : ''}
                     />
-                    {errors.destination && (
-                      <span className="error-text" role="alert">{errors.destination}</span>
+                    {errors.beneficiaire && (
+                      <span className="error-text" role="alert">
+                        {errors.beneficiaire}
+                      </span>
                     )}
                   </div>
+
                   <div className="form-group">
                     <label htmlFor="commentaire">Commentaire (optionnel)</label>
                     <textarea
@@ -234,6 +381,27 @@ const SortieStock = ({ userName, onLogout }) => {
                       placeholder="Informations supplementaires..."
                       rows={3}
                     />
+                  </div>
+                  <div className="form-row">
+                    <div className="form-group">
+                      <label htmlFor="attachmentLabel">Type de piece</label>
+                      <input
+                        id="attachmentLabel"
+                        type="text"
+                        value={attachmentLabel}
+                        onChange={(e) => setAttachmentLabel(e.target.value)}
+                        placeholder="Ex: Bon de prelevement signe"
+                      />
+                    </div>
+                    <div className="form-group">
+                      <label htmlFor="pieceJointe">Fichier joint (optionnel)</label>
+                      <input
+                        id="pieceJointe"
+                        type="file"
+                        accept=".pdf,.png,.jpg,.jpeg,.webp,.txt,.docx,.xlsx"
+                        onChange={(e) => setAttachmentFile(e.target.files?.[0] || null)}
+                      />
+                    </div>
                   </div>
                 </div>
 
@@ -263,18 +431,13 @@ const SortieStock = ({ userName, onLogout }) => {
                 )}
 
                 <div className="form-actions">
-                  <button 
-                    type="button" 
-                    className="btn-cancel" 
-                    onClick={() => navigate('/magasinier')}
-                    disabled={isSubmitting}
-                  >
+                  <button type="button" className="btn-cancel" onClick={() => navigate('/magasinier')} disabled={isSubmitting}>
                     <X size={18} />
                     Annuler
                   </button>
-                  <button 
-                    type="submit" 
-                    className="btn-submit exit" 
+                  <button
+                    type="submit"
+                    className="btn-submit exit"
                     disabled={!productInfo || !formData.quantite || isInsufficientStock || isSubmitting}
                   >
                     <Save size={18} />
@@ -291,4 +454,3 @@ const SortieStock = ({ userName, onLogout }) => {
 };
 
 export default SortieStock;
-

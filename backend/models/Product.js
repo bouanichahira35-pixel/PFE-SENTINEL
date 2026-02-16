@@ -24,7 +24,7 @@ const productSchema = new mongoose.Schema(
     quantity_current: { type: Number, default: 0 },
     seuil_minimum: { type: Number, default: 0 },
     status: { type: String, enum: ['ok', 'sous_seuil', 'rupture', 'bloque'], default: 'ok' },
-    qr_code_value: String,
+    qr_code_value: { type: String, trim: true },
     image_product: String,
     created_by: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
     validated_by: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
@@ -32,5 +32,7 @@ const productSchema = new mongoose.Schema(
   },
   { timestamps: true }
 );
+
+productSchema.index({ qr_code_value: 1 }, { unique: true, sparse: true });
 
 module.exports = mongoose.model('Product', productSchema);

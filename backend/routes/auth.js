@@ -2,14 +2,21 @@ const router = require('express').Router();
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const nodemailer = require('nodemailer');
+const { randomUUID } = require('crypto');
 const User = require('../models/User');
 const PasswordReset = require('../models/PasswordReset');
+const UserSession = require('../models/UserSession');
+const { normalizeRole, isTechnicalRole } = require('../constants/roles');
+const { logSecurityEvent } = require('../services/securityAuditService');
+const requireAuth = require('../middlewares/requireAuth');
 
 const RESET_CODE_TTL_MINUTES = Number(process.env.RESET_CODE_TTL_MINUTES || 10);
 const RESET_JWT_EXPIRES_IN = process.env.RESET_JWT_EXPIRES_IN || '15m';
 // Security policy: application sessions are limited to 15 minutes max.
 const JWT_EXPIRES_IN = '15m';
 const BCRYPT_SALT_ROUNDS = Number(process.env.BCRYPT_SALT_ROUNDS || 12);
+const REFRESH_JWT_EXPIRES_IN = process.env.REFRESH_JWT_EXPIRES_IN || '7d';
+const SINGLE_SESSION_MODE = String(process.env.SINGLE_SESSION_MODE || 'true') === 'true';
 
 const transporter = nodemailer.createTransport({
   host: process.env.MAIL_HOST,
@@ -45,32 +52,114 @@ router.post('/login', async (req, res) => {
       return res.status(400).json({ error: 'identifier, password et role sont obligatoires' });
     }
 
+    const normalizedRole = normalizeRole(role);
+    if (!isTechnicalRole(normalizedRole)) {
+      return res.status(400).json({ error: 'Role invalide' });
+    }
+
     const normalizedIdentifier = String(identifier).trim().toLowerCase();
     const rawIdentifier = String(identifier).trim();
+    const ip = req.ip;
+    const ua = req.headers['user-agent'] || '';
 
     const user = await User.findOne({
-      role,
+      role: normalizedRole,
       $or: [{ email: normalizedIdentifier }, { telephone: rawIdentifier }]
     }).select('+password_hash');
 
-    if (!user) return res.status(401).json({ error: 'Utilisateur introuvable' });
-    if (user.status !== 'active') return res.status(403).json({ error: 'Compte bloque' });
+    if (!user) {
+      await logSecurityEvent({
+        event_type: 'login_failed',
+        email: normalizedIdentifier,
+        role: normalizedRole,
+        ip_address: ip,
+        user_agent: ua,
+        success: false,
+        details: 'Utilisateur introuvable',
+      });
+      return res.status(401).json({ error: 'Utilisateur introuvable' });
+    }
+    if (user.status !== 'active') {
+      await logSecurityEvent({
+        event_type: 'login_failed',
+        user: user._id,
+        email: user.email,
+        role: user.role,
+        ip_address: ip,
+        user_agent: ua,
+        success: false,
+        details: 'Compte bloque',
+      });
+      return res.status(403).json({ error: 'Compte bloque' });
+    }
 
     const ok = await bcrypt.compare(password, user.password_hash);
-    if (!ok) return res.status(401).json({ error: 'Mot de passe incorrect' });
+    if (!ok) {
+      await logSecurityEvent({
+        event_type: 'login_failed',
+        user: user._id,
+        email: user.email,
+        role: user.role,
+        ip_address: ip,
+        user_agent: ua,
+        success: false,
+        details: 'Mot de passe incorrect',
+      });
+      return res.status(401).json({ error: 'Mot de passe incorrect' });
+    }
 
     user.last_login = new Date();
     await user.save();
 
+    if (SINGLE_SESSION_MODE) {
+      await UserSession.updateMany(
+        { user: user._id, is_active: true },
+        { $set: { is_active: false, logout_time: new Date(), revoked_reason: 'new_login' } }
+      );
+    }
+
+    const sessionId = randomUUID();
+    const accessExpiresAt = new Date(Date.now() + 15 * 60 * 1000);
+    const refreshExpiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
+
+    await UserSession.create({
+      user: user._id,
+      session_id: sessionId,
+      device: req.headers['sec-ch-ua-platform'] || 'web',
+      ip_address: ip,
+      user_agent: ua,
+      expires_at: refreshExpiresAt,
+      is_active: true,
+    });
+
     const token = jwt.sign(
-      { id: user._id, role: user.role, username: user.username },
+      { id: user._id, role: user.role, username: user.username, sid: sessionId },
       process.env.JWT_SECRET,
       { expiresIn: JWT_EXPIRES_IN }
     );
+    const refreshToken = jwt.sign(
+      { id: user._id, role: user.role, username: user.username, sid: sessionId, purpose: 'refresh' },
+      process.env.JWT_SECRET,
+      { expiresIn: REFRESH_JWT_EXPIRES_IN }
+    );
+
+    await logSecurityEvent({
+      event_type: 'login_success',
+      user: user._id,
+      email: user.email,
+      role: user.role,
+      ip_address: ip,
+      user_agent: ua,
+      success: true,
+      details: `Session ${sessionId}`,
+    });
 
     return res.json({
       token,
+      refreshToken,
       session_expires_in: JWT_EXPIRES_IN,
+      session_id: sessionId,
+      access_expires_at: accessExpiresAt,
       user: {
         id: user._id,
         username: user.username,
@@ -89,12 +178,31 @@ router.post('/forgot-password/request', async (req, res) => {
   try {
     const { email, role } = req.body;
     if (!email) return res.status(400).json({ error: 'email obligatoire' });
+    if (role) {
+      const normalizedRole = normalizeRole(role);
+      if (!isTechnicalRole(normalizedRole)) {
+        return res.status(400).json({ error: 'Role invalide' });
+      }
+    }
 
     const normalizedEmail = String(email).trim().toLowerCase();
-    const query = role ? { email: normalizedEmail, role } : { email: normalizedEmail };
+    const query = role ? { email: normalizedEmail, role: normalizeRole(role) } : { email: normalizedEmail };
     const user = await User.findOne(query);
+    const ip = req.ip;
+    const ua = req.headers['user-agent'] || '';
 
-    if (!user) return res.json({ message: 'Si ce compte existe, un code a ete envoye.' });
+    if (!user) {
+      await logSecurityEvent({
+        event_type: 'password_reset_request',
+        email: normalizedEmail,
+        role: role ? normalizeRole(role) : undefined,
+        ip_address: ip,
+        user_agent: ua,
+        success: false,
+        details: 'Compte introuvable',
+      });
+      return res.json({ message: 'Si ce compte existe, un code a ete envoye.' });
+    }
     if (user.status !== 'active') return res.json({ message: 'Si ce compte existe, un code a ete envoye.' });
 
     await PasswordReset.updateMany(
@@ -120,6 +228,16 @@ router.post('/forgot-password/request', async (req, res) => {
       text: `Votre code est: ${rawCode}. Il expire dans ${RESET_CODE_TTL_MINUTES} minutes.`,
       html: `<p>Votre code de reinitialisation est: <b>${rawCode}</b></p><p>Il expire dans ${RESET_CODE_TTL_MINUTES} minutes.</p>`
     });
+    await logSecurityEvent({
+      event_type: 'password_reset_request',
+      user: user._id,
+      email: user.email,
+      role: user.role,
+      ip_address: ip,
+      user_agent: ua,
+      success: true,
+      details: 'OTP envoye',
+    });
 
     return res.json({ message: 'Si ce compte existe, un code a ete envoye.' });
   } catch (err) {
@@ -132,9 +250,15 @@ router.post('/forgot-password/verify', async (req, res) => {
   try {
     const { email, code, role } = req.body;
     if (!email || !code) return res.status(400).json({ error: 'email et code obligatoires' });
+    if (role) {
+      const normalizedRole = normalizeRole(role);
+      if (!isTechnicalRole(normalizedRole)) {
+        return res.status(400).json({ error: 'Role invalide' });
+      }
+    }
 
     const normalizedEmail = String(email).trim().toLowerCase();
-    const query = role ? { email: normalizedEmail, role } : { email: normalizedEmail };
+    const query = role ? { email: normalizedEmail, role: normalizeRole(role) } : { email: normalizedEmail };
     const user = await User.findOne(query);
     if (!user) return res.status(400).json({ error: 'Code invalide' });
 
@@ -163,6 +287,16 @@ router.post('/forgot-password/verify', async (req, res) => {
       process.env.JWT_SECRET,
       { expiresIn: RESET_JWT_EXPIRES_IN }
     );
+    await logSecurityEvent({
+      event_type: 'password_reset_verify',
+      user: user._id,
+      email: user.email,
+      role: user.role,
+      ip_address: req.ip,
+      user_agent: req.headers['user-agent'] || '',
+      success: true,
+      details: 'OTP valide',
+    });
 
     return res.json({ message: 'Code valide', resetToken });
   } catch (err) {
@@ -221,7 +355,105 @@ router.post('/forgot-password/reset', async (req, res) => {
     reset.status = 'used';
     await reset.save();
 
+    await UserSession.updateMany(
+      { user: payload.userId, is_active: true },
+      { $set: { is_active: false, logout_time: new Date(), revoked_reason: 'password_reset' } }
+    );
+
+    await logSecurityEvent({
+      event_type: 'password_reset_done',
+      user: payload.userId,
+      ip_address: req.ip,
+      user_agent: req.headers['user-agent'] || '',
+      success: true,
+      details: 'Password updated and sessions revoked',
+    });
+
     return res.json({ message: 'Mot de passe mis a jour avec succes' });
+  } catch (err) {
+    return res.status(500).json({ error: 'Erreur serveur' });
+  }
+});
+
+router.post('/refresh', async (req, res) => {
+  try {
+    const { refreshToken } = req.body;
+    if (!refreshToken) return res.status(400).json({ error: 'refreshToken obligatoire' });
+
+    let payload;
+    try {
+      payload = jwt.verify(refreshToken, process.env.JWT_SECRET);
+    } catch {
+      return res.status(401).json({ error: 'Refresh token invalide ou expire' });
+    }
+
+    if (payload.purpose !== 'refresh' || !payload.sid) {
+      return res.status(401).json({ error: 'Refresh token invalide' });
+    }
+
+    const session = await UserSession.findOne({
+      session_id: payload.sid,
+      user: payload.id,
+      is_active: true,
+      expires_at: { $gt: new Date() },
+    });
+
+    if (!session) return res.status(401).json({ error: 'Session invalide' });
+
+    const token = jwt.sign(
+      { id: payload.id, role: payload.role, username: payload.username, sid: payload.sid },
+      process.env.JWT_SECRET,
+      { expiresIn: JWT_EXPIRES_IN }
+    );
+
+    return res.json({ token, session_expires_in: JWT_EXPIRES_IN });
+  } catch (err) {
+    return res.status(500).json({ error: 'Erreur serveur' });
+  }
+});
+
+router.post('/logout', requireAuth, async (req, res) => {
+  try {
+    const sessionId = req.user.sessionId;
+    if (sessionId) {
+      await UserSession.updateOne(
+        { session_id: sessionId, user: req.user.id, is_active: true },
+        { $set: { is_active: false, logout_time: new Date(), revoked_reason: 'logout' } }
+      );
+    }
+
+    await logSecurityEvent({
+      event_type: 'logout',
+      user: req.user.id,
+      role: req.user.role,
+      ip_address: req.ip,
+      user_agent: req.headers['user-agent'] || '',
+      success: true,
+    });
+
+    return res.json({ message: 'Logout OK' });
+  } catch (err) {
+    return res.status(500).json({ error: 'Erreur serveur' });
+  }
+});
+
+router.post('/logout-all', requireAuth, async (req, res) => {
+  try {
+    await UserSession.updateMany(
+      { user: req.user.id, is_active: true },
+      { $set: { is_active: false, logout_time: new Date(), revoked_reason: 'logout_all' } }
+    );
+
+    await logSecurityEvent({
+      event_type: 'logout_all',
+      user: req.user.id,
+      role: req.user.role,
+      ip_address: req.ip,
+      user_agent: req.headers['user-agent'] || '',
+      success: true,
+    });
+
+    return res.json({ message: 'Toutes les sessions ont ete fermees' });
   } catch (err) {
     return res.status(500).json({ error: 'Erreur serveur' });
   }

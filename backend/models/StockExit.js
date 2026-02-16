@@ -22,6 +22,14 @@ const stockExitSchema = new mongoose.Schema(
 
     // FIFO support (simple today, can become array of lots later)
     fifo_reference: String,
+    consumed_lots: [
+      {
+        lot: { type: mongoose.Schema.Types.ObjectId, ref: 'StockLot' },
+        lot_number: String,
+        quantity: Number,
+        expiry_date: Date,
+      },
+    ],
 
     // Optional document links/metadata
     attachments: [

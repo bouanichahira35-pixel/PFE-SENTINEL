@@ -1,18 +1,4 @@
-// Role aliases to align technical roles with business wording from cahier des charges.
-const ROLE_ALIASES = {
-  admin_app: 'responsable',
-  administrateur: 'responsable',
-  responsable: 'responsable',
-  stock_manager: 'magasinier',
-  gestionnaire: 'magasinier',
-  magasinier: 'magasinier',
-  viewer: 'demandeur',
-  demandeur: 'demandeur',
-};
-
-function normalizeRole(role) {
-  return ROLE_ALIASES[String(role || '').toLowerCase()] || String(role || '').toLowerCase();
-}
+const { normalizeRole } = require('../constants/roles');
 
 function requireRole(...allowedRoles) {
   const allowed = allowedRoles.map(normalizeRole);

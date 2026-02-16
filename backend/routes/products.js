@@ -3,7 +3,17 @@ const Product = require('../models/Product');
 const Category = require('../models/Category');
 const Sequence = require('../models/Sequence');
 const requireAuth = require('../middlewares/requireAuth');
-const requireRole = require('../middlewares/requireRole');
+const requirePermission = require('../middlewares/requirePermission');
+const { PERMISSIONS } = require('../constants/permissions');
+const History = require('../models/History');
+const {
+  asDate,
+  asNonNegativeNumber,
+  asOptionalString,
+  asTrimmedString,
+  isBlank,
+  isValidObjectIdLike,
+} = require('../utils/validation');
 
 function computeStatus(quantity, seuil) {
   const q = Number(quantity || 0);
@@ -93,11 +103,35 @@ router.get('/', requireAuth, async (req, res) => {
   }
 });
 
-router.post('/', requireAuth, requireRole('magasinier', 'responsable'), async (req, res) => {
+router.post('/', requireAuth, requirePermission(PERMISSIONS.PRODUCT_CREATE), async (req, res) => {
   try {
+    const errors = [];
     const family = normalizeFamily(req.body.family);
     if (!family) {
-      return res.status(400).json({ error: 'family invalide (economat, produit_chimique, gaz, consommable_informatique, consommable_laboratoire)' });
+      errors.push('family invalide (economat, produit_chimique, gaz, consommable_informatique, consommable_laboratoire)');
+    }
+    const name = asTrimmedString(req.body.name);
+    if (!name) errors.push('name obligatoire');
+
+    if (req.body.category && !isValidObjectIdLike(req.body.category)) {
+      errors.push('category doit etre un ObjectId valide');
+    }
+
+    const quantityCurrent = asNonNegativeNumber(req.body.quantity_current);
+    if (Number.isNaN(quantityCurrent)) errors.push('quantity_current doit etre un nombre >= 0');
+
+    const seuilMinimum = asNonNegativeNumber(req.body.seuil_minimum);
+    if (Number.isNaN(seuilMinimum)) errors.push('seuil_minimum doit etre un nombre >= 0');
+
+    const stockInitial = asNonNegativeNumber(req.body.stock_initial_year);
+    if (Number.isNaN(stockInitial)) errors.push('stock_initial_year doit etre un nombre >= 0');
+
+    if (!req.body.category && isBlank(req.body.category_name)) {
+      errors.push('category ou category_name obligatoire');
+    }
+
+    if (errors.length > 0) {
+      return res.status(400).json({ error: 'Validation failed', details: errors });
     }
 
     const category = await getOrCreateCategory({
@@ -106,38 +140,32 @@ router.post('/', requireAuth, requireRole('magasinier', 'responsable'), async (r
       userId: req.user.id,
     });
 
-    if (!category) {
-      return res.status(400).json({ error: 'category ou category_name obligatoire' });
-    }
-
-    const quantityCurrent = Number(req.body.quantity_current || 0);
-    const seuilMinimum = Number(req.body.seuil_minimum || 0);
+    if (!category) return res.status(400).json({ error: 'category invalide' });
 
     const payload = {
       code_product: req.body.code_product || (await getNextProductCode()),
-      name: req.body.name,
-      description: req.body.description,
+      name,
+      description: asOptionalString(req.body.description),
       category: category._id,
       family,
-      emplacement: req.body.emplacement,
-      stock_initial_year: Number(req.body.stock_initial_year || 0),
-      chemical_class: req.body.chemical_class,
-      physical_state: req.body.physical_state,
+      emplacement: asOptionalString(req.body.emplacement),
+      stock_initial_year: stockInitial ?? 0,
+      chemical_class: asOptionalString(req.body.chemical_class),
+      physical_state: asOptionalString(req.body.physical_state),
       fds_attachment: req.body.fds_attachment,
-      gas_pressure: req.body.gas_pressure,
-      gas_purity: req.body.gas_purity,
-      quantity_current: quantityCurrent,
-      seuil_minimum: seuilMinimum,
-      status: computeStatus(quantityCurrent, seuilMinimum),
-      qr_code_value: req.body.qr_code_value,
-      image_product: req.body.image_product,
+      gas_pressure: asOptionalString(req.body.gas_pressure),
+      gas_purity: asOptionalString(req.body.gas_purity),
+      quantity_current: quantityCurrent ?? 0,
+      seuil_minimum: seuilMinimum ?? 0,
+      status: computeStatus(quantityCurrent ?? 0, seuilMinimum ?? 0),
+      qr_code_value: asOptionalString(req.body.qr_code_value),
+      image_product: asOptionalString(req.body.image_product),
       created_by: req.user.id,
-      validation_status: req.body.validation_status || 'pending',
+      validation_status:
+        req.user.role === 'responsable'
+          ? (req.body.validation_status || 'approved')
+          : 'pending',
     };
-
-    if (!payload.name) {
-      return res.status(400).json({ error: 'name obligatoire' });
-    }
 
     const item = await Product.create(payload);
     res.status(201).json(item);
@@ -146,8 +174,51 @@ router.post('/', requireAuth, requireRole('magasinier', 'responsable'), async (r
   }
 });
 
-router.put('/:id', requireAuth, requireRole('magasinier', 'responsable'), async (req, res) => {
+router.patch(
+  '/:id/validation',
+  requireAuth,
+  requirePermission(PERMISSIONS.PRODUCT_VALIDATE),
+  async (req, res) => {
+    try {
+      if (!isValidObjectIdLike(req.params.id)) {
+        return res.status(400).json({ error: 'product id invalide' });
+      }
+
+      const status = String(req.body?.validation_status || '').trim();
+      if (!['approved', 'rejected'].includes(status)) {
+        return res.status(400).json({ error: 'validation_status doit etre approved ou rejected' });
+      }
+
+      const product = await Product.findById(req.params.id);
+      if (!product) return res.status(404).json({ error: 'Product not found' });
+
+      const before = product.validation_status;
+      product.validation_status = status;
+      product.validated_by = req.user.id;
+      await product.save();
+
+      await History.create({
+        action_type: 'validation',
+        user: req.user.id,
+        product: product._id,
+        source: 'ui',
+        description: `Validation produit: ${before} -> ${status}`,
+      });
+
+      return res.json(product);
+    } catch (err) {
+      return res.status(400).json({ error: 'Failed to update validation', details: err.message });
+    }
+  }
+);
+
+router.put('/:id', requireAuth, requirePermission(PERMISSIONS.PRODUCT_UPDATE), async (req, res) => {
   try {
+    const errors = [];
+    if (!isValidObjectIdLike(req.params.id)) {
+      return res.status(400).json({ error: 'product id invalide' });
+    }
+
     const product = await Product.findById(req.params.id);
     if (!product) {
       return res.status(404).json({ error: 'Product not found' });
@@ -187,8 +258,33 @@ router.put('/:id', requireAuth, requireRole('magasinier', 'responsable'), async 
     ];
 
     editableFields.forEach((field) => {
-      if (req.body[field] !== undefined) product[field] = req.body[field];
+      if (req.body[field] === undefined) return;
+
+      if (field === 'name') {
+        const value = asTrimmedString(req.body.name);
+        if (!value) errors.push('name ne peut pas etre vide');
+        else product.name = value;
+        return;
+      }
+
+      if (field === 'quantity_current' || field === 'seuil_minimum' || field === 'stock_initial_year') {
+        const n = asNonNegativeNumber(req.body[field]);
+        if (Number.isNaN(n)) errors.push(`${field} doit etre un nombre >= 0`);
+        else product[field] = n;
+        return;
+      }
+
+      product[field] = req.body[field];
     });
+
+    if (req.body.expiry_date !== undefined) {
+      const d = asDate(req.body.expiry_date);
+      if (d === null) errors.push('expiry_date invalide');
+    }
+
+    if (errors.length > 0) {
+      return res.status(400).json({ error: 'Validation failed', details: errors });
+    }
 
     product.status = computeStatus(product.quantity_current, product.seuil_minimum);
 

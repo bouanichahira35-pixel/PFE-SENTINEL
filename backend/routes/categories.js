@@ -1,7 +1,8 @@
 const router = require('express').Router();
 const Category = require('../models/Category');
 const requireAuth = require('../middlewares/requireAuth');
-const requireRole = require('../middlewares/requireRole');
+const requirePermission = require('../middlewares/requirePermission');
+const { PERMISSIONS } = require('../constants/permissions');
 
 router.get('/', requireAuth, async (req, res) => {
   try {
@@ -12,7 +13,7 @@ router.get('/', requireAuth, async (req, res) => {
   }
 });
 
-router.post('/', requireAuth, requireRole('magasinier', 'responsable'), async (req, res) => {
+router.post('/', requireAuth, requirePermission(PERMISSIONS.CATEGORY_MANAGE), async (req, res) => {
   try {
     const payload = {
       ...req.body,

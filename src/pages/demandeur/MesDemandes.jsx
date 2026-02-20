@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo, useCallback } from 'react';
-import { Clock, CheckCircle, XCircle, Package, Calendar } from 'lucide-react';
+import { Clock, CheckCircle, XCircle, Package, Calendar, Truck } from 'lucide-react';
 import SidebarDem from '../../components/demandeur/SidebarDem';
 import HeaderPage from '../../components/shared/HeaderPage';
 import LoadingSpinner from '../../components/shared/LoadingSpinner';
@@ -54,6 +54,8 @@ const MesDemandes = ({ userName, onLogout }) => {
         return { label: 'En attente', className: 'statut-attente', icon: Clock };
       case 'accepted':
         return { label: 'Acceptee', className: 'statut-validee', icon: CheckCircle };
+      case 'served':
+        return { label: 'Servie', className: 'statut-servie', icon: Truck };
       case 'refused':
         return { label: 'Refusee', className: 'statut-rejetee', icon: XCircle };
       default:

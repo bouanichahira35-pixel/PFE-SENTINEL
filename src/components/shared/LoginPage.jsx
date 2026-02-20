@@ -3,9 +3,10 @@ import { useNavigate } from 'react-router-dom';
 import { User, Lock, AlertTriangle, Eye } from 'lucide-react';
 import logoETAP from '../../assets/logoETAP.png';
 import { post } from '../../services/api';
+import { HOME_PATH_BY_ROLE } from '../../constants/roles';
 import './LoginPage.css';
 
-const LoginPage = ({ role, roleName, onLogin, redirectPath }) => {
+const LoginPage = ({ onLogin }) => {
   const navigate = useNavigate();
   const [formData, setFormData] = useState({
     username: '',
@@ -20,6 +21,14 @@ const LoginPage = ({ role, roleName, onLogin, redirectPath }) => {
     return () => {
       if (revealTimerRef.current) clearTimeout(revealTimerRef.current);
     };
+  }, []);
+
+  useEffect(() => {
+    const logoutMessage = sessionStorage.getItem('logoutReason');
+    if (logoutMessage) {
+      setError(logoutMessage);
+      sessionStorage.removeItem('logoutReason');
+    }
   }, []);
 
   const handleChange = (e) => {
@@ -47,11 +56,17 @@ const LoginPage = ({ role, roleName, onLogin, redirectPath }) => {
       const data = await post('/auth/login', {
         identifier,
         password,
-        role,
       });
 
+      const normalizedRole = String(data?.user?.role || '').toLowerCase();
+      const redirectPath = HOME_PATH_BY_ROLE[normalizedRole];
+      if (!redirectPath) {
+        setError('Role utilisateur invalide');
+        return;
+      }
+
       onLogin(data.user, data.token, data.refreshToken, data.session_id);
-      navigate(redirectPath);
+      navigate(redirectPath, { replace: true });
     } catch (err) {
       // UX: for security, keep the same generic message for invalid credentials.
       const message = String(err.message || '');
@@ -71,7 +86,7 @@ const LoginPage = ({ role, roleName, onLogin, redirectPath }) => {
   };
 
   const handleForgotPassword = () => {
-    navigate('/mot-de-passe-oublie', { state: { role } });
+    navigate('/mot-de-passe-oublie');
   };
 
   const handleRevealPassword = () => {
@@ -92,7 +107,6 @@ const LoginPage = ({ role, roleName, onLogin, redirectPath }) => {
             <img src={logoETAP} alt="ETAP Logo" className="login-logo" />
           </div>
 
-          <h1 className="login-title">{roleName}</h1>
           <p className="login-subtitle">Systeme de Gestion de Stock</p>
 
           <form onSubmit={handleSubmit} className="login-form">

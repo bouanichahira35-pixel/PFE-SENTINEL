@@ -1,0 +1,41 @@
+.app-table { 
+  width: 100%; 
+  border-collapse: collapse; 
+  table-layout: fixed; 
+  background: hsl(var(--card-bg));
+} 
+
+.app-table th { 
+  background: linear-gradient(180deg, hsl(var(--table-header)) 0%, hsl(var(--card-bg)) 100%);
+  padding: 0.85rem 1rem; 
+  text-align: left; 
+  font-size: 0.75rem; 
+  font-weight: 700; 
+  color: hsl(var(--text-secondary)); 
+  text-transform: uppercase; 
+  letter-spacing: 0.05em; 
+  border-bottom: 1px solid hsl(var(--border)); 
+  vertical-align: middle; 
+} 
+
+.app-table td { 
+  padding: 0.8rem 1rem; 
+  border-bottom: 1px solid hsl(var(--table-border)); 
+  font-size: 0.875rem; 
+  color: hsl(var(--text-primary)); 
+  vertical-align: middle; 
+  word-break: break-word; 
+} 
+
+.app-table tbody tr { 
+  transition: all 0.2s ease; 
+  animation: fadeInUp 0.3s ease-out backwards; 
+} 
+
+.app-table tbody tr:nth-child(even) { 
+  background: hsl(var(--table-row-hover) / 0.45); 
+} 
+
+.app-table tbody tr:hover { 
+  background: hsl(var(--table-row-hover)); 
+} 

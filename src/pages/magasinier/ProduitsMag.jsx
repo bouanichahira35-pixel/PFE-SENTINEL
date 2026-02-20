@@ -1,15 +1,17 @@
 import { useState, useMemo, useCallback, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Package, Plus, Eye, ArrowDownToLine, ArrowUpFromLine, Filter, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Package, Plus, Eye, ArrowDownToLine, ArrowUpFromLine, ChevronLeft, ChevronRight } from 'lucide-react';
 import SidebarMag from '../../components/magasinier/SidebarMag';
 import HeaderPage from '../../components/shared/HeaderPage';
 import LoadingSpinner from '../../components/shared/LoadingSpinner';
 import { useToast } from '../../components/shared/Toast';
 import { get } from '../../services/api';
+import { useUiLanguage } from '../../utils/uiLanguage';
 import './ProduitsMag.css';
 const ITEMS_PER_PAGE = 8;
 
 const ProduitsMag = ({ userName, onLogout }) => {
+  const lang = useUiLanguage();
   const navigate = useNavigate();
   const toast = useToast();
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
@@ -19,6 +21,104 @@ const ProduitsMag = ({ userName, onLogout }) => {
   const [currentPage, setCurrentPage] = useState(1);
   const [isLoading, setIsLoading] = useState(false);
   const [products, setProducts] = useState([]);
+  const i18n = {
+    fr: {
+      title: 'Gestion des Produits',
+      loading: 'Chargement...',
+      all: 'Tous',
+      available: 'Disponible',
+      low: 'Sous seuil',
+      out: 'Rupture',
+      allCats: 'Toutes les categories',
+      add: 'Ajouter produit',
+      code: 'Code',
+      product: 'Produit',
+      category: 'Categorie',
+      qty: 'Quantite',
+      min: 'Seuil Min.',
+      validation: 'Validation',
+      state: 'Etat',
+      actions: 'Actions',
+      validated: 'Valide',
+      rejected: 'Rejete',
+      pending: 'En attente',
+      noProducts: 'Aucun produit trouve',
+      updated: 'Liste des produits actualisee',
+      prev: 'Page precedente',
+      next: 'Page suivante',
+      page: 'Page',
+      details: 'Voir details',
+      entry: 'Entree de stock',
+      exit: 'Sortie de stock',
+      outStock: 'Stock epuise',
+      noStock: 'Stock insuffisant pour ce produit',
+      filterCat: 'Filtrer par categorie',
+    },
+    en: {
+      title: 'Product Management',
+      loading: 'Loading...',
+      all: 'All',
+      available: 'Available',
+      low: 'Low stock',
+      out: 'Out of stock',
+      allCats: 'All categories',
+      add: 'Add product',
+      code: 'Code',
+      product: 'Product',
+      category: 'Category',
+      qty: 'Quantity',
+      min: 'Min Threshold',
+      validation: 'Validation',
+      state: 'Status',
+      actions: 'Actions',
+      validated: 'Approved',
+      rejected: 'Rejected',
+      pending: 'Pending',
+      noProducts: 'No product found',
+      updated: 'Product list refreshed',
+      prev: 'Previous page',
+      next: 'Next page',
+      page: 'Page',
+      details: 'View details',
+      entry: 'Stock entry',
+      exit: 'Stock exit',
+      outStock: 'Out of stock',
+      noStock: 'Insufficient stock for this product',
+      filterCat: 'Filter by category',
+    },
+    ar: {
+      title: 'إدارة المنتجات',
+      loading: 'جار التحميل...',
+      all: 'الكل',
+      available: 'متوفر',
+      low: 'تحت الحد',
+      out: 'نفاد',
+      allCats: 'كل التصنيفات',
+      add: 'إضافة منتج',
+      code: 'الرمز',
+      product: 'المنتج',
+      category: 'التصنيف',
+      qty: 'الكمية',
+      min: 'الحد الأدنى',
+      validation: 'الاعتماد',
+      state: 'الحالة',
+      actions: 'الإجراءات',
+      validated: 'معتمد',
+      rejected: 'مرفوض',
+      pending: 'قيد الانتظار',
+      noProducts: 'لا يوجد منتج',
+      updated: 'تم تحديث قائمة المنتجات',
+      prev: 'الصفحة السابقة',
+      next: 'الصفحة التالية',
+      page: 'صفحة',
+      details: 'عرض التفاصيل',
+      entry: 'دخول مخزون',
+      exit: 'خروج مخزون',
+      outStock: 'نفاد المخزون',
+      noStock: 'مخزون غير كاف لهذا المنتج',
+      filterCat: 'تصفية حسب التصنيف',
+    },
+  }[lang];
 
   const loadProducts = useCallback(async () => {
     setIsLoading(true);
@@ -31,6 +131,7 @@ const ProduitsMag = ({ userName, onLogout }) => {
         categorie: p.category?.name || '-',
         quantite: Number(p.quantity_current || 0),
         seuilMin: Number(p.seuil_minimum || 0),
+        validationStatus: p.validation_status || 'pending',
         unite: p.unite || 'Unite',
       }));
       setProducts(mapped);
@@ -43,6 +144,13 @@ const ProduitsMag = ({ userName, onLogout }) => {
 
   useEffect(() => {
     loadProducts();
+  }, [loadProducts]);
+
+  useEffect(() => {
+    const timer = setInterval(() => {
+      loadProducts();
+    }, 10000);
+    return () => clearInterval(timer);
   }, [loadProducts]);
 
   const getProductStatus = useCallback((quantite, seuilMin) => {
@@ -64,7 +172,7 @@ const ProduitsMag = ({ userName, onLogout }) => {
 
       return matchesSearch && matchesCategory && matchesStatus;
     });
-  }, [searchQuery, categoryFilter, statusFilter, getProductStatus]);
+  }, [products, searchQuery, categoryFilter, statusFilter, getProductStatus]);
 
   const statusCounts = useMemo(() => ({
     all: products.length,
@@ -86,8 +194,8 @@ const ProduitsMag = ({ userName, onLogout }) => {
 
   const handleRefresh = useCallback(async () => {
     await loadProducts();
-    toast.success('Liste des produits actualisee');
-  }, [loadProducts, toast]);
+    toast.success(i18n.updated);
+  }, [loadProducts, toast, i18n.updated]);
 
   const handleEntreeStock = useCallback((product) => {
     navigate('/magasinier/entree-stock', { state: { product } });
@@ -95,15 +203,21 @@ const ProduitsMag = ({ userName, onLogout }) => {
 
   const handleSortieStock = useCallback((product) => {
     if (product.quantite === 0) {
-      toast.error('Stock insuffisant pour ce produit');
+      toast.error(i18n.noStock);
       return;
     }
     navigate('/magasinier/sortie-stock', { state: { product } });
-  }, [navigate, toast]);
+  }, [navigate, toast, i18n.noStock]);
 
   const handleVoirDetails = useCallback((product) => {
     navigate('/magasinier/voir-details', { state: { product } });
   }, [navigate]);
+
+  const getValidationLabel = useCallback((status) => {
+    if (status === 'approved') return { label: 'Valide', className: 'approved' };
+    if (status === 'rejected') return { label: 'Rejete', className: 'rejected' };
+    return { label: 'En attente', className: 'pending' };
+  }, []);
 
   return (
     <div className="app-layout">
@@ -117,14 +231,14 @@ const ProduitsMag = ({ userName, onLogout }) => {
       <div className="main-container">
         <HeaderPage 
           userName={userName}
-          title="Gestion des Produits"
+          title={i18n.title}
           searchValue={searchQuery}
           onSearchChange={setSearchQuery}
           onRefresh={handleRefresh}
         />
         
         <main className="main-content">
-          {isLoading && <LoadingSpinner overlay text="Chargement..." />}
+          {isLoading && <LoadingSpinner overlay text={i18n.loading} />}
           
           <div className="produits-page">
             <div className="produits-controls">
@@ -134,28 +248,28 @@ const ProduitsMag = ({ userName, onLogout }) => {
                   onClick={() => setStatusFilter('all')}
                   aria-pressed={statusFilter === 'all'}
                 >
-                  Tous ({statusCounts.all})
+                  {i18n.all} ({statusCounts.all})
                 </button>
                 <button 
                   className={`status-btn disponible ${statusFilter === 'disponible' ? 'active' : ''}`}
                   onClick={() => setStatusFilter('disponible')}
                   aria-pressed={statusFilter === 'disponible'}
                 >
-                  Disponible ({statusCounts.disponible})
+                  {i18n.available} ({statusCounts.disponible})
                 </button>
                 <button 
                   className={`status-btn sous-seuil ${statusFilter === 'sous-seuil' ? 'active' : ''}`}
                   onClick={() => setStatusFilter('sous-seuil')}
                   aria-pressed={statusFilter === 'sous-seuil'}
                 >
-                  Sous seuil ({statusCounts['sous-seuil']})
+                  {i18n.low} ({statusCounts['sous-seuil']})
                 </button>
                 <button 
                   className={`status-btn rupture ${statusFilter === 'rupture' ? 'active' : ''}`}
                   onClick={() => setStatusFilter('rupture')}
                   aria-pressed={statusFilter === 'rupture'}
                 >
-                  Rupture ({statusCounts.rupture})
+                  {i18n.out} ({statusCounts.rupture})
                 </button>
               </div>
 
@@ -164,9 +278,9 @@ const ProduitsMag = ({ userName, onLogout }) => {
                   className="category-filter"
                   value={categoryFilter}
                   onChange={(e) => setCategoryFilter(e.target.value)}
-                  aria-label="Filtrer par categorie"
+                  aria-label={i18n.filterCat}
                 >
-                  <option value="all">Toutes les categories</option>
+                  <option value="all">{i18n.allCats}</option>
                   {categories.map(cat => (
                     <option key={cat} value={cat}>{cat}</option>
                   ))}
@@ -178,7 +292,7 @@ const ProduitsMag = ({ userName, onLogout }) => {
                   aria-label="Ajouter un nouveau produit"
                 >
                   <Plus size={18} />
-                  <span>Ajouter produit</span>
+                  <span>{i18n.add}</span>
                 </button>
               </div>
             </div>
@@ -187,13 +301,14 @@ const ProduitsMag = ({ userName, onLogout }) => {
               <table className="produits-table" role="table">
                 <thead>
                   <tr>
-                    <th scope="col">Code</th>
-                    <th scope="col">Produit</th>
-                    <th scope="col">Categorie</th>
-                    <th scope="col">Quantite</th>
-                    <th scope="col">Seuil Min.</th>
-                    <th scope="col">Etat</th>
-                    <th scope="col">Actions</th>
+                    <th scope="col">{i18n.code}</th>
+                    <th scope="col">{i18n.product}</th>
+                    <th scope="col">{i18n.category}</th>
+                    <th scope="col">{i18n.qty}</th>
+                    <th scope="col">{i18n.min}</th>
+                    <th scope="col">{i18n.validation}</th>
+                    <th scope="col">{i18n.state}</th>
+                    <th scope="col">{i18n.actions}</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -212,9 +327,15 @@ const ProduitsMag = ({ userName, onLogout }) => {
                         <td className="quantity-cell">{product.quantite}</td>
                         <td className="seuil-cell">{product.seuilMin}</td>
                         <td>
+                          {(() => {
+                            const validation = getValidationLabel(product.validationStatus);
+                        return <span className={`validation-badge ${validation.className}`}>{validation.label === 'Valide' ? i18n.validated : validation.label === 'Rejete' ? i18n.rejected : i18n.pending}</span>;
+                      })()}
+                        </td>
+                        <td>
                           <span className={`status-badge ${status}`}>
-                            {status === 'disponible' ? 'Disponible' : 
-                             status === 'sous-seuil' ? 'Sous seuil' : 'Rupture'}
+                            {status === 'disponible' ? i18n.available : 
+                             status === 'sous-seuil' ? i18n.low : i18n.out}
                           </span>
                         </td>
                         <td>
@@ -222,16 +343,16 @@ const ProduitsMag = ({ userName, onLogout }) => {
                             <button 
                               className="action-btn view"
                               onClick={() => handleVoirDetails(product)}
-                              title="Voir details"
-                              aria-label={`Voir details de ${product.nom}`}
+                              title={i18n.details}
+                              aria-label={`${i18n.details} ${product.nom}`}
                             >
                               <Eye size={16} />
                             </button>
                             <button 
                               className="action-btn entry"
                               onClick={() => handleEntreeStock(product)}
-                              title="Entree de stock"
-                              aria-label={`Entree de stock pour ${product.nom}`}
+                              title={i18n.entry}
+                              aria-label={`${i18n.entry} ${product.nom}`}
                             >
                               <ArrowDownToLine size={16} />
                             </button>
@@ -239,8 +360,8 @@ const ProduitsMag = ({ userName, onLogout }) => {
                               className="action-btn exit"
                               onClick={() => handleSortieStock(product)}
                               disabled={product.quantite === 0}
-                              title={product.quantite === 0 ? 'Stock epuise' : 'Sortie de stock'}
-                              aria-label={`Sortie de stock pour ${product.nom}`}
+                              title={product.quantite === 0 ? i18n.outStock : i18n.exit}
+                              aria-label={`${i18n.exit} ${product.nom}`}
                             >
                               <ArrowUpFromLine size={16} />
                             </button>
@@ -255,7 +376,7 @@ const ProduitsMag = ({ userName, onLogout }) => {
               {filteredProducts.length === 0 && (
                 <div className="empty-state">
                   <Package size={48} />
-                  <p>Aucun produit trouve</p>
+                  <p>{i18n.noProducts}</p>
                 </div>
               )}
             </div>
@@ -269,7 +390,7 @@ const ProduitsMag = ({ userName, onLogout }) => {
                   <button 
                     onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
                     disabled={currentPage === 1}
-                    aria-label="Page precedente"
+                    aria-label={i18n.prev}
                   >
                     <ChevronLeft size={16} />
                   </button>
@@ -278,7 +399,7 @@ const ProduitsMag = ({ userName, onLogout }) => {
                       key={page}
                       className={page === currentPage ? 'active' : ''}
                       onClick={() => setCurrentPage(page)}
-                      aria-label={`Page ${page}`}
+                      aria-label={`${i18n.page} ${page}`}
                       aria-current={page === currentPage ? 'page' : undefined}
                     >
                       {page}
@@ -287,7 +408,7 @@ const ProduitsMag = ({ userName, onLogout }) => {
                   <button 
                     onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
                     disabled={currentPage === totalPages}
-                    aria-label="Page suivante"
+                    aria-label={i18n.next}
                   >
                     <ChevronRight size={16} />
                   </button>

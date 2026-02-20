@@ -1,0 +1,66 @@
+.inline-qr-scanner {
+  border: 1px solid var(--border-color, #d9e2ec);
+  border-radius: 12px;
+  padding: 12px;
+  background: var(--bg-card, #fff);
+  margin-top: 10px;
+}
+
+.inline-qr-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 10px;
+}
+
+.inline-qr-title {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 600;
+}
+
+.inline-qr-stop {
+  border: 1px solid #d1d5db;
+  border-radius: 8px;
+  background: #fff;
+  padding: 6px 10px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+}
+
+.inline-qr-video-wrap {
+  position: relative;
+  width: 100%;
+  max-width: 420px;
+  aspect-ratio: 4 / 3;
+  border-radius: 10px;
+  overflow: hidden;
+  background: #111827;
+}
+
+.inline-qr-video {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.inline-qr-frame {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 58%;
+  height: 58%;
+  transform: translate(-50%, -50%);
+  border: 2px solid #22c55e;
+  border-radius: 8px;
+  box-shadow: 0 0 0 200vmax rgba(0, 0, 0, 0.2);
+}
+
+.inline-qr-hint {
+  margin-top: 8px;
+  font-size: 12px;
+  color: #64748b;
+}

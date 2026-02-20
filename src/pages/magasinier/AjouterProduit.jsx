@@ -4,6 +4,7 @@ import { Package, X, QrCode, Tag, Hash, Layers, AlertCircle, CheckCircle, Lightb
 import SidebarMag from '../../components/magasinier/SidebarMag';
 import HeaderPage from '../../components/shared/HeaderPage';
 import LoadingSpinner from '../../components/shared/LoadingSpinner';
+import InlineQrScanner from '../../components/shared/InlineQrScanner';
 import { useToast } from '../../components/shared/Toast';
 import { get, post, uploadFile } from '../../services/api';
 import './AjouterProduit.css';
@@ -46,12 +47,6 @@ const categorySuggestions = {
 const AjouterProduit = ({ userName, onLogout }) => {
   const navigate = useNavigate();
   const toast = useToast();
-  const videoRef = useRef(null);
-  const scanLoopRef = useRef(null);
-  const detectorRef = useRef(null);
-  const zxingControlsRef = useRef(null);
-  const zxingReaderRef = useRef(null);
-  const detectionLockRef = useRef(false);
   const qrInputRef = useRef(null);
   const keyboardBufferRef = useRef('');
   const keyboardTimeoutRef = useRef(null);
@@ -60,9 +55,9 @@ const AjouterProduit = ({ userName, onLogout }) => {
   const [duplicateProduct, setDuplicateProduct] = useState(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [suggestedCategory, setSuggestedCategory] = useState('');
-  const [showQrScanner, setShowQrScanner] = useState(false);
+  const [scanTarget, setScanTarget] = useState('');
   const [keyboardScanMode, setKeyboardScanMode] = useState(false);
-  const [streamRef, setStreamRef] = useState(null);
+  const [showAdvancedFields, setShowAdvancedFields] = useState(false);
   
   const [formData, setFormData] = useState({
     qrCode: '',
@@ -103,29 +98,6 @@ const AjouterProduit = ({ userName, onLogout }) => {
     }
   }, [toast]);
 
-  const stopQrScanner = useCallback((stream) => {
-    const s = stream || streamRef;
-    if (s) {
-      s.getTracks().forEach(track => track.stop());
-    }
-    if (scanLoopRef.current) {
-      cancelAnimationFrame(scanLoopRef.current);
-      scanLoopRef.current = null;
-    }
-    detectorRef.current = null;
-    if (zxingControlsRef.current?.stop) {
-      zxingControlsRef.current.stop();
-    }
-    zxingControlsRef.current = null;
-    if (zxingReaderRef.current?.reset) {
-      zxingReaderRef.current.reset();
-    }
-    zxingReaderRef.current = null;
-    detectionLockRef.current = false;
-    setShowQrScanner(false);
-    setStreamRef(null);
-  }, [streamRef]);
-
   const stopKeyboardScanMode = useCallback(() => {
     setKeyboardScanMode(false);
     keyboardBufferRef.current = '';
@@ -135,95 +107,19 @@ const AjouterProduit = ({ userName, onLogout }) => {
     }
   }, []);
 
-  const handleDetectedQrCode = useCallback(async (value, stream) => {
+  const handleDetectedQrCode = useCallback(async (value) => {
     const qrValue = String(value || '').trim();
-    if (!qrValue || detectionLockRef.current) return;
-    detectionLockRef.current = true;
+    if (!qrValue) return;
     setFormData((prev) => ({ ...prev, qrCode: qrValue }));
     toast.success('QR Code detecte avec succes');
     await verifyQrCodeUniqueness(qrValue);
-    stopQrScanner(stream);
+    setScanTarget('');
     stopKeyboardScanMode();
-  }, [stopQrScanner, toast, verifyQrCodeUniqueness]);
-
-  const startKeyboardFallback = useCallback((msg) => {
-    setKeyboardScanMode(true);
-    toast.info(msg || 'Mode fallback active: utilisez une douchette USB ou saisie manuelle.');
-  }, [toast]);
-
-  const startQrScanner = useCallback(async () => {
-    try {
-      if (!navigator?.mediaDevices?.getUserMedia) {
-        toast.error('Camera non disponible sur ce navigateur');
-        startKeyboardFallback('Mode fallback active: utilisez une douchette USB ou saisie manuelle.');
-        return;
-      }
-
-      if (window.BarcodeDetector) {
-        const detector = new window.BarcodeDetector({ formats: ['qr_code'] });
-        detectorRef.current = detector;
-
-        const stream = await navigator.mediaDevices.getUserMedia({
-          video: { facingMode: 'environment' }
-        });
-        setStreamRef(stream);
-        setShowQrScanner(true);
-        if (videoRef.current) {
-          videoRef.current.srcObject = stream;
-          await videoRef.current.play();
-        }
-        toast.info('Camera activee - Presentez le QR Code');
-
-        const scan = async () => {
-          if (!videoRef.current || !detectorRef.current) return;
-          try {
-            const barcodes = await detectorRef.current.detect(videoRef.current);
-            if (Array.isArray(barcodes) && barcodes.length > 0) {
-              const qrValue = barcodes[0]?.rawValue;
-              if (qrValue) {
-                await handleDetectedQrCode(qrValue, stream);
-                return;
-              }
-            }
-          } catch (err) {
-            // keep scanning loop alive on temporary detector errors
-          }
-          scanLoopRef.current = requestAnimationFrame(scan);
-        };
-
-        scanLoopRef.current = requestAnimationFrame(scan);
-        return;
-      }
-
-      // Universal camera fallback for browsers without BarcodeDetector.
-      const { BrowserMultiFormatReader } = await import('@zxing/browser');
-      const reader = new BrowserMultiFormatReader();
-      zxingReaderRef.current = reader;
-      setShowQrScanner(true);
-      await new Promise((resolve) => requestAnimationFrame(resolve));
-      if (!videoRef.current) throw new Error('Zone video indisponible');
-      const controls = await reader.decodeFromVideoDevice(
-        undefined,
-        videoRef.current,
-        async (result) => {
-          if (result?.getText) {
-            await handleDetectedQrCode(result.getText());
-          }
-        }
-      );
-      zxingControlsRef.current = controls;
-      toast.info('Fallback camera ZXing active - Presentez le QR Code');
-    } catch (err) {
-      toast.error('Impossible de demarrer le scan QR. Verifiez les permissions camera.');
-      stopQrScanner();
-      startKeyboardFallback('Fallback clavier active: utilisez une douchette USB ou saisie manuelle.');
-    }
-  }, [handleDetectedQrCode, startKeyboardFallback, stopQrScanner, toast]);
+  }, [stopKeyboardScanMode, toast, verifyQrCodeUniqueness]);
 
   useEffect(() => () => {
-    stopQrScanner();
     stopKeyboardScanMode();
-  }, [stopKeyboardScanMode, stopQrScanner]);
+  }, [stopKeyboardScanMode]);
 
   useEffect(() => {
     const family = CATEGORY_TO_FAMILY[formData.categorie] || '';
@@ -379,6 +275,8 @@ const AjouterProduit = ({ userName, onLogout }) => {
         description: '',
       });
       setFdsFile(null);
+      setScanTarget('');
+      setShowAdvancedFields(false);
       navigate('/magasinier');
     } catch (err) {
       toast.error(err.message || "Echec de creation du produit");
@@ -435,6 +333,19 @@ const AjouterProduit = ({ userName, onLogout }) => {
               )}
 
               <form onSubmit={handleSubmit} className="ajouter-form" noValidate>
+                <div className="form-mode-toggle">
+                  <button
+                    type="button"
+                    className="mode-toggle-btn"
+                    onClick={() => setShowAdvancedFields((prev) => !prev)}
+                  >
+                    {showAdvancedFields ? 'Masquer champs avances' : 'Afficher champs avances'}
+                  </button>
+                  <span className="input-hint">
+                    Mode simple actif: seuls les champs obligatoires sont affiches.
+                  </span>
+                </div>
+
                 <div className="form-section">
                   <h3>Identification</h3>
                   
@@ -460,13 +371,20 @@ const AjouterProduit = ({ userName, onLogout }) => {
                         className={errors.qrCode ? 'error' : ''}
                         aria-invalid={errors.qrCode ? 'true' : 'false'}
                       />
-                      {!showQrScanner ? (
-                        <button type="button" className="scan-btn" onClick={startQrScanner}>
+                      {!scanTarget ? (
+                        <button
+                          type="button"
+                          className="scan-btn"
+                          onClick={() => {
+                            setScanTarget('product_qr');
+                            toast.info('Camera activee - Presentez le QR Code');
+                          }}
+                        >
                           <Camera size={18} />
                           Scanner QR
                         </button>
                       ) : (
-                        <button type="button" className="scan-btn scanning" onClick={() => stopQrScanner()}>
+                        <button type="button" className="scan-btn scanning" onClick={() => setScanTarget('')}>
                           <StopCircle size={18} />
                           Arreter
                         </button>
@@ -497,14 +415,11 @@ const AjouterProduit = ({ userName, onLogout }) => {
                     )}
                   </div>
 
-                  {showQrScanner && (
-                    <div className="qr-scanner-container">
-                      <video ref={videoRef} autoPlay playsInline className="qr-video" />
-                      <div className="qr-overlay">
-                        <div className="qr-frame"></div>
-                        <p>Presentez le QR Code devant la camera</p>
-                      </div>
-                    </div>
+                  {scanTarget === 'product_qr' && (
+                    <InlineQrScanner
+                      onDetected={handleDetectedQrCode}
+                      onClose={() => setScanTarget('')}
+                    />
                   )}
 
                   <div className="form-group">
@@ -567,52 +482,56 @@ const AjouterProduit = ({ userName, onLogout }) => {
                       <input id="famille_auto" type="text" readOnly value={FAMILY_LABELS[formData.famille] || ''} placeholder="Auto selon categorie" />
                       <span className="input-hint">La famille est geree automatiquement pour eviter les incoherences.</span>
                     </div>
-                    <div className="form-group">
-                      <label htmlFor="unite">
-                        <Package size={16} />
-                        Unite
-                      </label>
-                      <select
-                        id="unite"
-                        value={formData.unite}
-                        onChange={(e) => setFormData({ ...formData, unite: e.target.value })}
-                      >
-                        {unites.map(unit => (
-                          <option key={unit} value={unit}>{unit}</option>
-                        ))}
-                      </select>
-                    </div>
+                    {showAdvancedFields && (
+                      <div className="form-group">
+                        <label htmlFor="unite">
+                          <Package size={16} />
+                          Unite
+                        </label>
+                        <select
+                          id="unite"
+                          value={formData.unite}
+                          onChange={(e) => setFormData({ ...formData, unite: e.target.value })}
+                        >
+                          {unites.map(unit => (
+                            <option key={unit} value={unit}>{unit}</option>
+                          ))}
+                        </select>
+                      </div>
+                    )}
                   </div>
                 </div>
 
                 <div className="form-section">
                   <h3>Parametres de stock</h3>
-                  <div className="form-row">
-                    <div className="form-group">
-                      <label htmlFor="stockInitial">
-                        <Hash size={16} />
-                        Stock initial
-                      </label>
-                      <input
-                        id="stockInitial"
-                        type="number"
-                        min="0"
-                        value={formData.stockInitial}
-                        onChange={(e) => setFormData({ ...formData, stockInitial: e.target.value })}
-                        placeholder="Ex: 100"
-                      />
+                  {showAdvancedFields && (
+                    <div className="form-row">
+                      <div className="form-group">
+                        <label htmlFor="stockInitial">
+                          <Hash size={16} />
+                          Stock initial
+                        </label>
+                        <input
+                          id="stockInitial"
+                          type="number"
+                          min="0"
+                          value={formData.stockInitial}
+                          onChange={(e) => setFormData({ ...formData, stockInitial: e.target.value })}
+                          placeholder="Ex: 100"
+                        />
+                      </div>
+                      <div className="form-group">
+                        <label htmlFor="emplacement">Emplacement magasin</label>
+                        <input
+                          id="emplacement"
+                          type="text"
+                          value={formData.emplacement}
+                          onChange={(e) => setFormData({ ...formData, emplacement: e.target.value })}
+                          placeholder="Ex: Rayon A - Etagere 3"
+                        />
+                      </div>
                     </div>
-                    <div className="form-group">
-                      <label htmlFor="emplacement">Emplacement magasin</label>
-                      <input
-                        id="emplacement"
-                        type="text"
-                        value={formData.emplacement}
-                        onChange={(e) => setFormData({ ...formData, emplacement: e.target.value })}
-                        placeholder="Ex: Rayon A - Etagere 3"
-                      />
-                    </div>
-                  </div>
+                  )}
                   <div className="form-group">
                     <label htmlFor="seuilMinimum">
                       <Hash size={16} />
@@ -634,7 +553,7 @@ const AjouterProduit = ({ userName, onLogout }) => {
                   </div>
                 </div>
 
-                {formData.famille === 'produit_chimique' && (
+                {showAdvancedFields && formData.famille === 'produit_chimique' && (
                   <div className="form-section">
                     <h3>Parametres produit chimique</h3>
                     <div className="form-row">
@@ -671,7 +590,7 @@ const AjouterProduit = ({ userName, onLogout }) => {
                   </div>
                 )}
 
-                {formData.famille === 'gaz' && (
+                {showAdvancedFields && formData.famille === 'gaz' && (
                   <div className="form-section">
                     <h3>Parametres gaz</h3>
                     <div className="form-row">
@@ -699,19 +618,21 @@ const AjouterProduit = ({ userName, onLogout }) => {
                   </div>
                 )}
 
-                <div className="form-section">
-                  <h3>Informations complementaires</h3>
-                  <div className="form-group">
-                    <label htmlFor="description">Description (optionnel)</label>
-                    <textarea
-                      id="description"
-                      value={formData.description}
-                      onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-                      placeholder="Description du produit, specifications..."
-                      rows={3}
-                    />
+                {showAdvancedFields && (
+                  <div className="form-section">
+                    <h3>Informations complementaires</h3>
+                    <div className="form-group">
+                      <label htmlFor="description">Description (optionnel)</label>
+                      <textarea
+                        id="description"
+                        value={formData.description}
+                        onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+                        placeholder="Description du produit, specifications..."
+                        rows={3}
+                      />
+                    </div>
                   </div>
-                </div>
+                )}
 
                 <div className="form-actions">
                   <button type="button" className="btn-cancel" onClick={() => navigate('/magasinier')} disabled={isSubmitting}>

@@ -31,10 +31,10 @@
   gap: 0.75rem;
   margin: 1.5rem;
   padding: 1rem;
-  background: rgba(245, 158, 11, 0.1);
-  border: 1px solid rgba(245, 158, 11, 0.3);
+  background: var(--color-warning-soft);
+  border: 1px solid var(--color-warning-border);
   border-radius: 10px;
-  color: #b45309;
+  color: var(--color-warning);
 }
 
 .validation-notice svg {
@@ -102,6 +102,35 @@
 
 .ajouter-form {
   padding: 1.5rem;
+}
+
+.form-mode-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  margin-bottom: 1rem;
+}
+
+.mode-toggle-btn {
+  padding: 0.5rem 0.9rem;
+  border: 1px solid var(--color-warning-border);
+  background: var(--color-warning-soft);
+  color: var(--color-warning);
+  border-radius: 8px;
+  font-size: 0.85rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.mode-toggle-btn:hover {
+  background: var(--color-warning-soft-strong);
+}
+
+.mode-toggle-btn:focus {
+  outline: 2px solid var(--color-warning);
+  outline-offset: 2px;
 }
 
 .form-section {
@@ -209,6 +238,18 @@
   color: white;
 }
 
+.scan-btn.scanning {
+  background: var(--color-warning-soft);
+  border-color: var(--color-warning-border);
+  color: var(--color-warning);
+}
+
+.scan-btn.scanning:hover {
+  background: var(--color-warning-soft-strong);
+  border-color: var(--color-warning);
+  color: var(--color-warning);
+}
+
 .scan-btn:focus {
   outline: 2px solid var(--color-primary);
   outline-offset: 2px;
@@ -313,6 +354,11 @@
 }
 
 @media (max-width: 600px) {
+  .form-mode-toggle {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
   .form-row {
     grid-template-columns: 1fr;
   }
@@ -330,3 +376,5 @@
     justify-content: center;
   }
 }
+
+

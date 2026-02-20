@@ -1,175 +1,238 @@
- import { useState, useRef, useEffect } from 'react';
- import { Send, User, Search } from 'lucide-react';
- import SidebarResp from '../../components/responsable/SidebarResp';
- import HeaderPage from '../../components/shared/HeaderPage';
- import './ChatResp.css';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Send, User, Search } from 'lucide-react';
+import SidebarResp from '../../components/responsable/SidebarResp';
+import HeaderPage from '../../components/shared/HeaderPage';
+import { get, post } from '../../services/api';
+import { useToast } from '../../components/shared/Toast';
+import { useUiLanguage } from '../../utils/uiLanguage';
+import './ChatResp.css';
 
- const mockMagasiniers = [
-   { id: 1, nom: 'Ahmed Ben Ali', online: true, lastMessage: 'Je vous en prie.', time: '09:25' },
-   { id: 2, nom: 'Mohamed Sassi', online: false, lastMessage: 'Entree effectuee.', time: 'Hier' },
- ];
+const ChatResp = ({ userName, onLogout }) => {
+  const lang = useUiLanguage();
+  const toast = useToast();
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [contacts, setContacts] = useState([]);
+  const [selectedContact, setSelectedContact] = useState(null);
+  const [conversationId, setConversationId] = useState('');
+  const [messages, setMessages] = useState([]);
+  const [newMessage, setNewMessage] = useState('');
+  const [searchQuery, setSearchQuery] = useState('');
+  const messagesEndRef = useRef(null);
+  const i18n = {
+    fr: {
+      title: 'Chat Magasiniers',
+      contacts: 'Magasiniers',
+      search: 'Rechercher...',
+      online: 'En ligne',
+      offline: 'Hors ligne',
+      write: 'Ecrire un message...',
+      select: 'Selectionnez un magasinier',
+      failContacts: 'Chargement contacts echoue',
+      failMessages: 'Chargement messages echoue',
+      failSend: 'Envoi message echoue',
+    },
+    en: {
+      title: 'Storekeeper Chat',
+      contacts: 'Storekeepers',
+      search: 'Search...',
+      online: 'Online',
+      offline: 'Offline',
+      write: 'Write a message...',
+      select: 'Select a storekeeper',
+      failContacts: 'Failed to load contacts',
+      failMessages: 'Failed to load messages',
+      failSend: 'Failed to send message',
+    },
+    ar: {
+      title: 'دردشة أمين المخزن',
+      contacts: 'أمناء المخزن',
+      search: 'بحث...',
+      online: 'متصل',
+      offline: 'غير متصل',
+      write: 'اكتب رسالة...',
+      select: 'اختر أمين مخزن',
+      failContacts: 'فشل تحميل جهات الاتصال',
+      failMessages: 'فشل تحميل الرسائل',
+      failSend: 'فشل إرسال الرسالة',
+    },
+  }[lang];
 
- const mockMessages = {
-   1: [
-     { id: 1, sender: 'responsable', text: 'Bonjour, avez-vous recu le stock de cables?', time: '09:15' },
-     { id: 2, sender: 'magasinier', text: 'Oui, je viens de faire l\'entree. 100 unites.', time: '09:20' },
-     { id: 3, sender: 'responsable', text: 'Parfait, merci pour la rapidite.', time: '09:22' },
-     { id: 4, sender: 'magasinier', text: 'Je vous en prie.', time: '09:25' },
-   ],
-   2: [
-     { id: 1, sender: 'magasinier', text: 'Entree effectuee.', time: 'Hier' },
-   ],
- };
+  const loadContacts = useCallback(async () => {
+    try {
+      const items = await get('/chat/contacts');
+      setContacts(items || []);
+      if (!selectedContact && items?.length > 0) setSelectedContact(items[0]);
+    } catch (err) {
+      toast.error(err.message || i18n.failContacts);
+    }
+  }, [selectedContact, toast, i18n.failContacts]);
 
- const ChatResp = ({ userName, onLogout }) => {
-   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
-   const [selectedContact, setSelectedContact] = useState(mockMagasiniers[0]);
-   const [messages, setMessages] = useState(mockMessages);
-   const [newMessage, setNewMessage] = useState('');
-   const [searchQuery, setSearchQuery] = useState('');
-   const messagesEndRef = useRef(null);
+  const ensureConversation = useCallback(async (contactId) => {
+    if (!contactId) return '';
+    const conv = await post('/chat/conversations/direct', { user_id: contactId });
+    const id = conv?._id || '';
+    setConversationId(id);
+    return id;
+  }, []);
 
-   const scrollToBottom = () => {
-     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-   };
+  const loadMessages = useCallback(async (convId) => {
+    if (!convId) return;
+    try {
+      const items = await get(`/chat/messages/${convId}`);
+      setMessages(items || []);
+    } catch (err) {
+      toast.error(err.message || i18n.failMessages);
+    }
+  }, [toast, i18n.failMessages]);
 
-   useEffect(() => {
-     scrollToBottom();
-   }, [messages, selectedContact]);
+  useEffect(() => {
+    loadContacts();
+  }, [loadContacts]);
 
-   const handleSendMessage = (e) => {
-     e.preventDefault();
-     if (!newMessage.trim()) return;
+  useEffect(() => {
+    const run = async () => {
+      if (!selectedContact?._id) return;
+      const id = await ensureConversation(selectedContact._id);
+      await loadMessages(id);
+    };
+    run();
+  }, [selectedContact, ensureConversation, loadMessages]);
 
-     const message = {
-       id: Date.now(),
-       sender: 'responsable',
-       text: newMessage,
-       time: new Date().toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })
-     };
+  useEffect(() => {
+    if (!conversationId) return undefined;
+    const timer = setInterval(() => {
+      loadMessages(conversationId);
+    }, 5000);
+    return () => clearInterval(timer);
+  }, [conversationId, loadMessages]);
 
-     setMessages(prev => ({
-       ...prev,
-       [selectedContact.id]: [...(prev[selectedContact.id] || []), message]
-     }));
-     setNewMessage('');
-   };
+  useEffect(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [messages]);
 
-   const filteredMagasiniers = mockMagasiniers.filter(m =>
-     m.nom.toLowerCase().includes(searchQuery.toLowerCase())
-   );
+  const handleSendMessage = async (e) => {
+    e.preventDefault();
+    const text = String(newMessage || '').trim();
+    if (!text || !conversationId) return;
+    setNewMessage('');
+    try {
+      const created = await post(`/chat/messages/${conversationId}`, { message: text });
+      setMessages((prev) => [...prev, created]);
+    } catch (err) {
+      toast.error(err.message || i18n.failSend);
+      setNewMessage(text);
+    }
+  };
 
-   return (
-     <div className="app-layout">
-       <SidebarResp 
-         collapsed={sidebarCollapsed} 
-         onToggle={() => setSidebarCollapsed(!sidebarCollapsed)}
-         onLogout={onLogout}
+  const filteredContacts = useMemo(() => {
+    const q = String(searchQuery || '').toLowerCase();
+    return contacts.filter((c) => String(c.username || '').toLowerCase().includes(q));
+  }, [contacts, searchQuery]);
+
+  const contactLabel = useMemo(() => selectedContact?.username || 'Magasinier', [selectedContact]);
+
+  return (
+    <div className="app-layout">
+      <SidebarResp
+        collapsed={sidebarCollapsed}
+        onToggle={() => setSidebarCollapsed(!sidebarCollapsed)}
+        onLogout={onLogout}
         userName={userName}
-       />
-       
-       <div className="main-container">
-         <HeaderPage 
-           userName={userName}
-           title="Chat Magasiniers"
-           showSearch={false}
-         />
-         
-         <main className="main-content chat-main">
-           <div className="chat-container resp">
-             {/* Contacts sidebar */}
-             <div className="chat-contacts">
-               <div className="contacts-header">
-                 <h3>Magasiniers</h3>
-               </div>
-               <div className="contacts-search">
-                 <div className="contacts-search-input">
-                   <Search size={16} />
-                   <input
-                     type="text"
-                     placeholder="Rechercher..."
-                     value={searchQuery}
-                     onChange={(e) => setSearchQuery(e.target.value)}
-                   />
-                 </div>
-               </div>
-               <div className="contacts-list">
-                 {filteredMagasiniers.map(contact => (
-                   <div
-                     key={contact.id}
-                     className={`contact-item ${selectedContact?.id === contact.id ? 'active' : ''}`}
-                     onClick={() => setSelectedContact(contact)}
-                   >
-                     <div className="contact-avatar mag">
-                       <User size={20} />
-                       {contact.online && <span className="online-indicator"></span>}
-                     </div>
-                     <div className="contact-info">
-                       <span className="contact-name">{contact.nom}</span>
-                       <span className="contact-last-message">{contact.lastMessage}</span>
-                     </div>
-                     <span className="contact-time">{contact.time}</span>
-                   </div>
-                 ))}
-               </div>
-             </div>
+      />
 
-             {/* Chat area */}
-             <div className="chat-area">
-               {selectedContact ? (
-                 <>
-                   <div className="chat-header">
-                     <div className="chat-contact-info">
-                       <div className="contact-avatar mag">
-                         <User size={20} />
-                       </div>
-                       <div>
-                         <span className="contact-name">{selectedContact.nom}</span>
-                         <span className="contact-status">
-                           {selectedContact.online ? 'En ligne' : 'Hors ligne'}
-                         </span>
-                       </div>
-                     </div>
-                   </div>
+      <div className="main-container">
+        <HeaderPage userName={userName} title={i18n.title} showSearch={false} />
 
-                   <div className="chat-messages">
-                     {(messages[selectedContact.id] || []).map(msg => (
-                       <div 
-                         key={msg.id} 
-                         className={`message ${msg.sender === 'responsable' ? 'sent' : 'received'}`}
-                       >
-                         <div className="message-bubble">
-                           <p>{msg.text}</p>
-                           <span className="message-time">{msg.time}</span>
-                         </div>
-                       </div>
-                     ))}
-                     <div ref={messagesEndRef} />
-                   </div>
+        <main className="main-content chat-main">
+          <div className="chat-container resp">
+            <div className="chat-contacts">
+              <div className="contacts-header">
+                <h3>{i18n.contacts}</h3>
+              </div>
+              <div className="contacts-search">
+                <div className="contacts-search-input">
+                  <Search size={16} />
+                  <input
+                    type="text"
+                    placeholder={i18n.search}
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                  />
+                </div>
+              </div>
+              <div className="contacts-list">
+                {filteredContacts.map((contact) => (
+                  <div
+                    key={contact._id}
+                    className={`contact-item ${selectedContact?._id === contact._id ? 'active' : ''}`}
+                    onClick={() => setSelectedContact(contact)}
+                  >
+                    <div className="contact-avatar mag">
+                      <User size={20} />
+                      {contact.status === 'active' && <span className="online-indicator"></span>}
+                    </div>
+                    <div className="contact-info">
+                      <span className="contact-name">{contact.username}</span>
+                      <span className="contact-last-message">{contact.email || ''}</span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
 
-                   <form className="chat-input" onSubmit={handleSendMessage}>
-                     <input
-                       type="text"
-                       value={newMessage}
-                       onChange={(e) => setNewMessage(e.target.value)}
-                       placeholder="Ecrire un message..."
-                     />
-                     <button type="submit" className="resp" disabled={!newMessage.trim()}>
-                       <Send size={20} />
-                     </button>
-                   </form>
-                 </>
-               ) : (
-                 <div className="chat-empty">
-                   <p>Selectionnez un magasinier</p>
-                 </div>
-               )}
-             </div>
-           </div>
-         </main>
-       </div>
-     </div>
-   );
- };
+            <div className="chat-area">
+              {selectedContact ? (
+                <>
+                  <div className="chat-header">
+                    <div className="chat-contact-info">
+                      <div className="contact-avatar mag"><User size={20} /></div>
+                      <div>
+                        <span className="contact-name">{contactLabel}</span>
+                        <span className="contact-status">{selectedContact.status === 'active' ? i18n.online : i18n.offline}</span>
+                      </div>
+                    </div>
+                  </div>
 
- export default ChatResp;
+                  <div className="chat-messages">
+                    {messages.map((msg) => (
+                      <div
+                        key={msg._id}
+                        className={`message ${msg.sender_role === 'responsable' ? 'sent' : 'received'}`}
+                      >
+                        <div className="message-bubble">
+                          <p>{msg.message}</p>
+                          <span className="message-time">
+                            {new Date(msg.createdAt).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}
+                          </span>
+                        </div>
+                      </div>
+                    ))}
+                    <div ref={messagesEndRef} />
+                  </div>
+
+                  <form className="chat-input" onSubmit={handleSendMessage}>
+                    <input
+                      type="text"
+                      value={newMessage}
+                      onChange={(e) => setNewMessage(e.target.value)}
+                      placeholder={i18n.write}
+                    />
+                    <button type="submit" className="resp" disabled={!String(newMessage || '').trim()}>
+                      <Send size={20} />
+                    </button>
+                  </form>
+                </>
+              ) : (
+                <div className="chat-empty">
+                  <p>{i18n.select}</p>
+                </div>
+              )}
+            </div>
+          </div>
+        </main>
+      </div>
+    </div>
+  );
+};
+
+export default ChatResp;

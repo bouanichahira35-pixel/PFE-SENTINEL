@@ -1,4 +1,4 @@
-/* ============================================
+﻿/* ============================================
    HoverCard - Beautiful Hover Effects
    ============================================ */
 
@@ -7,7 +7,7 @@
   --hover-card-primary-dark: #1565c0;
   --hover-card-accent: #ff6b6b;
   --hover-card-success: #4caf50;
-  --hover-card-warning: #ff9800;
+  --hover-card-warning: #0d9488;
   --hover-card-bg: #ffffff;
   --hover-card-bg-dark: #1e1e1e;
   --hover-card-text: #333333;
@@ -415,3 +415,4 @@
     color: rgba(255, 255, 255, 0.7);
   }
 }
+

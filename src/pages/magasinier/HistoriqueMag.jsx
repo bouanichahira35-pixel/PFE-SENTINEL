@@ -1,9 +1,21 @@
-import { useEffect, useMemo, useState } from 'react';
-import { ArrowDownToLine, ArrowUpFromLine, Package, Calendar, User, Filter, Paperclip, Download } from 'lucide-react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import {
+  ArrowDownToLine,
+  ArrowUpFromLine,
+  Package,
+  Calendar,
+  User,
+  Filter,
+  Paperclip,
+  Download,
+  History,
+} from 'lucide-react';
 import SidebarMag from '../../components/magasinier/SidebarMag';
 import HeaderPage from '../../components/shared/HeaderPage';
+import LoadingSpinner from '../../components/shared/LoadingSpinner';
 import { useToast } from '../../components/shared/Toast';
 import { get } from '../../services/api';
+import { useUiLanguage } from '../../utils/uiLanguage';
 import './HistoriqueMag.css';
 
 function formatDate(value) {
@@ -14,95 +26,171 @@ function formatDate(value) {
 }
 
 const HistoriqueMag = ({ userName, onLogout }) => {
+  const lang = useUiLanguage();
   const toast = useToast();
+
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [filterType, setFilterType] = useState('tous');
+  const [isLoading, setIsLoading] = useState(false);
   const [items, setItems] = useState([]);
 
+  const i18n = {
+    fr: {
+      title: 'Historique',
+      fail: 'Chargement historique echoue',
+      allOps: 'Toutes les operations',
+      entries: 'Entrees',
+      exits: 'Sorties',
+      productAdds: 'Ajout produit',
+      addLabel: 'Ajout produit',
+      updateLabel: 'Maj produit',
+      export: 'Export CSV',
+      noData: 'Aucune donnee a exporter',
+      noRows: 'Aucune operation',
+      tableTitle: 'Historique des transactions',
+      lines: 'ligne(s)',
+    },
+    en: {
+      title: 'History',
+      fail: 'Failed to load history',
+      allOps: 'All operations',
+      entries: 'Entries',
+      exits: 'Exits',
+      productAdds: 'Product add',
+      addLabel: 'Product add',
+      updateLabel: 'Product update',
+      export: 'Export CSV',
+      noData: 'No data to export',
+      noRows: 'No operation',
+      tableTitle: 'Transaction history',
+      lines: 'line(s)',
+    },
+    ar: {
+      title: 'History',
+      fail: 'Failed to load history',
+      allOps: 'All operations',
+      entries: 'Entries',
+      exits: 'Exits',
+      productAdds: 'Product add',
+      addLabel: 'Product add',
+      updateLabel: 'Product update',
+      export: 'Export CSV',
+      noData: 'No data to export',
+      noRows: 'No operation',
+      tableTitle: 'Transaction history',
+      lines: 'line(s)',
+    },
+  }[lang];
+
+  const loadData = useCallback(async () => {
+    setIsLoading(true);
+    try {
+      const [entriesRes, exitsRes, historyRes] = await Promise.allSettled([
+        get('/stock/entries'),
+        get('/stock/exits'),
+        get('/history'),
+      ]);
+
+      const entries = entriesRes.status === 'fulfilled' && Array.isArray(entriesRes.value) ? entriesRes.value : [];
+      const exits = exitsRes.status === 'fulfilled' && Array.isArray(exitsRes.value) ? exitsRes.value : [];
+      const historyResponse = historyRes.status === 'fulfilled' ? historyRes.value : [];
+      const history = Array.isArray(historyResponse)
+        ? historyResponse
+        : Array.isArray(historyResponse?.items)
+          ? historyResponse.items
+          : [];
+
+      const entryRows = entries.map((e) => ({
+        id: `entry-${e._id}`,
+        type: 'entree',
+        typeLabel: i18n.entries,
+        produit: e.product?.name || '-',
+        code: e.product?.code_product || '-',
+        quantite: Number(e.quantity || 0),
+        date: e.date_entry || e.createdAt,
+        magasinier: e.magasinier?.username || '-',
+        source: e.supplier || e.service_requester || e.delivery_note_number || '-',
+        attachments: Array.isArray(e.attachments) ? e.attachments : [],
+      }));
+
+      const exitRows = exits.map((x) => ({
+        id: `exit-${x._id}`,
+        type: 'sortie',
+        typeLabel: i18n.exits,
+        produit: x.product?.name || '-',
+        code: x.product?.code_product || '-',
+        quantite: Number(x.quantity || 0),
+        date: x.date_exit || x.createdAt,
+        magasinier: x.magasinier?.username || '-',
+        source: x.direction_laboratory || x.beneficiary || x.withdrawal_paper_number || '-',
+        attachments: Array.isArray(x.attachments) ? x.attachments : [],
+      }));
+
+      const productRows = history
+        .filter((h) => ['product_create', 'product_update'].includes(h.action_type))
+        .map((h) => ({
+          id: `${h.action_type}-${h._id}`,
+          type: 'ajout',
+          typeLabel: h.action_type === 'product_create' ? i18n.addLabel : i18n.updateLabel,
+          produit: h.product?.name || '-',
+          code: h.product?.code_product || '-',
+          quantite: Number(h.quantity || 0),
+          date: h.date_action || h.createdAt,
+          magasinier: h.user?.username || '-',
+          source: h.description || '-',
+          attachments: [],
+        }));
+
+      setItems(
+        [...entryRows, ...exitRows, ...productRows].sort((a, b) => new Date(b.date || 0) - new Date(a.date || 0))
+      );
+    } catch (err) {
+      toast.error(err.message || i18n.fail);
+    } finally {
+      setIsLoading(false);
+    }
+  }, [toast, i18n.entries, i18n.exits, i18n.addLabel, i18n.updateLabel, i18n.fail]);
+
   useEffect(() => {
-    let ignore = false;
-
-    const loadData = async () => {
-      try {
-        const [entries, exits] = await Promise.all([get('/stock/entries'), get('/stock/exits')]);
-        if (ignore) return;
-
-        const entryRows = entries.map((e) => ({
-          id: `entry-${e._id}`,
-          type: 'entree',
-          typeLabel: 'Entree',
-          produit: e.product?.name || '-',
-          code: e.product?.code_product || '-',
-          quantite: Number(e.quantity || 0),
-          date: e.date_entry || e.createdAt,
-          magasinier: e.magasinier?.username || '-',
-          source: e.supplier || e.service_requester || e.delivery_note_number || '-',
-          attachments: Array.isArray(e.attachments) ? e.attachments : [],
-        }));
-
-        const exitRows = exits.map((x) => ({
-          id: `exit-${x._id}`,
-          type: 'sortie',
-          typeLabel: 'Sortie',
-          produit: x.product?.name || '-',
-          code: x.product?.code_product || '-',
-          quantite: Number(x.quantity || 0),
-          date: x.date_exit || x.createdAt,
-          magasinier: x.magasinier?.username || '-',
-          source: x.direction_laboratory || x.beneficiary || x.withdrawal_paper_number || '-',
-          attachments: Array.isArray(x.attachments) ? x.attachments : [],
-        }));
-
-        const merged = [...entryRows, ...exitRows].sort((a, b) => new Date(b.date) - new Date(a.date));
-        setItems(merged);
-      } catch (err) {
-        toast.error(err.message || 'Chargement historique echoue');
-      }
-    };
-
     loadData();
-    return () => {
-      ignore = true;
-    };
-  }, [toast]);
+  }, [loadData]);
 
   const filteredHistorique = useMemo(() => {
+    const q = searchQuery.toLowerCase().trim();
     return items.filter((item) => {
-      const q = searchQuery.toLowerCase();
-      const matchSearch =
-        item.produit.toLowerCase().includes(q) ||
-        item.code.toLowerCase().includes(q) ||
-        item.magasinier.toLowerCase().includes(q);
+      const matchSearch = !q
+        || item.produit.toLowerCase().includes(q)
+        || item.code.toLowerCase().includes(q)
+        || item.magasinier.toLowerCase().includes(q)
+        || String(item.source || '').toLowerCase().includes(q);
       const matchType = filterType === 'tous' || item.type === filterType;
       return matchSearch && matchType;
     });
   }, [items, searchQuery, filterType]);
 
   const getTypeIcon = (type) => {
-    if (type === 'entree') return <ArrowDownToLine size={16} />;
-    if (type === 'sortie') return <ArrowUpFromLine size={16} />;
-    return <Package size={16} />;
+    if (type === 'entree') return <ArrowDownToLine size={13} />;
+    if (type === 'sortie') return <ArrowUpFromLine size={13} />;
+    return <Package size={13} />;
   };
 
   const getTypeClass = (type) => {
-    if (type === 'entree') return 'type-entree';
-    if (type === 'sortie') return 'type-sortie';
-    return 'type-ajout';
+    if (type === 'entree') return 'entree';
+    if (type === 'sortie') return 'sortie';
+    return 'ajout';
   };
 
   const handleExport = () => {
     if (!filteredHistorique.length) {
-      toast.warning('Aucune donnee a exporter');
+      toast.warning(i18n.noData);
       return;
     }
 
-    const header = ['Type', 'Produit', 'Code', 'Quantite', 'Date', 'Magasinier', 'Source_Destination'];
+    const header = ['Type', 'Produit', 'Code', 'Quantite', 'Date', 'Magasinier', 'Source_Destination', 'Pieces'];
     const escapeCsv = (v) => {
       const s = String(v ?? '');
-      if (s.includes('"') || s.includes(';') || s.includes('\n')) {
-        return `"${s.replace(/"/g, '""')}"`;
-      }
+      if (s.includes('"') || s.includes(';') || s.includes('\n')) return `"${s.replace(/"/g, '""')}"`;
       return s;
     };
 
@@ -116,6 +204,7 @@ const HistoriqueMag = ({ userName, onLogout }) => {
         formatDate(item.date),
         item.magasinier,
         item.source,
+        item.attachments?.length || 0,
       ].map(escapeCsv).join(';'))),
     ];
 
@@ -140,90 +229,96 @@ const HistoriqueMag = ({ userName, onLogout }) => {
       />
 
       <div className="main-container">
-        <HeaderPage userName={userName} title="Historique" searchValue={searchQuery} onSearchChange={setSearchQuery} />
+        <HeaderPage userName={userName} title={i18n.title} searchValue={searchQuery} onSearchChange={setSearchQuery} />
 
         <main className="main-content">
-          <div className="historique-page">
-            <div className="historique-toolbar">
-              <div className="filter-group">
+          {isLoading && <LoadingSpinner overlay text="Chargement..." />}
+
+          <div className="hm-page">
+            <div className="hm-toolbar">
+              <div className="hm-filter">
                 <Filter size={16} />
-                <select value={filterType} onChange={(e) => setFilterType(e.target.value)} className="filter-select">
-                  <option value="tous">Toutes les operations</option>
-                  <option value="entree">Entrees</option>
-                  <option value="sortie">Sorties</option>
+                <select value={filterType} onChange={(e) => setFilterType(e.target.value)}>
+                  <option value="tous">{i18n.allOps}</option>
+                  <option value="entree">{i18n.entries}</option>
+                  <option value="sortie">{i18n.exits}</option>
+                  <option value="ajout">{i18n.productAdds}</option>
                 </select>
               </div>
-              <button className="export-btn" onClick={handleExport}>
-                <Download size={16} />
-                Exporter
+              <button className="hm-btn" onClick={handleExport}>
+                <Download size={15} />
+                {i18n.export}
               </button>
             </div>
 
-            <div className="historique-table-container">
-              <table className="historique-table">
-                <thead>
-                  <tr>
-                    <th>Type</th>
-                    <th>Produit</th>
-                    <th>Quantite</th>
-                    <th>Date</th>
-                    <th>Magasinier</th>
-                    <th>Source / Destination</th>
-                    <th>Pieces</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {filteredHistorique.map((item, index) => (
-                    <tr key={item.id} style={{ animationDelay: `${index * 20}ms` }}>
-                      <td>
-                        <span className={`type-badge ${getTypeClass(item.type)}`}>
-                          {getTypeIcon(item.type)}
-                          {item.typeLabel}
-                        </span>
-                      </td>
-                      <td className="product-cell">
-                        <Package size={16} />
-                        <div>
-                          <span className="product-name">{item.produit}</span>
-                          <span className="product-code">{item.code}</span>
-                        </div>
-                      </td>
-                      <td className="quantity-cell">
-                        <span className={item.type === 'entree' ? 'qty-plus' : 'qty-minus'}>
-                          {item.type === 'entree' ? '+' : '-'}
-                          {item.quantite}
-                        </span>
-                      </td>
-                      <td className="date-cell">
-                        <Calendar size={14} />
-                        {formatDate(item.date)}
-                      </td>
-                      <td className="user-cell">
-                        <User size={14} />
-                        {item.magasinier}
-                      </td>
-                      <td className="source-cell">{item.source}</td>
-                      <td className="source-cell">
-                        {item.attachments.length === 0 ? (
-                          '-'
-                        ) : (
-                          item.attachments.map((a, idx) => (
-                            <div key={`${item.id}-att-${idx}`}>
-                              <a href={a.file_url} target="_blank" rel="noreferrer">
-                                <Paperclip size={12} /> {a.label || a.file_name || `Piece ${idx + 1}`}
-                              </a>
-                            </div>
-                          ))
-                        )}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+            <div className="hm-card">
+              <div className="hm-card-head">
+                <h3><History size={18} /> {i18n.tableTitle}</h3>
+                <span>{filteredHistorique.length} {i18n.lines}</span>
+              </div>
 
-            <div className="historique-footer">
-              <p>{filteredHistorique.length} operation{filteredHistorique.length > 1 ? 's' : ''}</p>
+              <div className="hm-table-wrap">
+                <table className="hm-table">
+                  <thead>
+                    <tr>
+                      <th>Type</th>
+                      <th>Produit</th>
+                      <th>Quantite</th>
+                      <th>Date</th>
+                      <th>Magasinier</th>
+                      <th>Source / Destination</th>
+                      <th>Pieces</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {filteredHistorique.map((item) => (
+                      <tr key={item.id}>
+                        <td>
+                          <span className={`hm-type-pill ${getTypeClass(item.type)}`}>
+                            {getTypeIcon(item.type)}
+                            {item.typeLabel}
+                          </span>
+                        </td>
+                        <td>
+                          <div className="hm-product-cell">
+                            <Package size={14} />
+                            <div>
+                              <strong>{item.produit}</strong>
+                              <small>{item.code}</small>
+                            </div>
+                          </div>
+                        </td>
+                        <td>{item.quantite}</td>
+                        <td>
+                          <span className="hm-meta-inline"><Calendar size={13} /> {formatDate(item.date)}</span>
+                        </td>
+                        <td>
+                          <span className="hm-meta-inline"><User size={13} /> {item.magasinier || userName || '-'}</span>
+                        </td>
+                        <td>{item.source}</td>
+                        <td>
+                          {item.attachments.length === 0 ? (
+                            <span className="hm-no-piece">-</span>
+                          ) : (
+                            <div className="hm-piece-list">
+                              {item.attachments.map((a, idx) => (
+                                <a key={`${item.id}-att-${idx}`} href={a.file_url} target="_blank" rel="noreferrer">
+                                  <Paperclip size={12} /> {a.label || a.file_name || `Piece ${idx + 1}`}
+                                </a>
+                              ))}
+                            </div>
+                          )}
+                        </td>
+                      </tr>
+                    ))}
+                    {!filteredHistorique.length && (
+                      <tr>
+                        <td colSpan={7} className="hm-empty">{i18n.noRows}</td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
             </div>
           </div>
         </main>

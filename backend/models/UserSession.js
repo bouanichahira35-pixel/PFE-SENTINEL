@@ -8,6 +8,7 @@ const userSessionSchema = new mongoose.Schema(
     ip_address: String,
     user_agent: String,
     login_time: { type: Date, default: Date.now },
+    last_activity_at: { type: Date, default: Date.now },
     logout_time: Date,
     expires_at: { type: Date, required: true },
     is_active: { type: Boolean, default: true },

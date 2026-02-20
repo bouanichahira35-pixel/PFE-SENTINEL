@@ -34,5 +34,8 @@ const productSchema = new mongoose.Schema(
 );
 
 productSchema.index({ qr_code_value: 1 }, { unique: true, sparse: true });
+productSchema.index({ validation_status: 1, createdAt: -1 });
+productSchema.index({ status: 1, quantity_current: 1 });
+productSchema.index({ category: 1, family: 1, createdAt: -1 });
 
 module.exports = mongoose.model('Product', productSchema);

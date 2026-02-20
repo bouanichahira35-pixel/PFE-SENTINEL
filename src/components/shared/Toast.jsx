@@ -1,4 +1,4 @@
-import { useState, useEffect, createContext, useContext } from 'react';
+import { useRef, useState, createContext, useContext } from 'react';
 import { CheckCircle, XCircle, AlertTriangle, Info, X } from 'lucide-react';
 import './Toast.css';
 
@@ -14,9 +14,11 @@ export const useToast = () => {
 
 export const ToastProvider = ({ children }) => {
   const [toasts, setToasts] = useState([]);
+  const idCounterRef = useRef(0);
 
   const addToast = (message, type = 'info', duration = 4000) => {
-    const id = Date.now();
+    idCounterRef.current += 1;
+    const id = `${Date.now()}-${idCounterRef.current}`;
     setToasts(prev => [...prev, { id, message, type }]);
     
     if (duration > 0) {

@@ -11,14 +11,24 @@ const stockExitSchema = new mongoose.Schema(
     // Core stock linkage
     product: { type: mongoose.Schema.Types.ObjectId, ref: 'Product', required: true },
     quantity: { type: Number, required: true, min: 0 },
+    submission_duration_ms: { type: Number, min: 0 },
 
     // Requester/business context from cahier de charge
     direction_laboratory: String,
     beneficiary: String,
     demandeur: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+    request: { type: mongoose.Schema.Types.ObjectId, ref: 'Request' },
 
     // Date fields
     date_exit: { type: Date, default: Date.now },
+    scanned_lot_qr: String,
+    internal_bond_token: String,
+    internal_bond_id: String,
+    exit_mode: {
+      type: String,
+      enum: ['manual', 'fifo_qr', 'internal_bond'],
+      default: 'manual',
+    },
 
     // FIFO support (simple today, can become array of lots later)
     fifo_reference: String,
@@ -50,5 +60,12 @@ const stockExitSchema = new mongoose.Schema(
   },
   { timestamps: true }
 );
+
+stockExitSchema.index({ product: 1, date_exit: -1 });
+stockExitSchema.index({ demandeur: 1, date_exit: -1 });
+stockExitSchema.index({ magasinier: 1, date_exit: -1 });
+stockExitSchema.index({ request: 1 }, { sparse: true });
+stockExitSchema.index({ canceled: 1, date_exit: -1 });
+stockExitSchema.index({ internal_bond_id: 1, canceled: 1 }, { sparse: true });
 
 module.exports = mongoose.model('StockExit', stockExitSchema);

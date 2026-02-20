@@ -79,8 +79,8 @@
 }
 
 .filter-tab.warning.active {
-  background: rgba(245, 158, 11, 0.2);
-  color: #d97706;
+  background: var(--color-warning-soft-strong);
+  color: var(--color-warning);
 }
 
 .filter-tab.danger.active {
@@ -190,8 +190,8 @@
 }
 
 .badge-warning {
-  background: rgba(245, 158, 11, 0.1);
-  color: #d97706;
+  background: var(--color-warning-soft);
+  color: var(--color-warning);
 }
 
 .badge-danger {
@@ -291,3 +291,4 @@
   opacity: 0.5;
   cursor: not-allowed;
 }
+

@@ -5,8 +5,6 @@ import SplashScreen from "./components/shared/SplashScreen";
 import LoginPage from "./components/shared/LoginPage";
 import ForgotPassword from "./components/shared/ForgotPassword";
 
-import RoleSelection from "./pages/RoleSelection";
-
 import ProduitsMag from "./pages/magasinier/ProduitsMag";
 import ListeDemandes from "./pages/magasinier/ListeDemandes";
 import EntreeStock from "./pages/magasinier/EntreeStock.jsx";
@@ -14,13 +12,16 @@ import SortieStock from "./pages/magasinier/SortieStock.jsx";
 import AjouterProduit from "./pages/magasinier/AjouterProduit";
 import VoirDetails from "./pages/magasinier/VoirDetails";
 import HistoriqueMag from "./pages/magasinier/HistoriqueMag";
+import AuditFifoMag from "./pages/magasinier/AuditFifoMag";
 import ChatMag from "./pages/magasinier/ChatMag";
 import ParametresMag from "./pages/magasinier/ParametresMag";
 
 import DashboardResp from "./pages/responsable/DashboardResp";
+import AnalyseResp from "./pages/responsable/AnalyseResp";
+import SurveillanceResp from "./pages/responsable/SurveillanceResp";
+import TransactionsResp from "./pages/responsable/TransactionsResp";
 import ChatbotResp from "./pages/responsable/ChatbotResp";
 import ChatResp from "./pages/responsable/ChatResp";
-import HistoriqueResp from "./pages/responsable/HistoriqueResp";
 import ParametresResp from "./pages/responsable/ParametresResp";
 
 import ProduitsDem from "./pages/demandeur/ProduitsDem";
@@ -28,11 +29,11 @@ import MesDemandes from "./pages/demandeur/MesDemandes";
 
 import NotFound from "./pages/NotFound";
 import { HOME_PATH_BY_ROLE, ROLES, isKnownRole } from "./constants/roles";
+import { applyUiLanguage, getUiLanguage } from "./utils/uiLanguage";
 
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 
 const SESSION_TIMEOUT_MS = 15 * 60 * 1000;
-const SESSION_STARTED_KEY = "sessionStartedAt";
 const LAST_ACTIVITY_KEY = "lastActivityAt";
 const LOGOUT_REASON_KEY = "logoutReason";
 
@@ -53,21 +54,23 @@ const App = () => {
   const [userRole, setUserRole] = useState("");
   const [userName, setUserName] = useState("");
 
+  useEffect(() => {
+    applyUiLanguage(getUiLanguage());
+  }, []);
+
   const handleLogout = useCallback((reason = "") => {
     setUserName("");
     setUserRole("");
     setIsAuthenticated(false);
 
-    if (reason) {
-      sessionStorage.setItem(LOGOUT_REASON_KEY, reason);
-    }
+    if (reason) sessionStorage.setItem(LOGOUT_REASON_KEY, reason);
 
     sessionStorage.removeItem("token");
     sessionStorage.removeItem("refreshToken");
     sessionStorage.removeItem("sessionId");
     sessionStorage.removeItem("userName");
     sessionStorage.removeItem("userRole");
-    sessionStorage.removeItem(SESSION_STARTED_KEY);
+    sessionStorage.removeItem("imageProfile");
     sessionStorage.removeItem(LAST_ACTIVITY_KEY);
 
     localStorage.removeItem("token");
@@ -75,41 +78,48 @@ const App = () => {
     localStorage.removeItem("sessionId");
     localStorage.removeItem("userName");
     localStorage.removeItem("userRole");
+    localStorage.removeItem("imageProfile");
   }, []);
 
   useEffect(() => {
     const token = sessionStorage.getItem("token") || localStorage.getItem("token");
+    const refreshToken = sessionStorage.getItem("refreshToken") || localStorage.getItem("refreshToken");
     const savedRole = sessionStorage.getItem("userRole") || localStorage.getItem("userRole");
     const savedName = sessionStorage.getItem("userName") || localStorage.getItem("userName");
 
-    if (!token || !savedRole || !savedName) return;
+    if ((!token && !refreshToken) || !savedRole || !savedName) return;
+
     if (!isKnownRole(savedRole)) {
       handleLogout("Role session invalide.");
       return;
     }
 
-    const payload = decodeJwtPayload(token);
-    const expMs = payload?.exp ? payload.exp * 1000 : 0;
-
-    if (!expMs || Date.now() >= expMs) {
-      handleLogout("Session expirée. Veuillez vous reconnecter.");
-      return;
+    if (token) {
+      const payload = decodeJwtPayload(token);
+      if (!payload) {
+        if (!refreshToken) {
+          handleLogout("Session invalide. Veuillez vous reconnecter.");
+          return;
+        }
+        sessionStorage.removeItem("token");
+      } else {
+        sessionStorage.setItem("token", token);
+      }
     }
 
-    // Migrate old localStorage sessions to sessionStorage (logout when browser closes).
-    sessionStorage.setItem("token", token);
+    if (refreshToken) {
+      sessionStorage.setItem("refreshToken", refreshToken);
+    }
+
     sessionStorage.setItem("userRole", savedRole);
     sessionStorage.setItem("userName", savedName);
-    sessionStorage.setItem(
-      SESSION_STARTED_KEY,
-      sessionStorage.getItem(SESSION_STARTED_KEY) || String(Date.now())
-    );
     sessionStorage.setItem(
       LAST_ACTIVITY_KEY,
       sessionStorage.getItem(LAST_ACTIVITY_KEY) || String(Date.now())
     );
 
     localStorage.removeItem("token");
+    localStorage.removeItem("refreshToken");
     localStorage.removeItem("userRole");
     localStorage.removeItem("userName");
 
@@ -118,73 +128,92 @@ const App = () => {
     setIsAuthenticated(true);
   }, [handleLogout]);
 
-  // Absolute JWT expiration timer.
-  useEffect(() => {
-    if (!isAuthenticated) return undefined;
-
-    const token = sessionStorage.getItem("token");
-    const payload = token ? decodeJwtPayload(token) : null;
-    const expMs = payload?.exp ? payload.exp * 1000 : 0;
-
-    if (!expMs) {
-      handleLogout("Session expirée. Veuillez vous reconnecter.");
-      return undefined;
-    }
-
-    const remaining = expMs - Date.now();
-    if (remaining <= 0) {
-      handleLogout("Session expirée. Veuillez vous reconnecter.");
-      return undefined;
-    }
-
-    const timer = setTimeout(() => {
-      handleLogout("Session expirée (15 min). Veuillez vous reconnecter.");
-    }, remaining);
-
-    return () => clearTimeout(timer);
-  }, [isAuthenticated, handleLogout]);
-
-  // Inactivity timeout timer (15 min max without activity).
+  // Inactivity timeout timer (15 min max without activity, even after tab/app switch).
   useEffect(() => {
     if (!isAuthenticated) return undefined;
 
     let inactivityTimer;
 
-    const resetInactivityTimer = () => {
+    const readLastActivity = () => Number(sessionStorage.getItem(LAST_ACTIVITY_KEY) || 0);
+    const writeLastActivity = () => sessionStorage.setItem(LAST_ACTIVITY_KEY, String(Date.now()));
+
+    const logoutForInactivity = () => {
+      handleLogout("Deconnexion automatique apres 15 min d'inactivite.");
+    };
+
+    const scheduleInactivityTimer = () => {
       clearTimeout(inactivityTimer);
-      sessionStorage.setItem(LAST_ACTIVITY_KEY, String(Date.now()));
+
+      if (!readLastActivity()) writeLastActivity();
+
+      const elapsed = Date.now() - (readLastActivity() || Date.now());
+      const remaining = SESSION_TIMEOUT_MS - elapsed;
+
+      if (remaining <= 0) {
+        logoutForInactivity();
+        return;
+      }
+
       inactivityTimer = setTimeout(() => {
-        handleLogout("Déconnexion automatique après 15 min d'inactivité.");
-      }, SESSION_TIMEOUT_MS);
+        const latestElapsed = Date.now() - readLastActivity();
+        if (latestElapsed >= SESSION_TIMEOUT_MS) {
+          logoutForInactivity();
+          return;
+        }
+        scheduleInactivityTimer();
+      }, remaining);
+    };
+
+    const markActivity = () => {
+      writeLastActivity();
+      scheduleInactivityTimer();
+    };
+
+    const checkInactivityNow = () => {
+      const lastActivity = readLastActivity();
+      if (!lastActivity || Date.now() - lastActivity >= SESSION_TIMEOUT_MS) {
+        logoutForInactivity();
+        return;
+      }
+      scheduleInactivityTimer();
+    };
+
+    const handleVisibilityChange = () => {
+      if (!document.hidden) checkInactivityNow();
     };
 
     const events = ["mousemove", "mousedown", "keydown", "scroll", "touchstart", "click"];
-    events.forEach((eventName) => window.addEventListener(eventName, resetInactivityTimer));
+    events.forEach((eventName) => window.addEventListener(eventName, markActivity));
+    window.addEventListener("focus", checkInactivityNow);
+    window.addEventListener("pageshow", checkInactivityNow);
+    document.addEventListener("visibilitychange", handleVisibilityChange);
 
-    resetInactivityTimer();
+    checkInactivityNow();
 
     return () => {
       clearTimeout(inactivityTimer);
-      events.forEach((eventName) => window.removeEventListener(eventName, resetInactivityTimer));
+      events.forEach((eventName) => window.removeEventListener(eventName, markActivity));
+      window.removeEventListener("focus", checkInactivityNow);
+      window.removeEventListener("pageshow", checkInactivityNow);
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
     };
   }, [isAuthenticated, handleLogout]);
 
-  // Safety guard: enforce max 15 min session age and max 15 min inactivity.
+  // Safety guard: enforce max 15 min inactivity based on last recorded activity.
   useEffect(() => {
     if (!isAuthenticated) return undefined;
 
     const interval = setInterval(() => {
       const now = Date.now();
-      const startedAt = Number(sessionStorage.getItem(SESSION_STARTED_KEY) || 0);
       const lastActivity = Number(sessionStorage.getItem(LAST_ACTIVITY_KEY) || 0);
 
-      if (!startedAt || !lastActivity) {
-        handleLogout("Session expirée. Veuillez vous reconnecter.");
+      if (!lastActivity) {
+        handleLogout("Session expiree. Veuillez vous reconnecter.");
         return;
       }
 
-      if (now - startedAt >= SESSION_TIMEOUT_MS || now - lastActivity >= SESSION_TIMEOUT_MS) {
-        handleLogout("Session expirée (15 min). Veuillez vous reconnecter.");
+      if (now - lastActivity >= SESSION_TIMEOUT_MS) {
+        handleLogout("Session expiree apres 15 min d'inactivite.");
       }
     }, 5000);
 
@@ -211,10 +240,12 @@ const App = () => {
     if (sessionId) sessionStorage.setItem("sessionId", sessionId);
     sessionStorage.setItem("userName", user.username);
     sessionStorage.setItem("userRole", normalizedRole);
-    sessionStorage.setItem(SESSION_STARTED_KEY, String(Date.now()));
+    if (user.image_profile) sessionStorage.setItem("imageProfile", user.image_profile);
+    else sessionStorage.removeItem("imageProfile");
     sessionStorage.setItem(LAST_ACTIVITY_KEY, String(Date.now()));
 
     localStorage.removeItem("token");
+    localStorage.removeItem("refreshToken");
     localStorage.removeItem("userName");
     localStorage.removeItem("userRole");
   };
@@ -223,8 +254,7 @@ const App = () => {
     return <SplashScreen onComplete={handleSplashComplete} />;
   }
 
-  const homePath =
-    HOME_PATH_BY_ROLE[userRole] || "/";
+  const homePath = HOME_PATH_BY_ROLE[userRole] || "/";
 
   return (
     <ToastProvider>
@@ -232,45 +262,15 @@ const App = () => {
         <Routes>
           {!isAuthenticated ? (
             <>
-              <Route path="/" element={<RoleSelection />} />
-              
-              <Route 
-                path="/login/magasinier" 
-                element={
-                  <LoginPage 
-                    role="magasinier" 
-                    roleName="MAGASINIER" 
-                    onLogin={handleLogin}
-                    redirectPath="/magasinier"
-                  />
-                } 
-              />
-              <Route 
-                path="/login/responsable" 
-                element={
-                  <LoginPage 
-                    role="responsable" 
-                    roleName="RESPONSABLE" 
-                    onLogin={handleLogin}
-                    redirectPath="/responsable"
-                  />
-                } 
-              />
-              <Route 
-                path="/login/demandeur" 
-                element={
-                  <LoginPage 
-                    role="demandeur" 
-                    roleName="DEMANDEUR" 
-                    onLogin={handleLogin}
-                    redirectPath="/demandeur"
-                  />
-                } 
-              />
-              
+              <Route path="/" element={<LoginPage onLogin={handleLogin} />} />
+              <Route path="/login" element={<LoginPage onLogin={handleLogin} />} />
+              <Route path="/login/magasinier" element={<Navigate to="/login" replace />} />
+              <Route path="/login/responsable" element={<Navigate to="/login" replace />} />
+              <Route path="/login/demandeur" element={<Navigate to="/login" replace />} />
+
               <Route path="/mot-de-passe-oublie" element={<ForgotPassword />} />
-              
-              <Route path="*" element={<Navigate to="/" replace />} />
+
+              <Route path="*" element={<Navigate to="/login" replace />} />
             </>
           ) : (
             <>
@@ -284,6 +284,7 @@ const App = () => {
                   <Route path="/magasinier/ajouter-produit" element={<AjouterProduit userName={userName} onLogout={handleLogout} />} />
                   <Route path="/magasinier/voir-details" element={<VoirDetails userName={userName} onLogout={handleLogout} />} />
                   <Route path="/magasinier/historique" element={<HistoriqueMag userName={userName} onLogout={handleLogout} />} />
+                  <Route path="/magasinier/audit-fifo" element={<AuditFifoMag userName={userName} onLogout={handleLogout} />} />
                   <Route path="/magasinier/chat" element={<ChatMag userName={userName} onLogout={handleLogout} />} />
                   <Route path="/magasinier/parametres" element={<ParametresMag userName={userName} onLogout={handleLogout} />} />
                   <Route path="/" element={<Navigate to="/magasinier" replace />} />
@@ -293,9 +294,12 @@ const App = () => {
               {userRole === ROLES.RESPONSABLE && (
                 <>
                   <Route path="/responsable" element={<DashboardResp userName={userName} onLogout={handleLogout} />} />
+                  <Route path="/responsable/analyse" element={<AnalyseResp userName={userName} onLogout={handleLogout} />} />
+                  <Route path="/responsable/surveillance" element={<SurveillanceResp userName={userName} onLogout={handleLogout} />} />
+                  <Route path="/responsable/transactions" element={<TransactionsResp userName={userName} onLogout={handleLogout} />} />
+                  <Route path="/responsable/historique" element={<Navigate to="/responsable/transactions" replace />} />
                   <Route path="/responsable/chatbot" element={<ChatbotResp userName={userName} onLogout={handleLogout} />} />
                   <Route path="/responsable/chat" element={<ChatResp userName={userName} onLogout={handleLogout} />} />
-                  <Route path="/responsable/historique" element={<HistoriqueResp userName={userName} onLogout={handleLogout} />} />
                   <Route path="/responsable/parametres" element={<ParametresResp userName={userName} onLogout={handleLogout} />} />
                   <Route path="/" element={<Navigate to="/responsable" replace />} />
                 </>
@@ -319,4 +323,3 @@ const App = () => {
 };
 
 export default App;
-

@@ -2,10 +2,16 @@ const router = require('express').Router();
 const Product = require('../models/Product');
 const Category = require('../models/Category');
 const Sequence = require('../models/Sequence');
+const User = require('../models/User');
+const Notification = require('../models/Notification');
 const requireAuth = require('../middlewares/requireAuth');
 const requirePermission = require('../middlewares/requirePermission');
+const strictBody = require('../middlewares/strictBody');
 const { PERMISSIONS } = require('../constants/permissions');
 const History = require('../models/History');
+const { logSecurityEvent } = require('../services/securityAuditService');
+const { enqueueMail } = require('../services/mailQueueService');
+const { getUserPreferences } = require('../services/userPreferencesService');
 const {
   asDate,
   asNonNegativeNumber,
@@ -63,6 +69,110 @@ async function getOrCreateCategory({ categoryId, categoryName, userId }) {
   });
 }
 
+async function notifyCreatorOnValidationDecision(product, actorUser, fromStatus, toStatus) {
+  try {
+    if (!product?.created_by) return;
+    const creator = await User.findById(product.created_by).select('_id email username role status').lean();
+    if (!creator || creator.status !== 'active') return;
+
+    const statusLabel = toStatus === 'approved' ? 'VALIDE' : 'REJETE';
+    const actorName = actorUser?.username || 'responsable';
+    const subject = `Produit ${statusLabel}: ${product.name}`;
+    const text = `Votre produit ${product.name} (${product.code_product}) a ete ${statusLabel.toLowerCase()} par ${actorName}.`;
+
+    await Notification.create({
+      user: creator._id,
+      title: subject,
+      message: text,
+      type: toStatus === 'approved' ? 'info' : 'warning',
+      is_read: false,
+    });
+
+    if (!creator.email) return;
+    const creatorPrefs = await getUserPreferences(creator._id);
+    if (!creatorPrefs?.notifications?.email) return;
+    try {
+      await enqueueMail({
+        kind: 'product_validation',
+        role: creator.role,
+        to: creator.email,
+        subject,
+        text,
+        html: `<p>${text}</p>`,
+        job_id: `product_validation_${product._id}_${toStatus}_${Date.now()}`,
+      });
+      await logSecurityEvent({
+        event_type: 'email_sent',
+        user: creator._id,
+        email: creator.email,
+        role: creator.role,
+        success: true,
+        details: `Product validation email sent (${fromStatus} -> ${toStatus})`,
+        after: { product_id: product._id, product_code: product.code_product, validation_status: toStatus },
+      });
+    } catch {
+      await logSecurityEvent({
+        event_type: 'email_failed',
+        user: creator._id,
+        email: creator.email,
+        role: creator.role,
+        success: false,
+        details: `Product validation email failed (${fromStatus} -> ${toStatus})`,
+        after: { product_id: product._id, product_code: product.code_product, validation_status: toStatus },
+      });
+    }
+  } catch {
+    // Keep validation resilient.
+  }
+}
+
+async function notifyResponsablesOnPendingValidation(product, creatorUser) {
+  try {
+    if (!product?._id) return;
+    if (String(product.validation_status || '') !== 'pending') return;
+
+    const responsables = await User.find({ role: 'responsable', status: 'active' })
+      .select('_id email username role')
+      .lean();
+    if (!responsables.length) return;
+
+    const subject = `Produit soumis en attente de validation: ${product.name}`;
+    const creatorName = creatorUser?.username || 'magasinier';
+    const text = `Le produit ${product.name} (${product.code_product}) a ete soumis par ${creatorName} et attend votre validation.`;
+
+    await Notification.insertMany(
+      responsables.map((r) => ({
+        user: r._id,
+        title: subject,
+        message: text,
+        type: 'info',
+        is_read: false,
+      }))
+    );
+
+    for (const r of responsables) {
+      if (!r.email) continue;
+      try {
+        const prefs = await getUserPreferences(r._id);
+        if (!prefs?.notifications?.email || !prefs?.notifications?.demandesAlerts) continue;
+        await enqueueMail({
+          kind: 'product_pending_validation',
+          role: r.role,
+          to: r.email,
+          subject,
+          text,
+          html: `<p>${text}</p>`,
+          job_id: `product_pending_${product._id}_${r._id}_${Date.now()}`,
+        });
+      } catch {
+        // keep flow resilient
+      }
+    }
+  } catch {
+    // keep product creation resilient
+  }
+}
+
 async function getNextProductCode() {
   const year = new Date().getFullYear();
   const counterName = `product_code_${year}`;
@@ -95,6 +205,8 @@ router.get('/', requireAuth, async (req, res) => {
 
     const items = await Product.find(filter)
       .populate('category')
+      .populate('created_by', 'username email role')
+      .populate('validated_by', 'username email role')
       .sort({ createdAt: -1 });
 
     res.json(items);
@@ -127,7 +239,31 @@ router.get('/qr-check', requireAuth, async (req, res) => {
   }
 });
 
-router.post('/', requireAuth, requirePermission(PERMISSIONS.PRODUCT_CREATE), async (req, res) => {
+router.post(
+  '/',
+  requireAuth,
+  requirePermission(PERMISSIONS.PRODUCT_CREATE),
+  strictBody([
+    'code_product',
+    'name',
+    'description',
+    'category',
+    'category_name',
+    'family',
+    'emplacement',
+    'stock_initial_year',
+    'chemical_class',
+    'physical_state',
+    'fds_attachment',
+    'gas_pressure',
+    'gas_purity',
+    'quantity_current',
+    'seuil_minimum',
+    'qr_code_value',
+    'image_product',
+    'validation_status',
+  ]),
+  async (req, res) => {
   try {
     const errors = [];
     const family = normalizeFamily(req.body.family);
@@ -206,6 +342,25 @@ router.post('/', requireAuth, requirePermission(PERMISSIONS.PRODUCT_CREATE), asy
     };
 
     const item = await Product.create(payload);
+    await History.create({
+      action_type: 'product_create',
+      user: req.user.id,
+      product: item._id,
+      quantity: Number(item.quantity_current || 0),
+      source: 'ui',
+      description: `Produit cree (${item.code_product})`,
+      status_after: item.validation_status,
+      actor_role: req.user.role,
+      tags: ['product', 'create'],
+      context: {
+        seuil_minimum: Number(item.seuil_minimum || 0),
+        family: item.family,
+        category: String(item.category),
+      },
+    });
+    if (item.validation_status === 'pending') {
+      await notifyResponsablesOnPendingValidation(item, req.user);
+    }
     res.status(201).json(item);
   } catch (err) {
     if (err?.code === 11000 && err?.keyPattern?.qr_code_value) {
@@ -219,6 +374,7 @@ router.patch(
   '/:id/validation',
   requireAuth,
   requirePermission(PERMISSIONS.PRODUCT_VALIDATE),
+  strictBody(['validation_status']),
   async (req, res) => {
     try {
       if (!isValidObjectIdLike(req.params.id)) {
@@ -245,6 +401,7 @@ router.patch(
         source: 'ui',
         description: `Validation produit: ${before} -> ${status}`,
       });
+      await notifyCreatorOnValidationDecision(product, req.user, before, status);
 
       return res.json(product);
     } catch (err) {
@@ -253,7 +410,31 @@ router.patch(
   }
 );
 
-router.put('/:id', requireAuth, requirePermission(PERMISSIONS.PRODUCT_UPDATE), async (req, res) => {
+router.put(
+  '/:id',
+  requireAuth,
+  requirePermission(PERMISSIONS.PRODUCT_UPDATE),
+  strictBody([
+    'name',
+    'description',
+    'category',
+    'category_name',
+    'family',
+    'emplacement',
+    'stock_initial_year',
+    'chemical_class',
+    'physical_state',
+    'fds_attachment',
+    'gas_pressure',
+    'gas_purity',
+    'quantity_current',
+    'seuil_minimum',
+    'qr_code_value',
+    'image_product',
+    'validation_status',
+    'expiry_date',
+  ]),
+  async (req, res) => {
   try {
     const errors = [];
     if (!isValidObjectIdLike(req.params.id)) {
@@ -264,6 +445,12 @@ router.put('/:id', requireAuth, requirePermission(PERMISSIONS.PRODUCT_UPDATE), a
     if (!product) {
       return res.status(404).json({ error: 'Product not found' });
     }
+    const beforeSnapshot = {
+      name: product.name,
+      seuil_minimum: Number(product.seuil_minimum || 0),
+      quantity_current: Number(product.quantity_current || 0),
+      validation_status: product.validation_status,
+    };
 
     if (req.body.family) {
       const family = normalizeFamily(req.body.family);
@@ -354,6 +541,27 @@ router.put('/:id', requireAuth, requirePermission(PERMISSIONS.PRODUCT_UPDATE), a
     product.status = computeStatus(product.quantity_current, product.seuil_minimum);
 
     await product.save();
+    await History.create({
+      action_type: 'product_update',
+      user: req.user.id,
+      product: product._id,
+      quantity: Number(product.quantity_current || 0),
+      source: 'ui',
+      description: `Produit modifie (${product.code_product})`,
+      status_before: beforeSnapshot.validation_status,
+      status_after: product.validation_status,
+      actor_role: req.user.role,
+      tags: ['product', 'update'],
+      context: {
+        before: beforeSnapshot,
+        after: {
+          name: product.name,
+          seuil_minimum: Number(product.seuil_minimum || 0),
+          quantity_current: Number(product.quantity_current || 0),
+          validation_status: product.validation_status,
+        },
+      },
+    });
     res.json(product);
   } catch (err) {
     if (err?.code === 11000 && err?.keyPattern?.qr_code_value) {

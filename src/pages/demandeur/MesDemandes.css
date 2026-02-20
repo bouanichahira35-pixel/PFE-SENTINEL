@@ -1,4 +1,4 @@
-.app-layout {
+﻿.app-layout {
   display: flex;
   min-height: 100vh;
   background: #f9fafb;
@@ -31,6 +31,7 @@
 .demandes-table {
   width: 100%;
   border-collapse: collapse;
+  table-layout: fixed;
 }
 
 .demandes-table th {
@@ -50,6 +51,12 @@
   border-bottom: 1px solid #f3f4f6;
   font-size: 0.875rem;
   color: #1f2937;
+  vertical-align: top;
+  word-break: break-word;
+}
+
+.demandes-table th {
+  vertical-align: top;
 }
 
 .demandes-table tbody tr {
@@ -61,46 +68,46 @@
   background: #f9fafb;
 }
 
-.ref-cell {
+.mes-demandes-page .ref-cell {
   font-family: monospace;
   font-weight: 500;
   color: #059669;
 }
 
-.product-cell {
+.mes-demandes-page .product-cell {
   display: flex;
   align-items: center;
   gap: 0.75rem;
 }
 
-.product-cell svg {
+.mes-demandes-page .product-cell svg {
   color: #6b7280;
 }
 
-.product-name {
+.mes-demandes-page .product-name {
   display: block;
   font-weight: 500;
 }
 
-.product-code {
+.mes-demandes-page .product-code {
   display: block;
   font-size: 0.75rem;
   color: #9ca3af;
   font-family: monospace;
 }
 
-.quantity-cell {
+.mes-demandes-page .quantity-cell {
   font-weight: 600;
 }
 
-.date-cell {
+.mes-demandes-page .date-cell {
   display: flex;
   align-items: center;
   gap: 0.5rem;
   color: #6b7280;
 }
 
-.statut-badge {
+.mes-demandes-page .statut-badge {
   display: inline-flex;
   align-items: center;
   gap: 0.375rem;
@@ -110,19 +117,24 @@
   font-weight: 500;
 }
 
-.statut-badge.statut-attente {
-  background: #fef3c7;
-  color: #d97706;
+.mes-demandes-page .statut-badge.statut-attente {
+  background: #ccfbf1;
+  color: #0f766e;
 }
 
-.statut-badge.statut-validee {
+.mes-demandes-page .statut-badge.statut-validee {
   background: #d1fae5;
   color: #059669;
 }
 
-.statut-badge.statut-rejetee {
+.mes-demandes-page .statut-badge.statut-rejetee {
   background: #fee2e2;
   color: #dc2626;
+}
+
+.mes-demandes-page .statut-badge.statut-servie {
+  background: #dbeafe;
+  color: #1d4ed8;
 }
 
 .demandes-footer {
@@ -147,3 +159,4 @@
     transform: translateY(0);
   }
 }
+

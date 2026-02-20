@@ -71,6 +71,14 @@
   max-width: 140px;
 }
 
+.sidebar-user-avatar {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  object-fit: cover;
+  border: 1px solid #e5e7eb;
+}
+
 .sidebar-toggle-btn {
   background: none;
   border: none;

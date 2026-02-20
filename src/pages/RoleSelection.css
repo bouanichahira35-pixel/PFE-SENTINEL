@@ -1,4 +1,4 @@
-.role-selection-page {
+﻿.role-selection-page {
   min-height: 100vh;
   background: linear-gradient(135deg, #e8f4fc 0%, #f0f7fc 50%, #e1eff9 100%);
   display: flex;
@@ -70,8 +70,8 @@
   margin: 1rem auto 0;
   max-width: 560px;
   background: #fff4e5;
-  border: 1px solid #f59e0b;
-  color: #92400e;
+  border: 1px solid #0d9488;
+  color: #115e59;
   border-radius: 10px;
   padding: 0.75rem 1rem;
   font-size: 0.9rem;
@@ -187,3 +187,4 @@
     font-size: 1.5rem;
   }
 }
+

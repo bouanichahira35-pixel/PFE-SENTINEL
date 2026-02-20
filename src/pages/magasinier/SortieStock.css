@@ -165,7 +165,7 @@
 }
 
 .stock-box.warning {
-  background: rgba(245, 158, 11, 0.1);
+  background: var(--color-warning-soft);
 }
 
 .stock-box.danger {
@@ -190,7 +190,7 @@
 }
 
 .stock-box.warning .stock-value {
-  color: #d97706;
+  color: var(--color-warning);
 }
 
 .stock-box.danger .stock-value {
@@ -284,3 +284,4 @@
   opacity: 0.5;
   cursor: not-allowed;
 }
+

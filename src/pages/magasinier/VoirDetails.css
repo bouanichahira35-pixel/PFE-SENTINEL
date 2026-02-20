@@ -1,4 +1,4 @@
- .voir-details-page {
+﻿ .voir-details-page {
    animation: fadeIn 0.3s ease-out;
    max-width: 700px;
    margin: 0 auto;
@@ -75,8 +75,8 @@
  }
 
  .stock-status-banner.stock-warning {
-   background: #fef3c7;
-   color: #d97706;
+   background: #ccfbf1;
+   color: #0f766e;
  }
 
  .stock-status-banner.stock-rupture {

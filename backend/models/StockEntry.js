@@ -10,11 +10,18 @@ const stockEntrySchema = new mongoose.Schema(
     // Core quantities and pricing
     quantity: { type: Number, required: true, min: 0 },
     unit_price: { type: Number, min: 0 },
+    submission_duration_ms: { type: Number, min: 0 },
 
     // Bon/commande metadata from cahier de charge
     purchase_order_number: String,
     purchase_voucher_number: String,
     delivery_note_number: String,
+    supplier_doc_qr_value: String,
+    entry_mode: {
+      type: String,
+      enum: ['manual', 'supplier_number', 'supplier_qr'],
+      default: 'manual',
+    },
     delivery_date: Date,
     service_requester: String,
     supplier: String,
@@ -23,6 +30,7 @@ const stockEntrySchema = new mongoose.Schema(
     commercial_name: String,
     reference_code: String,
     lot_number: String,
+    lot_qr_value: String,
 
     // Asset tracking (economat / patrimoine)
     inventory_number: String,
@@ -56,5 +64,12 @@ const stockEntrySchema = new mongoose.Schema(
   },
   { timestamps: true }
 );
+
+stockEntrySchema.index({ product: 1, date_entry: -1 });
+stockEntrySchema.index({ magasinier: 1, date_entry: -1 });
+stockEntrySchema.index({ canceled: 1, date_entry: -1 });
+stockEntrySchema.index({ delivery_date: -1 });
+stockEntrySchema.index({ product: 1, supplier: 1, delivery_note_number: 1, canceled: 1 });
+stockEntrySchema.index({ product: 1, supplier_doc_qr_value: 1, canceled: 1 });
 
 module.exports = mongoose.model('StockEntry', stockEntrySchema);

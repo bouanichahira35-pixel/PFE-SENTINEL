@@ -58,7 +58,7 @@
 .sidebar-logo-title {
   font-weight: 700;
   font-size: 1rem;
-  color: #7c3aed;
+  color: #0f766e;
   letter-spacing: 1px;
 }
 
@@ -69,6 +69,14 @@
   overflow: hidden;
   text-overflow: ellipsis;
   max-width: 140px;
+}
+
+.sidebar-user-avatar {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  object-fit: cover;
+  border: 1px solid #e5e7eb;
 }
 
 .sidebar-toggle-btn {
@@ -133,18 +141,18 @@
 }
 
 .sidebar-nav-item:hover .sidebar-nav-icon {
-  color: #7c3aed;
+  color: #0f766e;
 }
 
 .sidebar-nav-item.active {
-  background: #f3e8ff;
-  color: #7c3aed;
+  background: #ecfeff;
+  color: #0f766e;
   font-weight: 500;
 }
 
 .sidebar-nav-item.active .sidebar-nav-icon {
   transform: scale(1.1);
-  color: #7c3aed;
+  color: #0f766e;
 }
 
 .sidebar-nav-icon {

@@ -14,6 +14,7 @@
 .products-dem-table {
   width: 100%;
   border-collapse: collapse;
+  table-layout: fixed;
 }
 
 .products-dem-table th {
@@ -33,6 +34,12 @@
   font-size: 0.9rem;
   color: var(--color-text-primary);
   border-bottom: 1px solid var(--color-border-light);
+  vertical-align: top;
+  word-break: break-word;
+}
+
+.products-dem-table th {
+  vertical-align: top;
 }
 
 .products-dem-table tbody tr {
@@ -51,19 +58,19 @@
   background: var(--color-bg-secondary);
 }
 
-.code-cell {
+.products-dem-page .code-cell {
   color: #059669;
   font-weight: 500;
 }
 
-.name-cell {
+.products-dem-page .name-cell {
   display: flex;
   align-items: center;
   gap: 0.5rem;
   font-weight: 500;
 }
 
-.product-icon {
+.products-dem-page .product-icon {
   color: var(--color-text-secondary);
 }
 
@@ -97,7 +104,7 @@
   transform: translateY(0);
 }
 
-.empty-state {
+.products-dem-page .empty-state {
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -107,7 +114,7 @@
   gap: 1rem;
 }
 
-.empty-state p {
+.products-dem-page .empty-state p {
   margin: 0;
   font-size: 1rem;
 }
@@ -279,6 +286,19 @@
   margin-top: 0.5rem;
   font-size: 0.85rem;
   color: #ef4444;
+}
+
+.modal-form input.locked-input {
+  background: #f3f4f6;
+  color: #6b7280;
+  cursor: not-allowed;
+}
+
+.helper-text {
+  display: block;
+  margin-top: 0.4rem;
+  font-size: 0.8rem;
+  color: #6b7280;
 }
 
 .modal-actions {

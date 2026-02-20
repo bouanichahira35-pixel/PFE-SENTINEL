@@ -1,16 +1,59 @@
 /* Global theme tokens */
-:root {
-  --color-primary: #1976d2;
-  --color-primary-dark: #1565c0;
-  --color-bg-primary: #ffffff;
+:root { 
+  --color-primary: #1976d2; 
+  --color-primary-dark: #1565c0; 
+  --color-bg-primary: #ffffff; 
   --color-bg-secondary: #f3f4f6;
   --color-bg-tertiary: #e5e7eb;
   --color-text-primary: #1f2937;
   --color-text-secondary: #6b7280;
-  --color-text-muted: #9ca3af;
-  --color-border: #e5e7eb;
-  --color-border-light: #f3f4f6;
-}
+  --color-text-muted: #9ca3af; 
+  --color-border: #e5e7eb; 
+  --color-border-light: #f3f4f6; 
+  --color-warning: #7c3aed;
+  --color-warning-soft: rgba(124, 58, 237, 0.12);
+  --color-warning-soft-strong: rgba(124, 58, 237, 0.2);
+  --color-warning-border: rgba(124, 58, 237, 0.35);
+
+  /* Legacy HSL tokens used across magasinier/responsable pages */ 
+  --primary: 210 79% 46%; 
+  --app-bg: 246 248 251; 
+  --card-bg: 0 0% 100%; 
+  --border: 214 32% 91%; 
+  --table-header: 220 33% 97%; 
+  --table-border: 214 32% 93%; 
+  --table-row-hover: 214 44% 97%; 
+  --text-primary: 222 47% 11%; 
+  --text-secondary: 215 16% 47%; 
+} 
+
+[data-theme="dark"] { 
+  --color-primary: #60a5fa; 
+  --color-primary-dark: #3b82f6;
+  --color-bg-primary: #111827;
+  --color-bg-secondary: #1f2937;
+  --color-bg-tertiary: #374151;
+  --color-text-primary: #f3f4f6;
+  --color-text-secondary: #d1d5db;
+  --color-text-muted: #9ca3af; 
+  --color-border: #374151; 
+  --color-border-light: #1f2937; 
+  --color-warning: #a78bfa;
+  --color-warning-soft: rgba(167, 139, 250, 0.16);
+  --color-warning-soft-strong: rgba(167, 139, 250, 0.26);
+  --color-warning-border: rgba(167, 139, 250, 0.45);
+
+  /* Legacy HSL tokens (dark mode) */ 
+  --primary: 210 93% 67%; 
+  --app-bg: 221 33% 13%; 
+  --card-bg: 222 30% 16%; 
+  --border: 220 20% 25%; 
+  --table-header: 221 27% 19%; 
+  --table-border: 220 20% 25%; 
+  --table-row-hover: 220 23% 22%; 
+  --text-primary: 210 40% 96%; 
+  --text-secondary: 215 20% 75%; 
+} 
 
 body {
   margin: 0;
@@ -19,14 +62,44 @@ body {
     sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
-  background: #f9fafb;
+  background: var(--color-bg-secondary);
   color: var(--color-text-primary);
+}
+
+button { 
+  opacity: 1; 
+  font-family: inherit;
+} 
+
+button:disabled { 
+  opacity: 0.72; 
+  cursor: not-allowed;
+} 
+
+.form-group label,
+.toggle-label,
+.summary-label,
+.info-label {
+  font-weight: 600;
+}
+
+.btn-save,
+.btn-submit,
+.btn-add,
+.scan-btn,
+.btn-cancel,
+.btn-user,
+.btn-refresh,
+.langue-option,
+.theme-option,
+.param-tab {
+  opacity: 1 !important;
 }
 
 .app-layout {
   display: flex;
   min-height: 100vh;
-  background: #f9fafb;
+  background: var(--color-bg-secondary);
 }
 
 .main-container {
@@ -40,9 +113,51 @@ body {
   flex: 1;
   padding: 1.5rem;
   overflow-y: auto;
+  background: var(--color-bg-secondary);
 }
 
 code {
   font-family: source-code-pro, Menlo, Monaco, Consolas, 'Courier New',
     monospace;
+}
+
+.historique-table,
+.demandes-table,
+.produits-table,
+.products-dem-table {
+  table-layout: fixed;
+}
+
+.historique-table th,
+.historique-table td,
+.demandes-table th,
+.demandes-table td,
+.produits-table th,
+.produits-table td,
+.products-dem-table th,
+.products-dem-table td {
+  vertical-align: top;
+}
+
+[data-theme="dark"] .dashboard-card,
+[data-theme="dark"] .kpi-card,
+[data-theme="dark"] .pending-item,
+[data-theme="dark"] .products-dem-table-container,
+[data-theme="dark"] .demandes-table-container,
+[data-theme="dark"] .historique-table-container,
+[data-theme="dark"] .produits-table-container {
+  background: var(--color-bg-primary) !important;
+  border-color: var(--color-border) !important;
+}
+
+[data-theme="dark"] .products-dem-table th,
+[data-theme="dark"] .products-dem-table td,
+[data-theme="dark"] .demandes-table th,
+[data-theme="dark"] .demandes-table td,
+[data-theme="dark"] .historique-table th,
+[data-theme="dark"] .historique-table td,
+[data-theme="dark"] .produits-table th,
+[data-theme="dark"] .produits-table td {
+  background: transparent;
+  color: var(--color-text-primary);
 }

@@ -66,11 +66,11 @@
 }
 
 .toast-warning {
-  border-left-color: #f59e0b;
+  border-left-color: var(--color-warning);
 }
 
 .toast-warning .toast-icon {
-  color: #f59e0b;
+  color: var(--color-warning);
 }
 
 .toast-info {
@@ -116,3 +116,4 @@
   outline: 2px solid var(--color-primary);
   outline-offset: 2px;
 }
+

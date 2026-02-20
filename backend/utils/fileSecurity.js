@@ -1,10 +1,14 @@
 const path = require('path');
+const { spawn } = require('child_process');
 
-const ALLOWED_MIME_TYPES = new Set([
-  'application/pdf',
-  'image/png',
-  'image/jpeg',
-  'image/webp',
+const ALLOWED_MIME_TYPES = new Set([ 
+  'application/pdf', 
+  'image/png', 
+  'image/jpeg', 
+  'image/jpg', 
+  'image/webp', 
+  'image/heic', 
+  'image/heif', 
   'text/plain',
   'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
   'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
@@ -15,7 +19,10 @@ const ALLOWED_EXTENSIONS = new Set([
   '.png',
   '.jpg',
   '.jpeg',
+  '.jfif',
   '.webp',
+  '.heic',
+  '.heif',
   '.txt',
   '.docx',
   '.xlsx',
@@ -61,7 +68,35 @@ function hasBasicMalwareSignature(buffer) {
   return content.includes(EICAR_SIGNATURE);
 }
 
+function scanFileWithOptionalAntivirus(filePath) {
+  return new Promise((resolve) => {
+    const enabled = String(process.env.CLAMAV_ENABLED || 'false') === 'true';
+    if (!enabled) {
+      return resolve({ ok: true, scanned: false, reason: 'antivirus_disabled' });
+    }
+
+    const binary = process.env.CLAMAV_BIN || 'clamscan';
+    const args = ['--no-summary', filePath];
+    const proc = spawn(binary, args, { stdio: 'ignore' });
+
+    proc.on('error', () => {
+      resolve({ ok: true, scanned: false, reason: 'antivirus_unavailable' });
+    });
+
+    proc.on('close', (code) => {
+      if (code === 0) {
+        resolve({ ok: true, scanned: true });
+      } else if (code === 1) {
+        resolve({ ok: false, scanned: true, reason: 'virus_detected' });
+      } else {
+        resolve({ ok: true, scanned: false, reason: 'scanner_error' });
+      }
+    });
+  });
+}
+
 module.exports = {
   validateFileType,
   hasBasicMalwareSignature,
+  scanFileWithOptionalAntivirus,
 };

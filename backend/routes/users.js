@@ -2,11 +2,16 @@
 
 const requireAuth = require('../middlewares/requireAuth');
 const requirePermission = require('../middlewares/requirePermission');
+const strictBody = require('../middlewares/strictBody');
 const { PERMISSIONS } = require('../constants/permissions');
 
 const User = require('../models/User');
 const UserSession = require('../models/UserSession');
+const Notification = require('../models/Notification');
+const History = require('../models/History');
+const { enqueueMail } = require('../services/mailQueueService');
 const { logSecurityEvent } = require('../services/securityAuditService');
+const { ERROR_CODES } = require('../constants/errorCodes');
 
 // Toutes les routes ici sont protégées
 router.use(requireAuth);
@@ -43,7 +48,7 @@ router.get('/', requirePermission(PERMISSIONS.USER_MANAGE), async (req, res) => 
         $group: {
           _id: '$user',
           activeSessionsCount: { $sum: 1 },
-          lastActivityAt: { $max: '$updatedAt' },
+          lastActivityAt: { $max: { $ifNull: ['$last_activity_at', '$updatedAt'] } },
         },
       },
     ]);
@@ -84,8 +89,8 @@ router.get(
 
       // Si on filtre par role, on fait un lookup via populate
       let sessionsQuery = UserSession.find(q)
-        .sort({ updatedAt: -1 })
-        .select('session_id user login_time expires_at ip_address device user_agent updatedAt')
+        .sort({ last_activity_at: -1, updatedAt: -1 })
+        .select('session_id user login_time last_activity_at expires_at ip_address device user_agent updatedAt')
         .populate({
           path: 'user',
           select: '_id username email telephone role status',
@@ -108,16 +113,50 @@ router.get(
 router.patch(
   '/:id/status',
   requirePermission(PERMISSIONS.USER_MANAGE),
+  strictBody(['status', 'reason']),
   async (req, res) => {
     try {
       const { status } = req.body || {};
+      const reason = String(req.body?.reason || '').trim();
       if (!['active', 'blocked'].includes(status)) {
-        return res.status(400).json({ error: 'status invalide' });
+        return res.status(400).json({
+          error: 'status invalide',
+          code: ERROR_CODES.VALIDATION_FAILED,
+          reason: 'status doit etre active ou blocked',
+        });
+      }
+      if (reason.length < 5) {
+        return res.status(400).json({
+          error: 'reason obligatoire (min 5 caracteres)',
+          code: ERROR_CODES.USER_STATUS_REASON_REQUIRED,
+          reason: 'Le motif est obligatoire pour la tracabilite.',
+        });
       }
 
       const user = await User.findById(req.params.id);
-      if (!user) return res.status(404).json({ error: 'Utilisateur introuvable' });
+      if (!user) {
+        return res.status(404).json({
+          error: 'Utilisateur introuvable',
+          code: ERROR_CODES.USER_NOT_FOUND,
+          reason: 'Aucun utilisateur ne correspond a cet identifiant.',
+        });
+      }
+      if (String(user._id) === String(req.user.id)) {
+        return res.status(400).json({
+          error: 'Operation interdite: vous ne pouvez pas modifier votre propre statut',
+          code: ERROR_CODES.USER_STATUS_FORBIDDEN_SELF,
+          reason: 'Separation des pouvoirs: un responsable ne peut pas s auto-bloquer.',
+        });
+      }
+      if (user.role === 'responsable') {
+        return res.status(400).json({
+          error: 'Operation interdite: impossible de bloquer un responsable',
+          code: ERROR_CODES.USER_STATUS_FORBIDDEN_ROLE,
+          reason: 'Ce flux gere uniquement les comptes magasinier/demandeur.',
+        });
+      }
 
+      const beforeStatus = user.status;
       user.status = status;
       await user.save();
 
@@ -134,6 +173,47 @@ router.patch(
         );
       }
 
+      const actorName = req.user.username || 'Responsable';
+      const statusLabel = status === 'blocked' ? 'BLOQUE' : 'DEBLOQUE';
+      const subject = `Mise a jour de votre compte: ${statusLabel}`;
+      const message = `Votre compte a ete ${status === 'blocked' ? 'bloque' : 'debloque'} par ${actorName}. Motif: ${reason}`;
+
+      await Notification.create({
+        user: user._id,
+        title: subject,
+        message,
+        type: status === 'blocked' ? 'warning' : 'info',
+        is_read: false,
+      });
+
+      if (user.email) {
+        await enqueueMail({
+          kind: 'user_status_change',
+          role: user.role,
+          to: user.email,
+          subject,
+          text: message,
+          html: `<p>${message}</p>`,
+          job_id: `user_status_${user._id}_${status}_${Date.now()}`,
+        });
+      }
+
+      await History.create({
+        action_type: 'block',
+        user: req.user.id,
+        source: 'ui',
+        description: `Statut utilisateur modifie (${beforeStatus} -> ${status})`,
+        status_before: beforeStatus,
+        status_after: status,
+        actor_role: req.user.role,
+        tags: ['user', 'status_change', status],
+        context: {
+          target_user_id: String(user._id),
+          target_role: user.role,
+          reason,
+        },
+      });
+
       await logSecurityEvent({
         event_type: 'user_status_changed',
         user: req.user.id,
@@ -141,12 +221,21 @@ router.patch(
         ip_address: req.ip,
         user_agent: req.headers['user-agent'] || '',
         success: true,
-        details: `Changed status for user ${user._id} to ${status}`,
+        details: `Changed status for user ${user._id} to ${status}. reason=${reason}`,
       });
 
-      return res.json({ message: 'Status mis a jour', user: { id: user._id, status: user.status } });
+      return res.json({
+        message: 'Status mis a jour',
+        user: { id: user._id, status: user.status },
+        reason,
+      });
     } catch (err) {
-      return res.status(500).json({ error: 'Failed to update status', details: err.message });
+      return res.status(500).json({
+        error: 'Failed to update status',
+        code: ERROR_CODES.INTERNAL_ERROR,
+        reason: 'Erreur serveur durant la mise a jour du statut.',
+        details: err.message,
+      });
     }
   }
 );

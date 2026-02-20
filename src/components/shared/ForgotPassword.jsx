@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { Mail, ArrowLeft, AlertTriangle, CheckCircle, ShieldCheck, Lock } from 'lucide-react';
+import { Mail, ArrowLeft, AlertTriangle, CheckCircle, ShieldCheck, Lock, Eye, EyeOff } from 'lucide-react';
 import logoETAP from '../../assets/logoETAP.png';
 import { post } from '../../services/api';
 import './ForgotPassword.css';
@@ -8,12 +8,14 @@ import './ForgotPassword.css';
 const ForgotPassword = () => {
   const navigate = useNavigate();
   const location = useLocation();
-  const roleFromLogin = location.state?.role || 'demandeur';
+  const roleFromLogin = location.state?.role ? String(location.state.role) : '';
   const [email, setEmail] = useState('');
   const [code, setCode] = useState('');
   const [resetToken, setResetToken] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
+  const [showNewPassword, setShowNewPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [step, setStep] = useState('request');
   const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
@@ -47,10 +49,8 @@ const ForgotPassword = () => {
     setIsLoading(true);
 
     try {
-      await post('/auth/forgot-password/request', {
-        email,
-        role: roleFromLogin,
-      });
+      const payload = roleFromLogin ? { email, role: roleFromLogin } : { email };
+      await post('/auth/forgot-password/request', payload);
       setStep('verify');
     } catch (err) {
       setError(err.message || "Erreur lors de l'envoi du code");
@@ -71,11 +71,10 @@ const ForgotPassword = () => {
     setIsLoading(true);
 
     try {
-      const data = await post('/auth/forgot-password/verify', {
-        email,
-        role: roleFromLogin,
-        code: code.replace(/\s/g, ''),
-      });
+      const payload = roleFromLogin
+        ? { email, role: roleFromLogin, code: code.replace(/\s/g, '') }
+        : { email, code: code.replace(/\s/g, '') };
+      const data = await post('/auth/forgot-password/verify', payload);
 
       setResetToken(data.resetToken);
       setStep('reset');
@@ -291,7 +290,7 @@ const ForgotPassword = () => {
                 <div className="forgot-input-wrapper">
                   <Lock size={20} className="forgot-input-icon" />
                   <input
-                    type="password"
+                    type={showNewPassword ? 'text' : 'password'}
                     id="newPassword"
                     name="newPassword"
                     value={newPassword}
@@ -303,6 +302,14 @@ const ForgotPassword = () => {
                     className="forgot-input"
                     autoComplete="new-password"
                   />
+                  <button
+                    type="button"
+                    className="forgot-toggle-password"
+                    onClick={() => setShowNewPassword((prev) => !prev)}
+                    aria-label={showNewPassword ? 'Masquer le mot de passe' : 'Afficher le mot de passe'}
+                  >
+                    {showNewPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+                  </button>
                 </div>
               </div>
 
@@ -313,7 +320,7 @@ const ForgotPassword = () => {
                 <div className="forgot-input-wrapper">
                   <Lock size={20} className="forgot-input-icon" />
                   <input
-                    type="password"
+                    type={showConfirmPassword ? 'text' : 'password'}
                     id="confirmPassword"
                     name="confirmPassword"
                     value={confirmPassword}
@@ -325,6 +332,14 @@ const ForgotPassword = () => {
                     className="forgot-input"
                     autoComplete="new-password"
                   />
+                  <button
+                    type="button"
+                    className="forgot-toggle-password"
+                    onClick={() => setShowConfirmPassword((prev) => !prev)}
+                    aria-label={showConfirmPassword ? 'Masquer le mot de passe' : 'Afficher le mot de passe'}
+                  >
+                    {showConfirmPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+                  </button>
                 </div>
               </div>
 

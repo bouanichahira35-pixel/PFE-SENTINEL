@@ -1,32 +1,26 @@
 const router = require('express').Router();
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
-const nodemailer = require('nodemailer');
 const { randomUUID } = require('crypto');
 const User = require('../models/User');
 const PasswordReset = require('../models/PasswordReset');
 const UserSession = require('../models/UserSession');
 const { normalizeRole, isTechnicalRole } = require('../constants/roles');
 const { logSecurityEvent } = require('../services/securityAuditService');
+const { enqueueMail } = require('../services/mailQueueService');
 const requireAuth = require('../middlewares/requireAuth');
 
 const RESET_CODE_TTL_MINUTES = Number(process.env.RESET_CODE_TTL_MINUTES || 10);
 const RESET_JWT_EXPIRES_IN = process.env.RESET_JWT_EXPIRES_IN || '15m';
 // Security policy: application sessions are limited to 15 minutes max.
 const JWT_EXPIRES_IN = '15m';
+const SESSION_INACTIVITY_MS = Math.max(
+  60 * 1000,
+  Number(process.env.SESSION_INACTIVITY_MS || 15 * 60 * 1000)
+);
 const BCRYPT_SALT_ROUNDS = Number(process.env.BCRYPT_SALT_ROUNDS || 12);
 const REFRESH_JWT_EXPIRES_IN = process.env.REFRESH_JWT_EXPIRES_IN || '7d';
 const SINGLE_SESSION_MODE = String(process.env.SINGLE_SESSION_MODE || 'true') === 'true';
-
-const transporter = nodemailer.createTransport({
-  host: process.env.MAIL_HOST,
-  port: Number(process.env.MAIL_PORT || 587),
-  secure: String(process.env.MAIL_SECURE) === 'true',
-  auth: {
-    user: process.env.MAIL_USER,
-    pass: process.env.MAIL_PASS
-  }
-});
 
 function generateOtpCode() {
   return String(Math.floor(100000 + Math.random() * 900000));
@@ -43,17 +37,28 @@ function isStrongPassword(password) {
   return hasLower && hasUpper && hasDigit;
 }
 
+function getLastActivityDate(session) {
+  return session?.last_activity_at || session?.updatedAt || session?.login_time || null;
+}
+
+function isSessionInactive(session, now) {
+  const lastActivity = getLastActivityDate(session);
+  if (!lastActivity) return true;
+  return now.getTime() - new Date(lastActivity).getTime() >= SESSION_INACTIVITY_MS;
+}
+
 // POST /api/auth/login
 router.post('/login', async (req, res) => {
   try {
     const { identifier, password, role } = req.body;
 
-    if (!identifier || !password || !role) {
-      return res.status(400).json({ error: 'identifier, password et role sont obligatoires' });
+    if (!identifier || !password) {
+      return res.status(400).json({ error: 'identifier et password sont obligatoires' });
     }
 
-    const normalizedRole = normalizeRole(role);
-    if (!isTechnicalRole(normalizedRole)) {
+    const hasRoleFilter = typeof role === 'string' && String(role).trim().length > 0;
+    const normalizedRole = hasRoleFilter ? normalizeRole(role) : null;
+    if (hasRoleFilter && !isTechnicalRole(normalizedRole)) {
       return res.status(400).json({ error: 'Role invalide' });
     }
 
@@ -62,16 +67,27 @@ router.post('/login', async (req, res) => {
     const ip = req.ip;
     const ua = req.headers['user-agent'] || '';
 
-    const user = await User.findOne({
-      role: normalizedRole,
-      $or: [{ email: normalizedIdentifier }, { telephone: rawIdentifier }]
-    }).select('+password_hash');
+    const loginQuery = {
+      $or: [
+        { email: normalizedIdentifier },
+        { telephone: rawIdentifier },
+        { username: rawIdentifier },
+        { username: normalizedIdentifier },
+      ],
+    };
+    if (normalizedRole) {
+      loginQuery.role = normalizedRole;
+    }
 
-    if (!user) {
+    const candidates = await User.find(loginQuery)
+      .select('+password_hash')
+      .limit(10);
+
+    if (!candidates.length) {
       await logSecurityEvent({
         event_type: 'login_failed',
         email: normalizedIdentifier,
-        role: normalizedRole,
+        role: normalizedRole || undefined,
         ip_address: ip,
         user_agent: ua,
         success: false,
@@ -79,6 +95,31 @@ router.post('/login', async (req, res) => {
       });
       return res.status(401).json({ error: 'Utilisateur introuvable' });
     }
+
+    let user = null;
+    for (const candidate of candidates) {
+      const passwordOk = await bcrypt.compare(password, candidate.password_hash);
+      if (passwordOk) {
+        user = candidate;
+        break;
+      }
+    }
+
+    if (!user) {
+      const matchedIdentityUser = candidates[0];
+      await logSecurityEvent({
+        event_type: 'login_failed',
+        user: matchedIdentityUser._id,
+        email: matchedIdentityUser.email,
+        role: matchedIdentityUser.role,
+        ip_address: ip,
+        user_agent: ua,
+        success: false,
+        details: 'Mot de passe incorrect',
+      });
+      return res.status(401).json({ error: 'Mot de passe incorrect' });
+    }
+
     if (user.status !== 'active') {
       await logSecurityEvent({
         event_type: 'login_failed',
@@ -91,21 +132,6 @@ router.post('/login', async (req, res) => {
         details: 'Compte bloque',
       });
       return res.status(403).json({ error: 'Compte bloque' });
-    }
-
-    const ok = await bcrypt.compare(password, user.password_hash);
-    if (!ok) {
-      await logSecurityEvent({
-        event_type: 'login_failed',
-        user: user._id,
-        email: user.email,
-        role: user.role,
-        ip_address: ip,
-        user_agent: ua,
-        success: false,
-        details: 'Mot de passe incorrect',
-      });
-      return res.status(401).json({ error: 'Mot de passe incorrect' });
     }
 
     user.last_login = new Date();
@@ -128,6 +154,7 @@ router.post('/login', async (req, res) => {
       device: req.headers['sec-ch-ua-platform'] || 'web',
       ip_address: ip,
       user_agent: ua,
+      last_activity_at: new Date(),
       expires_at: refreshExpiresAt,
       is_active: true,
     });
@@ -165,7 +192,8 @@ router.post('/login', async (req, res) => {
         username: user.username,
         role: user.role,
         email: user.email,
-        telephone: user.telephone
+        telephone: user.telephone,
+        image_profile: user.image_profile || null
       }
     });
   } catch (err) {
@@ -221,12 +249,14 @@ router.post('/forgot-password/request', async (req, res) => {
       status: 'valid'
     });
 
-    await transporter.sendMail({
-      from: process.env.MAIL_FROM || process.env.MAIL_USER,
+    await enqueueMail({
+      kind: 'password_reset_otp',
+      role: user.role,
       to: user.email,
       subject: 'Code de reinitialisation mot de passe',
       text: `Votre code est: ${rawCode}. Il expire dans ${RESET_CODE_TTL_MINUTES} minutes.`,
-      html: `<p>Votre code de reinitialisation est: <b>${rawCode}</b></p><p>Il expire dans ${RESET_CODE_TTL_MINUTES} minutes.</p>`
+      html: `<p>Votre code de reinitialisation est: <b>${rawCode}</b></p><p>Il expire dans ${RESET_CODE_TTL_MINUTES} minutes.</p>`,
+      job_id: `otp_${user._id}_${Date.now()}`,
     });
     await logSecurityEvent({
       event_type: 'password_reset_request',
@@ -391,14 +421,34 @@ router.post('/refresh', async (req, res) => {
       return res.status(401).json({ error: 'Refresh token invalide' });
     }
 
+    const now = new Date();
     const session = await UserSession.findOne({
       session_id: payload.sid,
       user: payload.id,
       is_active: true,
-      expires_at: { $gt: new Date() },
-    });
+      expires_at: { $gt: now },
+    }).select('_id session_id login_time updatedAt last_activity_at');
 
     if (!session) return res.status(401).json({ error: 'Session invalide' });
+
+    if (isSessionInactive(session, now)) {
+      await UserSession.updateOne(
+        { _id: session._id, is_active: true },
+        {
+          $set: {
+            is_active: false,
+            logout_time: now,
+            revoked_reason: 'inactive_timeout',
+          },
+        }
+      );
+      return res.status(401).json({ error: 'Session expiree apres 15 min d inactivite' });
+    }
+
+    await UserSession.updateOne(
+      { _id: session._id, is_active: true },
+      { $set: { last_activity_at: now } }
+    );
 
     const token = jwt.sign(
       { id: payload.id, role: payload.role, username: payload.username, sid: payload.sid },

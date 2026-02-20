@@ -5,6 +5,7 @@ const stockLotSchema = new mongoose.Schema(
     product: { type: mongoose.Schema.Types.ObjectId, ref: 'Product', required: true },
     entry: { type: mongoose.Schema.Types.ObjectId, ref: 'StockEntry' },
     lot_number: String,
+    qr_code_value: String,
     expiry_date: Date,
     date_entry: { type: Date, default: Date.now },
     quantity_initial: { type: Number, required: true, min: 0 },
@@ -16,5 +17,6 @@ const stockLotSchema = new mongoose.Schema(
 );
 
 stockLotSchema.index({ product: 1, date_entry: 1, expiry_date: 1 });
+stockLotSchema.index({ product: 1, qr_code_value: 1 }, { unique: true, sparse: true });
 
 module.exports = mongoose.model('StockLot', stockLotSchema);

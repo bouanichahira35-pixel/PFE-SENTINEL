@@ -9,6 +9,7 @@ import './ProduitsDem.css';
 
 const ProduitsDem = ({ userName, onLogout }) => {
   const toast = useToast();
+  const demandeurName = sessionStorage.getItem('userName') || localStorage.getItem('userName') || userName || '';
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [products, setProducts] = useState([]);
@@ -20,7 +21,9 @@ const ProduitsDem = ({ userName, onLogout }) => {
     quantite: '',
     motif: '',
     urgence: 'normale',
-    commentaire: ''
+    commentaire: '',
+    directionLaboratoire: '',
+    beneficiaire: demandeurName,
   });
   const [errors, setErrors] = useState({});
 
@@ -68,6 +71,9 @@ const ProduitsDem = ({ userName, onLogout }) => {
     if (!formData.motif.trim()) {
       newErrors.motif = 'Motif requis';
     }
+    if (!formData.directionLaboratoire.trim()) {
+      newErrors.directionLaboratoire = 'Direction / laboratoire requis';
+    }
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
   }, [formData]);
@@ -91,29 +97,48 @@ const ProduitsDem = ({ userName, onLogout }) => {
         formData.commentaire.trim() ? `Commentaire: ${formData.commentaire.trim()}` : '',
       ].filter(Boolean);
 
-      await post('/requests', {
+      const payload = {
         product: selectedProduct.id,
         quantity_requested: Number(formData.quantite),
+        direction_laboratory: formData.directionLaboratoire.trim(),
+        beneficiary: demandeurName,
         note: noteParts.join(' | '),
-      });
+      };
+
+      try {
+        await post('/requests', payload);
+      } catch (err) {
+        const msg = String(err?.message || '');
+        if (!msg.toLowerCase().includes('champs non autorises')) throw err;
+        const legacyNote = [payload.note, `Direction: ${payload.direction_laboratory}`].filter(Boolean).join(' | ');
+        await post('/requests', {
+          product: payload.product,
+          quantity_requested: payload.quantity_requested,
+          note: legacyNote,
+        });
+      }
 
       toast.success('Demande envoyee avec succes');
       setShowModal(false);
       setSelectedProduct(null);
-      setFormData({ quantite: '', motif: '', urgence: 'normale', commentaire: '' });
+      setFormData({ quantite: '', motif: '', urgence: 'normale', commentaire: '', directionLaboratoire: '', beneficiaire: demandeurName });
     } catch (err) {
       toast.error(err.message || "Echec d'envoi de la demande");
     } finally {
       setIsSubmitting(false);
     }
-  }, [formData, selectedProduct, validateForm, toast]);
+  }, [formData, selectedProduct, validateForm, toast, demandeurName]);
 
   const handleCloseModal = useCallback(() => {
     setShowModal(false);
     setSelectedProduct(null);
-    setFormData({ quantite: '', motif: '', urgence: 'normale', commentaire: '' });
+    setFormData({ quantite: '', motif: '', urgence: 'normale', commentaire: '', directionLaboratoire: '', beneficiaire: demandeurName });
     setErrors({});
-  }, []);
+  }, [demandeurName]);
+
+  useEffect(() => {
+    setFormData((prev) => ({ ...prev, beneficiaire: demandeurName }));
+  }, [demandeurName]);
 
   return (
     <div className="app-layout">
@@ -257,6 +282,37 @@ const ProduitsDem = ({ userName, onLogout }) => {
                   <option value="urgente">Urgente</option>
                   <option value="tres_urgente">Tres urgente</option>
                 </select>
+              </div>
+
+              <div className="form-group">
+                <label htmlFor="directionLaboratoire">Direction / Laboratoire</label>
+                <input
+                  id="directionLaboratoire"
+                  type="text"
+                  value={formData.directionLaboratoire}
+                  onChange={(e) => setFormData({ ...formData, directionLaboratoire: e.target.value })}
+                  placeholder="Ex: DSP"
+                  className={errors.directionLaboratoire ? 'error' : ''}
+                  aria-invalid={errors.directionLaboratoire ? 'true' : 'false'}
+                />
+                {errors.directionLaboratoire && (
+                  <span className="error-text" role="alert">{errors.directionLaboratoire}</span>
+                )}
+              </div>
+
+              <div className="form-group">
+                <label htmlFor="beneficiaire">Beneficiaire</label>
+                <input
+                  id="beneficiaire"
+                  type="text"
+                  value={formData.beneficiaire}
+                  readOnly
+                  disabled
+                  placeholder="Nom de la personne concernee"
+                  className="locked-input"
+                  aria-readonly="true"
+                />
+                <span className="helper-text">Rempli automatiquement par votre nom de compte.</span>
               </div>
 
               <div className="form-group">

@@ -1,9 +1,25 @@
-﻿import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
-import { Package, ArrowUpFromLine, Save, X, ScanLine, Calendar, User, Hash, AlertTriangle, FileText, Building2 } from 'lucide-react';
+import {
+  Package,
+  ArrowUpFromLine,
+  Save,
+  X,
+  ScanLine,
+  Calendar,
+  User,
+  Hash,
+  AlertTriangle,
+  FileText,
+  Building2,
+  QrCode,
+  RefreshCcw,
+  Printer,
+} from 'lucide-react';
 import SidebarMag from '../../components/magasinier/SidebarMag';
 import HeaderPage from '../../components/shared/HeaderPage';
 import LoadingSpinner from '../../components/shared/LoadingSpinner';
+import InlineQrScanner from '../../components/shared/InlineQrScanner';
 import { useToast } from '../../components/shared/Toast';
 import { get, patch, post, uploadFile } from '../../services/api';
 import './EntreeStock.css';
@@ -25,16 +41,110 @@ const SortieStock = ({ userName, onLogout }) => {
   const [errors, setErrors] = useState({});
   const [attachmentFile, setAttachmentFile] = useState(null);
   const [attachmentLabel, setAttachmentLabel] = useState('Bon de prelevement');
+  const [scanTarget, setScanTarget] = useState('');
+  const [nextFifoLot, setNextFifoLot] = useState(null);
+  const [isLoadingFifoLot, setIsLoadingFifoLot] = useState(false);
+  const [isResolvingBond, setIsResolvingBond] = useState(false);
+  const [isGeneratingBond, setIsGeneratingBond] = useState(false);
+  const [bondResolution, setBondResolution] = useState(null);
+  const [generatedBond, setGeneratedBond] = useState(null);
+  const formOpenedAtRef = useRef(Date.now());
 
   const [formData, setFormData] = useState({
     codeBarres: initialProduct?.code || '',
     quantite: demandeInfo?.quantite?.toString() || '',
     dateSortie: new Date().toISOString().split('T')[0],
     directionLaboratoire: demandeInfo?.direction || '',
-    beneficiaire: demandeInfo?.demandeur || '',
+    beneficiaire: demandeInfo?.beneficiaire || demandeInfo?.demandeur || '',
     numeroBonPrelevementPapier: '',
+    lotQrCode: '',
+    internalBondQr: '',
     commentaire: '',
   });
+
+  const findProductByCode = useCallback(
+    (rawCode) => {
+      const normalized = String(rawCode || '').trim().toUpperCase();
+      if (!normalized) return null;
+      return productsIndex.find((p) => String(p.code || '').trim().toUpperCase() === normalized) || null;
+    },
+    [productsIndex]
+  );
+
+  const applyBondPayloadToForm = useCallback(
+    (payload, tokenValue) => {
+      if (!payload || typeof payload !== 'object') return;
+
+      const mappedProduct = productsIndex.find(
+        (p) => String(p.id) === String(payload.product_id || '')
+          || String(p.code || '').trim().toUpperCase() === String(payload.product_code || '').trim().toUpperCase()
+      );
+
+      if (mappedProduct) {
+        setProductInfo(mappedProduct);
+      }
+
+      setFormData((prev) => ({
+        ...prev,
+        codeBarres: mappedProduct?.code || payload.product_code || prev.codeBarres,
+        quantite: payload.quantity ? String(payload.quantity) : prev.quantite,
+        numeroBonPrelevementPapier:
+          prev.numeroBonPrelevementPapier || payload.withdrawal_paper_number || '',
+        directionLaboratoire:
+          prev.directionLaboratoire || payload.direction_laboratory || '',
+        beneficiaire:
+          prev.beneficiaire || payload.beneficiary || '',
+        internalBondQr: tokenValue || prev.internalBondQr,
+        commentaire: prev.commentaire || payload.note || '',
+      }));
+    },
+    [productsIndex]
+  );
+
+  const resolveInternalBond = useCallback(
+    async (rawQr, options = {}) => {
+      const qrValue = String(rawQr || '').trim();
+      const silent = Boolean(options.silent);
+
+      if (!qrValue) {
+        setBondResolution(null);
+        setGeneratedBond(null);
+        setErrors((prev) => ({ ...prev, internalBondQr: undefined }));
+        if (!silent) toast.error('QR bon interne requis');
+        return null;
+      }
+
+      setIsResolvingBond(true);
+      try {
+        const resolved = await post('/stock/internal-bond/resolve', { qr_value: qrValue });
+        setBondResolution(resolved);
+
+        if (resolved?.already_used) {
+          setErrors((prev) => ({
+            ...prev,
+            internalBondQr: `Bon deja utilise (${resolved?.used_exit?.exit_number || 'sortie existante'})`,
+          }));
+          if (!silent) toast.error("Ce bon interne a deja ete utilise");
+          return resolved;
+        }
+
+        applyBondPayloadToForm(resolved?.payload, qrValue);
+        setErrors((prev) => ({ ...prev, internalBondQr: undefined }));
+        if (!silent) {
+          toast.success(`Bon interne ${resolved?.payload?.bond_id || ''} verifie`);
+        }
+        return resolved;
+      } catch (err) {
+        setBondResolution(null);
+        setErrors((prev) => ({ ...prev, internalBondQr: 'QR interne invalide ou expire' }));
+        if (!silent) toast.error(err.message || 'Verification QR bon interne impossible');
+        return null;
+      } finally {
+        setIsResolvingBond(false);
+      }
+    },
+    [applyBondPayloadToForm, toast]
+  );
 
   useEffect(() => {
     let ignore = false;
@@ -58,7 +168,7 @@ const SortieStock = ({ userName, onLogout }) => {
         setProductsIndex(mapped);
 
         if (!initialProduct && formData.codeBarres) {
-          const found = mapped.find((x) => x.code === formData.codeBarres.trim().toUpperCase());
+          const found = mapped.find((x) => String(x.code || '').trim().toUpperCase() === formData.codeBarres.trim().toUpperCase());
           if (found) setProductInfo(found);
         }
       } catch (err) {
@@ -74,6 +184,60 @@ const SortieStock = ({ userName, onLogout }) => {
     };
   }, [initialProduct, formData.codeBarres, toast]);
 
+  useEffect(() => {
+    let ignore = false;
+
+    const hydrateFromRequest = async () => {
+      if (!demandeInfo?.id) return;
+      if (formData.directionLaboratoire && formData.beneficiaire) return;
+
+      try {
+        const reqDoc = await get(`/requests/${demandeInfo.id}`);
+        if (ignore || !reqDoc) return;
+
+        setFormData((prev) => ({
+          ...prev,
+          directionLaboratoire: prev.directionLaboratoire || reqDoc.direction_laboratory || '',
+          beneficiaire: prev.beneficiaire || reqDoc.beneficiary || reqDoc.demandeur?.username || '',
+        }));
+      } catch {
+        // Keep form usable even if request hydration fails.
+      }
+    };
+
+    hydrateFromRequest();
+    return () => {
+      ignore = true;
+    };
+  }, [demandeInfo?.id, formData.directionLaboratoire, formData.beneficiaire]);
+
+  useEffect(() => {
+    let ignore = false;
+
+    const loadNextFifoLot = async () => {
+      if (!productInfo?.id) {
+        setNextFifoLot(null);
+        return;
+      }
+
+      setIsLoadingFifoLot(true);
+      try {
+        const fifo = await get(`/stock/fifo/next-lot/${productInfo.id}`);
+        if (ignore) return;
+        setNextFifoLot(fifo?.next_fifo_lot || null);
+      } catch {
+        if (!ignore) setNextFifoLot(null);
+      } finally {
+        if (!ignore) setIsLoadingFifoLot(false);
+      }
+    };
+
+    loadNextFifoLot();
+    return () => {
+      ignore = true;
+    };
+  }, [productInfo?.id]);
+
   const quantiteSortie = Number.parseInt(formData.quantite, 10) || 0;
   const isInsufficientStock = useMemo(
     () => Boolean(productInfo && quantiteSortie > productInfo.quantite),
@@ -85,13 +249,12 @@ const SortieStock = ({ userName, onLogout }) => {
   );
 
   const handleScanBarcode = () => {
-    const code = formData.codeBarres.trim().toUpperCase();
-    if (!code) {
+    if (!formData.codeBarres.trim()) {
       toast.error('Saisissez un code produit');
       return;
     }
 
-    const found = productsIndex.find((p) => p.code === code);
+    const found = findProductByCode(formData.codeBarres);
     if (!found) {
       setProductInfo(null);
       toast.error('Produit introuvable pour ce code');
@@ -103,8 +266,99 @@ const SortieStock = ({ userName, onLogout }) => {
     toast.success(`Produit identifie: ${found.nom}`);
   };
 
+  const handleDetectedQr = (value) => {
+    const scanned = String(value || '').trim();
+    if (!scanned) return;
+    if (scanTarget === 'codeBarres') {
+      setFormData((prev) => ({ ...prev, codeBarres: scanned }));
+      const found = findProductByCode(scanned);
+      if (found) {
+        setProductInfo(found);
+        setErrors((prev) => ({ ...prev, product: undefined }));
+        toast.success(`Produit identifie: ${found.nom}`);
+      }
+      return;
+    }
+    if (scanTarget === 'lotQrCode') {
+      setFormData((prev) => ({ ...prev, lotQrCode: scanned }));
+      setErrors((prev) => ({ ...prev, lotQrCode: undefined }));
+      toast.success('QR lot detecte');
+      return;
+    }
+    if (scanTarget === 'internalBondQr') {
+      setFormData((prev) => ({ ...prev, internalBondQr: scanned }));
+      resolveInternalBond(scanned);
+    }
+  };
+
+  const handleGenerateInternalBond = async () => {
+    if (!productInfo?.id) {
+      toast.error('Selectionnez d abord un produit');
+      return;
+    }
+    const qty = Number.parseInt(formData.quantite, 10);
+    if (!qty || qty < 1) {
+      toast.error('Saisissez une quantite valide avant generation');
+      return;
+    }
+    if (qty > Number(productInfo?.quantite || 0)) {
+      toast.error('Stock insuffisant pour generer un bon interne sur cette quantite');
+      return;
+    }
+
+    setIsGeneratingBond(true);
+    try {
+      const generated = await post('/stock/internal-bond/generate', {
+        product: productInfo.id,
+        quantity: qty,
+        withdrawal_paper_number: formData.numeroBonPrelevementPapier || undefined,
+        direction_laboratory: formData.directionLaboratoire || undefined,
+        beneficiary: formData.beneficiaire || undefined,
+        request: demandeInfo?.id || undefined,
+        note: formData.commentaire || undefined,
+        valid_hours: 24,
+      });
+      setGeneratedBond(generated);
+      setFormData((prev) => ({ ...prev, internalBondQr: generated?.qr_value || '' }));
+      await resolveInternalBond(generated?.qr_value || '', { silent: true });
+      toast.success(`Bon interne ${generated?.bond_id || ''} genere`);
+    } catch (err) {
+      toast.error(err.message || 'Generation bon interne impossible');
+    } finally {
+      setIsGeneratingBond(false);
+    }
+  };
+
+  const handlePrintInternalBond = async () => {
+    const internalBondQr = String(formData.internalBondQr || '').trim();
+    if (!internalBondQr) {
+      toast.error('Aucun QR bon interne a imprimer');
+      return;
+    }
+    try {
+      const data = await post('/stock/internal-bond/print-data', { qr_value: internalBondQr });
+      const html = String(data?.html || '');
+      if (!html) {
+        toast.error('Document PDF indisponible');
+        return;
+      }
+      const popup = window.open('', '_blank', 'noopener,noreferrer,width=980,height=1100');
+      if (!popup) {
+        toast.error('Popup bloquee. Autorisez les popups puis reessayez.');
+        return;
+      }
+      popup.document.open();
+      popup.document.write(html);
+      popup.document.close();
+      popup.focus();
+    } catch (err) {
+      toast.error(err.message || 'Impression bon interne impossible');
+    }
+  };
+
   const validateForm = () => {
     const newErrors = {};
+    const hasInternalBond = Boolean(formData.internalBondQr.trim());
 
     if (!productInfo) newErrors.product = 'Produit requis';
 
@@ -112,12 +366,24 @@ const SortieStock = ({ userName, onLogout }) => {
       newErrors.quantite = 'Quantite valide requise';
     }
 
-    if (!formData.directionLaboratoire.trim()) {
+    if (!hasInternalBond && !formData.directionLaboratoire.trim()) {
       newErrors.directionLaboratoire = 'Direction / laboratoire requis';
     }
 
-    if (!formData.beneficiaire.trim()) {
+    if (!hasInternalBond && !formData.beneficiaire.trim()) {
       newErrors.beneficiaire = 'Beneficiaire requis';
+    }
+
+    if (hasInternalBond && bondResolution?.already_used) {
+      newErrors.internalBondQr = 'Bon interne deja utilise';
+    }
+
+    if (
+      formData.lotQrCode
+      && nextFifoLot?.qr_code_value
+      && String(formData.lotQrCode).trim() !== String(nextFifoLot.qr_code_value).trim()
+    ) {
+      newErrors.lotQrCode = 'Le QR scanne ne correspond pas au premier lot FIFO';
     }
 
     setErrors(newErrors);
@@ -140,6 +406,19 @@ const SortieStock = ({ userName, onLogout }) => {
     setIsSubmitting(true);
 
     try {
+      const internalBondQr = String(formData.internalBondQr || '').trim();
+      if (internalBondQr) {
+        const resolved = await resolveInternalBond(internalBondQr, { silent: true });
+        if (!resolved) {
+          toast.error('QR bon interne invalide');
+          return;
+        }
+        if (resolved.already_used) {
+          toast.error('Ce bon interne est deja utilise');
+          return;
+        }
+      }
+
       const attachments = [];
       if (attachmentFile) {
         const uploaded = await uploadFile('/files/upload', attachmentFile);
@@ -153,20 +432,28 @@ const SortieStock = ({ userName, onLogout }) => {
       const createdExit = await post('/stock/exits', {
         product: productInfo.id,
         quantity: Number(formData.quantite),
+        submission_duration_ms: Math.max(0, Date.now() - formOpenedAtRef.current),
         date_exit: formData.dateSortie,
         withdrawal_paper_number: formData.numeroBonPrelevementPapier || undefined,
         direction_laboratory: formData.directionLaboratoire,
         beneficiary: formData.beneficiaire,
+        scanned_lot_qr: formData.lotQrCode || undefined,
+        internal_bond_token: internalBondQr || undefined,
+        exit_mode: internalBondQr ? 'internal_bond' : (formData.lotQrCode ? 'fifo_qr' : 'manual'),
         demandeur: demandeInfo?.demandeurId || undefined,
+        request: demandeInfo?.id || undefined,
         note: formData.commentaire || undefined,
         attachments,
       });
 
       if (demandeInfo?.id) {
         try {
-          await patch(`/requests/${demandeInfo.id}/process`, { status: 'accepted' });
+          await patch(`/requests/${demandeInfo.id}/serve`, {
+            stock_exit_id: createdExit?._id,
+            note: formData.commentaire || undefined,
+          });
         } catch {
-          toast.warning("Sortie creee, mais la demande n'a pas ete mise a jour automatiquement");
+          toast.warning("Sortie creee, mais la demande n'a pas ete cloturee automatiquement");
         }
       }
 
@@ -197,7 +484,7 @@ const SortieStock = ({ userName, onLogout }) => {
         <HeaderPage userName={userName} title="Sortie de Stock" showSearch={false} />
 
         <main className="main-content">
-          {(isSubmitting || isLoadingProducts) && <LoadingSpinner overlay text="Chargement..." />}
+          {(isSubmitting || isLoadingProducts || isGeneratingBond || isResolvingBond || isLoadingFifoLot) && <LoadingSpinner overlay text="Chargement..." />}
 
           <div className="stock-operation-page">
             <div className="operation-card">
@@ -229,6 +516,10 @@ const SortieStock = ({ userName, onLogout }) => {
                         <button type="button" className="scan-btn" onClick={handleScanBarcode}>
                           <ScanLine size={18} />
                           Scanner
+                        </button>
+                        <button type="button" className="scan-btn" onClick={() => setScanTarget('codeBarres')}>
+                          <ScanLine size={18} />
+                          Camera
                         </button>
                       </div>
                       {errors.product && (
@@ -286,6 +577,36 @@ const SortieStock = ({ userName, onLogout }) => {
                       />
                     </div>
                     <div className="form-group">
+                      <label htmlFor="lotQrCode">
+                        <ScanLine size={16} />
+                        QR lot FIFO (scan)
+                      </label>
+                      <input
+                        id="lotQrCode"
+                        type="text"
+                        value={formData.lotQrCode}
+                        onChange={(e) => setFormData({ ...formData, lotQrCode: e.target.value })}
+                        placeholder="Scanner le QR du premier lot"
+                      />
+                      <button type="button" className="scan-btn" onClick={() => setScanTarget('lotQrCode')}>
+                        <ScanLine size={18} />
+                        Camera
+                      </button>
+                      {errors.lotQrCode && (
+                        <span className="error-text" role="alert">
+                          {errors.lotQrCode}
+                        </span>
+                      )}
+                      {nextFifoLot?.qr_code_value && (
+                        <span className="field-hint">
+                          FIFO attendu: lot {nextFifoLot.lot_number || '-'} | QR {nextFifoLot.qr_code_value}
+                        </span>
+                      )}
+                      {!nextFifoLot?.qr_code_value && productInfo && (
+                        <span className="field-hint">Aucun QR lot ouvert detecte: FIFO sera applique sur les lots disponibles.</span>
+                      )}
+                    </div>
+                    <div className="form-group">
                       <label htmlFor="dateSortie">
                         <Calendar size={16} />
                         Date de sortie
@@ -298,6 +619,92 @@ const SortieStock = ({ userName, onLogout }) => {
                       />
                     </div>
                   </div>
+                </div>
+
+                <div className="form-section">
+                  <h3>Bon interne QR (optionnel)</h3>
+                  <div className="form-row">
+                    <div className="form-group">
+                      <label htmlFor="internalBondQr">
+                        <QrCode size={16} />
+                        QR bon interne
+                      </label>
+                      <div className="input-with-btn">
+                        <input
+                          id="internalBondQr"
+                          type="text"
+                          value={formData.internalBondQr}
+                          onChange={(e) => {
+                            const value = e.target.value;
+                            setFormData((prev) => ({ ...prev, internalBondQr: value }));
+                            if (!String(value || '').trim()) {
+                              setBondResolution(null);
+                              setGeneratedBond(null);
+                              setErrors((prev) => ({ ...prev, internalBondQr: undefined }));
+                            }
+                          }}
+                          placeholder="Scanner ou coller le QR signe du bon interne"
+                          className={errors.internalBondQr ? 'error' : ''}
+                        />
+                        <button type="button" className="scan-btn" onClick={() => setScanTarget('internalBondQr')}>
+                          <ScanLine size={18} />
+                          Camera
+                        </button>
+                        <button
+                          type="button"
+                          className="scan-btn"
+                          onClick={() => resolveInternalBond(formData.internalBondQr)}
+                          disabled={!formData.internalBondQr.trim() || isResolvingBond}
+                        >
+                          <RefreshCcw size={18} />
+                          Verifier
+                        </button>
+                      </div>
+                      {errors.internalBondQr && (
+                        <span className="error-text" role="alert">
+                          {errors.internalBondQr}
+                        </span>
+                      )}
+                    </div>
+                    <div className="form-group">
+                      <label htmlFor="generateInternalBond">Generer bon interne depuis ce formulaire</label>
+                      <button
+                        id="generateInternalBond"
+                        type="button"
+                        className="scan-btn"
+                        onClick={handleGenerateInternalBond}
+                        disabled={!productInfo || !formData.quantite || isGeneratingBond}
+                      >
+                        <QrCode size={18} />
+                        Generer QR
+                      </button>
+                      <span className="field-hint">Le bon contient produit + quantite + beneficiaire, avec signature backend.</span>
+                    </div>
+                  </div>
+
+                  {(bondResolution?.payload || generatedBond?.bond_id) && (
+                    <div className={`helper-card ${bondResolution?.already_used ? 'danger' : 'success'}`}>
+                      <strong>Bon interne</strong>
+                      <div>
+                        ID: {bondResolution?.payload?.bond_id || generatedBond?.bond_id || '-'}
+                        {generatedBond?.expires_at ? ` | Expire: ${new Date(generatedBond.expires_at).toLocaleString('fr-FR')}` : ''}
+                      </div>
+                      <div>
+                        Produit: {bondResolution?.payload?.product_name || productInfo?.nom || '-'} | Quantite: {bondResolution?.payload?.quantity || formData.quantite || 0}
+                      </div>
+                      {bondResolution?.already_used && (
+                        <div>Deja consomme par: {bondResolution?.used_exit?.exit_number || '-'}</div>
+                      )}
+                      {!bondResolution?.already_used && (
+                        <div style={{ marginTop: 8 }}>
+                          <button type="button" className="scan-btn" onClick={handlePrintInternalBond}>
+                            <Printer size={16} />
+                            Imprimer PDF
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  )}
                 </div>
 
                 <div className="form-section">
@@ -343,6 +750,7 @@ const SortieStock = ({ userName, onLogout }) => {
                         onChange={(e) => setFormData({ ...formData, directionLaboratoire: e.target.value })}
                         placeholder="Ex: DSP"
                         className={errors.directionLaboratoire ? 'error' : ''}
+                        readOnly={Boolean(demandeInfo?.id)}
                       />
                       {errors.directionLaboratoire && (
                         <span className="error-text" role="alert">
@@ -364,6 +772,7 @@ const SortieStock = ({ userName, onLogout }) => {
                       onChange={(e) => setFormData({ ...formData, beneficiaire: e.target.value })}
                       placeholder="Nom de la personne"
                       className={errors.beneficiaire ? 'error' : ''}
+                      readOnly={Boolean(demandeInfo?.id)}
                     />
                     {errors.beneficiaire && (
                       <span className="error-text" role="alert">
@@ -407,7 +816,7 @@ const SortieStock = ({ userName, onLogout }) => {
 
                 <div className="fifo-notice" role="note">
                   <AlertTriangle size={16} />
-                  <span>Le systeme applique automatiquement la regle FIFO (Premier Entre, Premier Sorti)</span>
+                  <span>FIFO est applique automatiquement. Avec QR lot, le systeme verifie que vous scannez le premier lot autorise.</span>
                 </div>
 
                 {productInfo && formData.quantite && !isInsufficientStock && (
@@ -428,6 +837,13 @@ const SortieStock = ({ userName, onLogout }) => {
                       </div>
                     </div>
                   </div>
+                )}
+
+                {scanTarget && (
+                  <InlineQrScanner
+                    onDetected={handleDetectedQr}
+                    onClose={() => setScanTarget('')}
+                  />
                 )}
 
                 <div className="form-actions">

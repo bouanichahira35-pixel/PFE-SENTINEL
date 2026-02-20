@@ -2,18 +2,9 @@ const User = require('../models/User');
 const Notification = require('../models/Notification');
 const AIAlert = require('../models/AIAlert');
 const StockLot = require('../models/StockLot');
-const nodemailer = require('nodemailer');
+const { enqueueMail } = require('./mailQueueService');
+const { getUserPreferences } = require('./userPreferencesService');
 const { logSecurityEvent } = require('./securityAuditService');
-
-const transporter = nodemailer.createTransport({
-  host: process.env.MAIL_HOST,
-  port: Number(process.env.MAIL_PORT || 587),
-  secure: String(process.env.MAIL_SECURE) === 'true',
-  auth: {
-    user: process.env.MAIL_USER,
-    pass: process.env.MAIL_PASS,
-  },
-});
 
 async function createNotificationsForResponsables({ title, message, type = 'warning' }, session = null) {
   const responsables = await User.find({ role: 'responsable', status: 'active' }).select('_id email').session(session);
@@ -33,29 +24,35 @@ async function createNotificationsForResponsables({ title, message, type = 'warn
 
   const emails = responsables.map((x) => x.email).filter(Boolean);
   if (emails.length > 0) {
-    try {
-      await transporter.sendMail({
-        from: process.env.MAIL_FROM || process.env.MAIL_USER,
-        to: emails.join(','),
-        subject: title,
-        text: message,
-      });
+    let sentCount = 0;
+    for (const responsable of responsables) {
+      if (!responsable.email) continue;
+      try {
+        const prefs = await getUserPreferences(responsable._id);
+        if (!prefs?.notifications?.email || !prefs?.notifications?.stockAlerts) continue;
+        await enqueueMail({
+          kind: 'stock_alert',
+          role: 'responsable',
+          to: responsable.email,
+          subject: title,
+          text: message,
+          html: `<p>${message}</p>`,
+          job_id: `stock_alert_${responsable._id}_${Date.now()}`,
+        });
+        sentCount += 1;
+      } catch {
+        // keep loop resilient
+      }
+    }
+
+    if (sentCount > 0) {
       await logSecurityEvent({
         event_type: 'email_sent',
         role: 'responsable',
         success: true,
-        details: 'Stock alert mail sent',
-        after: { recipients_count: emails.length, subject: title },
+        details: 'Stock alert mail queued',
+        after: { recipients_count: sentCount, subject: title },
       });
-    } catch {
-      await logSecurityEvent({
-        event_type: 'email_failed',
-        role: 'responsable',
-        success: false,
-        details: 'Stock alert mail failed',
-        after: { recipients_count: emails.length, subject: title },
-      });
-      // Keep app resilient if mail provider is unavailable.
     }
   }
 }

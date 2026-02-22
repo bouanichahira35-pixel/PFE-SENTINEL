@@ -3,13 +3,17 @@ const Notification = require('../models/Notification');
 const AIAlert = require('../models/AIAlert');
 const StockLot = require('../models/StockLot');
 const { enqueueMail } = require('./mailQueueService');
-const { getUserPreferences } = require('./userPreferencesService');
+const { getUserPreferences, canSendNotificationEmail } = require('./userPreferencesService');
 const { logSecurityEvent } = require('./securityAuditService');
 
-async function createNotificationsForResponsables({ title, message, type = 'warning' }, session = null) {
-  const responsables = await User.find({ role: 'responsable', status: 'active' }).select('_id email').session(session);
-  if (!responsables.length) return;
-  const docs = responsables.map((u) => ({
+async function createNotificationsForStockTeams({ title, message, type = 'warning' }, session = null) {
+  const teams = await User.find({
+    role: { $in: ['responsable', 'magasinier'] },
+    status: 'active',
+  }).select('_id email role').session(session);
+  if (!teams.length) return;
+
+  const docs = teams.map((u) => ({
     user: u._id,
     title,
     message,
@@ -22,22 +26,22 @@ async function createNotificationsForResponsables({ title, message, type = 'warn
     await Notification.insertMany(docs);
   }
 
-  const emails = responsables.map((x) => x.email).filter(Boolean);
+  const emails = teams.map((x) => x.email).filter(Boolean);
   if (emails.length > 0) {
     let sentCount = 0;
-    for (const responsable of responsables) {
-      if (!responsable.email) continue;
+    for (const teamUser of teams) {
+      if (!teamUser.email) continue;
       try {
-        const prefs = await getUserPreferences(responsable._id);
-        if (!prefs?.notifications?.email || !prefs?.notifications?.stockAlerts) continue;
+        const prefs = await getUserPreferences(teamUser._id);
+        if (!canSendNotificationEmail(prefs, 'stock')) continue;
         await enqueueMail({
           kind: 'stock_alert',
-          role: 'responsable',
-          to: responsable.email,
+          role: teamUser.role,
+          to: teamUser.email,
           subject: title,
           text: message,
           html: `<p>${message}</p>`,
-          job_id: `stock_alert_${responsable._id}_${Date.now()}`,
+          job_id: `stock_alert_${teamUser._id}_${Date.now()}`,
         });
         sentCount += 1;
       } catch {
@@ -48,7 +52,7 @@ async function createNotificationsForResponsables({ title, message, type = 'warn
     if (sentCount > 0) {
       await logSecurityEvent({
         event_type: 'email_sent',
-        role: 'responsable',
+        role: 'stock_team',
         success: true,
         details: 'Stock alert mail queued',
         after: { recipients_count: sentCount, subject: title },
@@ -66,7 +70,7 @@ async function evaluateProductAlerts(product, session = null) {
     const title = 'Alerte stock';
     const message = `${product.name} est ${statusLabel}. Quantite restante: ${qty}, seuil: ${seuil}.`;
 
-    await createNotificationsForResponsables({ title, message, type: 'alert' }, session);
+    await createNotificationsForStockTeams({ title, message, type: 'alert' }, session);
 
     const alertDoc = {
       product: product._id,
@@ -92,7 +96,7 @@ async function evaluateProductAlerts(product, session = null) {
   if (expiringLots.length) {
     const title = 'Alerte peremption';
     const message = `${product.name}: ${expiringLots.length} lot(s) proches de la peremption.`;
-    await createNotificationsForResponsables({ title, message, type: 'warning' }, session);
+    await createNotificationsForStockTeams({ title, message, type: 'warning' }, session);
     const alertDoc = {
       product: product._id,
       alert_type: 'anomaly',

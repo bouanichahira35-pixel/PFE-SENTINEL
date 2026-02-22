@@ -22,14 +22,13 @@ const FAMILIES = [
   'economat',
   'produit_chimique',
   'gaz',
-  'consommable_informatique',
   'consommable_laboratoire',
 ];
 
 const CATEGORY_NAMES = [
   'Papeterie',
   'Laboratoire',
-  'Informatique',
+  'Operationnel',
   'Maintenance',
   'Securite',
   'Gaz Techniques',
@@ -112,7 +111,7 @@ async function ensureCategories(createdById) {
     const cat = await Category.findOneAndUpdate(
       { name },
       { $setOnInsert: { name, description: `${name} (seed)`, created_by: createdById } },
-      { upsert: true, new: true }
+      { upsert: true, returnDocument: 'after' }
     ).lean();
     categories.push(cat);
   }

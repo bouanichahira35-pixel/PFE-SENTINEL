@@ -37,7 +37,7 @@ router.patch('/:id/read', requireAuth, async (req, res) => {
     const item = await Notification.findOneAndUpdate(
       { _id: req.params.id, user: req.user.id },
       { $set: { is_read: true } },
-      { new: true }
+      { returnDocument: 'after' }
     );
     if (!item) return res.status(404).json({ error: 'Notification not found' });
     res.json(item);
@@ -87,6 +87,10 @@ router.post('/mail/test', requireAuth, async (req, res) => {
   try {
     const user = await User.findById(req.user.id).select('username email role').lean();
     if (!user?.email) return res.status(400).json({ error: 'Email utilisateur introuvable' });
+    const prefs = await getUserPreferences(req.user.id);
+    if (!prefs?.notifications?.email) {
+      return res.status(400).json({ error: 'Notifications email desactivees pour cet utilisateur' });
+    }
 
     await enqueueMail({
       kind: 'test_mail',

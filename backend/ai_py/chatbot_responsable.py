@@ -312,6 +312,7 @@ def main():
     context = payload.get("context", {}) or {}
     history = payload.get("history", []) or []
     use_gemini = bool(payload.get("use_gemini", True))
+    strict_gemini = bool(payload.get("strict_gemini", False))
 
     if not question:
         result = {"answer": "Question vide. Merci de preciser votre demande.", "source": "fallback"}
@@ -341,9 +342,17 @@ def main():
                 result = {"answer": answer, "source": "gemini", "mode": mode}
             else:
                 raise RuntimeError("Gemini disabled")
-        except Exception:
-            answer = fallback_report_answer(question, context) if mode == "report" else fallback_chat_answer(question, context)
-            result = {"answer": answer, "source": "fallback", "mode": mode}
+        except Exception as exc:
+            if use_gemini and strict_gemini:
+                result = {
+                    "error": "Gemini call failed",
+                    "details": str(exc)[:1200],
+                    "source": "gemini_error",
+                    "mode": mode,
+                }
+            else:
+                answer = fallback_report_answer(question, context) if mode == "report" else fallback_chat_answer(question, context)
+                result = {"answer": answer, "source": "fallback", "mode": mode}
 
     with open(args.output, "w", encoding="utf-8") as f:
         json.dump(result, f, ensure_ascii=False)

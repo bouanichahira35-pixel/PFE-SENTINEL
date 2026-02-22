@@ -15,6 +15,12 @@ const {
   askResponsableAssistant,
 } = require('../services/aiModelService');
 
+const AI_SETTINGS_DEFAULT = Object.freeze({
+  predictionsEnabled: true,
+  alertesAuto: true,
+  analyseConsommation: true,
+});
+
 function asPositiveInt(value, fallback) {
   const n = Number(value);
   if (!Number.isFinite(n) || n <= 0) return fallback;
@@ -26,11 +32,20 @@ async function getSettingValue(key, fallback = null) {
   return item?.setting_value ?? fallback;
 }
 
+async function getAiConfig() {
+  const cfg = await getSettingValue('ai_config', AI_SETTINGS_DEFAULT);
+  return {
+    predictionsEnabled: cfg?.predictionsEnabled !== false,
+    alertesAuto: cfg?.alertesAuto !== false,
+    analyseConsommation: cfg?.analyseConsommation !== false,
+  };
+}
+
 async function setSettingValue(key, value, userId = null) {
   return AppSetting.findOneAndUpdate(
     { setting_key: key },
     { $set: { setting_value: value, updated_by: userId || undefined } },
-    { new: true, upsert: true }
+    { returnDocument: 'after', upsert: true }
   );
 }
 
@@ -74,6 +89,97 @@ function ensureResponsable(req, res) {
   return true;
 }
 
+function ensureAiPredictionsEnabled(config, res) {
+  if (config?.predictionsEnabled !== false) return true;
+  res.status(409).json({
+    error: 'Predictions IA desactivees',
+    details: 'Activez "Predictions de rupture" dans Parametres > Intelligence Artificielle.',
+  });
+  return false;
+}
+
+function ensureConsumptionAnalysisEnabled(config, res) {
+  if (config?.analyseConsommation !== false) return true;
+  res.status(409).json({
+    error: 'Analyse de consommation desactivee',
+    details: 'Activez "Analyse de consommation" dans Parametres > Intelligence Artificielle.',
+  });
+  return false;
+}
+
+async function runSafeStep(label, task, fallbackValue) {
+  try {
+    const value = await task();
+    return { label, ok: true, value };
+  } catch (err) {
+    return {
+      label,
+      ok: false,
+      value: fallbackValue,
+      error: err?.message || String(err),
+    };
+  }
+}
+
+async function buildAssistantSignals({ includeConsumption = true } = {}) {
+  const jobs = [
+    runSafeStep('metrics', () => getSettingValue('ai_models_metrics_v2', {}), {}),
+    runSafeStep('stockout', () => predictStockout({ horizon_days: 7 }), []),
+    runSafeStep('anomaly', () => predictAnomaly({}), []),
+    runSafeStep(
+      'copilot',
+      () => buildCopilotRecommendations({ horizon_days: 14, top_n: 5, simulations: [], include_consumption: includeConsumption }),
+      {}
+    ),
+  ];
+
+  if (includeConsumption) {
+    jobs.push(runSafeStep('consumption', () => predictConsumption({ horizon_days: 14 }), []));
+  } else {
+    jobs.push(Promise.resolve({
+      label: 'consumption',
+      ok: false,
+      value: [],
+      error: 'analyse_consommation_disabled',
+    }));
+  }
+
+  const settled = await Promise.all(jobs);
+  const byLabel = new Map(settled.map((item) => [item.label, item]));
+  const warnings = settled
+    .filter((item) => !item.ok)
+    .map((item) => ({ source: item.label, reason: item.error }));
+
+  return {
+    metrics: byLabel.get('metrics')?.value || {},
+    stockout: byLabel.get('stockout')?.value || [],
+    consumption: byLabel.get('consumption')?.value || [],
+    anomaly: byLabel.get('anomaly')?.value || [],
+    copilot: byLabel.get('copilot')?.value || {},
+    warnings,
+  };
+}
+
+function sendGeminiUnavailable(res) {
+  return res.status(503).json({
+    error: 'Gemini indisponible (non configure)',
+    code: 'GEMINI_NOT_CONFIGURED',
+    details: 'Configurez GEMINI_API_KEY avec une cle valide (AIza...) puis redemarrez le backend.',
+  });
+}
+
+function isGeminiUpstreamError(err) {
+  return String(err?.code || '').toUpperCase() === 'GEMINI_ERROR';
+}
+
+function capability(enabled, reasons = []) {
+  const cleanReasons = Array.from(new Set((Array.isArray(reasons) ? reasons : []).filter(Boolean)));
+  return {
+    enabled: Boolean(enabled),
+    reasons: Boolean(enabled) ? [] : cleanReasons,
+  };
+}
+
 router.get('/alerts', requireAuth, async (req, res) => {
   try {
     const items = await AIAlert.find().populate('product').sort({ detected_at: -1, createdAt: -1 });
@@ -97,11 +203,13 @@ router.get('/models/status', requireAuth, async (req, res) => {
     const registry = await getSettingValue('ai_models_registry_v2', null);
     const metrics = await getSettingValue('ai_models_metrics_v2', null);
     const governance = await getGovernance();
+    const config = await getAiConfig();
     return res.json({
       trained: Boolean(registry?.trained_at),
       registry: registry || null,
       metrics: metrics || null,
       governance,
+      config,
     });
   } catch (err) {
     return res.status(500).json({ error: 'Failed to fetch model status', details: err.message });
@@ -147,12 +255,68 @@ router.get('/gemini/status', requireAuth, async (req, res) => {
   }
 });
 
+router.get('/assistant/status', requireAuth, async (req, res) => {
+  try {
+    if (!ensureResponsable(req, res)) return;
+
+    const aiConfig = await getAiConfig();
+    const geminiConfigured = isGeminiConfigured();
+    const [registry, metrics] = await Promise.all([
+      getSettingValue('ai_models_registry_v2', null),
+      getSettingValue('ai_models_metrics_v2', null),
+    ]);
+
+    const baseAskReasons = [];
+    if (!aiConfig.predictionsEnabled) baseAskReasons.push('ai_predictions_disabled');
+
+    const transcribeReasons = [];
+    if (!geminiConfigured) transcribeReasons.push('gemini_not_configured');
+
+    const voiceAskReasons = [];
+    if (!aiConfig.predictionsEnabled) voiceAskReasons.push('ai_predictions_disabled');
+    if (!geminiConfigured) voiceAskReasons.push('gemini_not_configured');
+
+    const consumptionReasons = [];
+    if (!aiConfig.predictionsEnabled) consumptionReasons.push('ai_predictions_disabled');
+    if (!aiConfig.analyseConsommation) consumptionReasons.push('consumption_analysis_disabled');
+
+    return res.json({
+      ok: true,
+      ai_config: aiConfig,
+      gemini: {
+        configured: geminiConfigured,
+        model_default: process.env.GEMINI_MODEL || 'gemini-2.0-flash',
+      },
+      models: {
+        trained: Boolean(registry?.trained_at),
+        model_version: registry?.model_version || null,
+        trained_at: registry?.trained_at || null,
+        metrics_ready: Boolean(metrics),
+      },
+      capabilities: {
+        assistant_ask: capability(aiConfig.predictionsEnabled, baseAskReasons),
+        assistant_report: capability(aiConfig.predictionsEnabled, baseAskReasons),
+        assistant_transcribe: capability(geminiConfigured, transcribeReasons),
+        assistant_voice_ask: capability(aiConfig.predictionsEnabled && geminiConfigured, voiceAskReasons),
+        predict_stockout: capability(aiConfig.predictionsEnabled, ['ai_predictions_disabled']),
+        predict_consumption: capability(aiConfig.predictionsEnabled && aiConfig.analyseConsommation, consumptionReasons),
+        predict_anomaly: capability(aiConfig.predictionsEnabled, ['ai_predictions_disabled']),
+        copilot_recommendations: capability(aiConfig.predictionsEnabled, ['ai_predictions_disabled']),
+      },
+    });
+  } catch (err) {
+    return res.status(500).json({ error: 'Failed to fetch assistant status', details: err.message });
+  }
+});
+
 router.post(
   '/gemini/generate',
   requireAuth,
   strictBody(['prompt', 'history', 'model', 'temperature', 'max_output_tokens', 'system_instruction']),
   async (req, res) => {
     try {
+      if (!isGeminiConfigured()) return sendGeminiUnavailable(res);
+
       const prompt = String(req.body?.prompt || '').trim();
       if (!prompt) return res.status(400).json({ error: 'prompt obligatoire' });
       if (prompt.length > 8000) return res.status(400).json({ error: 'prompt trop long' });
@@ -175,6 +339,8 @@ router.post(
 router.post('/models/train', requireAuth, strictBody(['lookback_days', 'force']), async (req, res) => {
   try {
     if (!ensureResponsable(req, res)) return;
+    const aiConfig = await getAiConfig();
+    if (!ensureAiPredictionsEnabled(aiConfig, res)) return;
     const force = Boolean(req.body?.force);
     const lookbackDays = Math.min(730, asPositiveInt(req.body?.lookback_days, 240));
     const governance = await getGovernance();
@@ -213,6 +379,9 @@ router.post('/models/train', requireAuth, strictBody(['lookback_days', 'force'])
 
 router.post('/predict/stockout', requireAuth, strictBody(['horizon_days', 'product_ids']), async (req, res) => {
   try {
+    const aiConfig = await getAiConfig();
+    if (!ensureAiPredictionsEnabled(aiConfig, res)) return;
+
     const horizonDays = Math.min(30, asPositiveInt(req.body?.horizon_days, 7));
     const productIds = Array.isArray(req.body?.product_ids) ? req.body.product_ids : null;
     const predictions = await predictStockout({ horizon_days: horizonDays, product_ids: productIds });
@@ -243,6 +412,10 @@ router.post('/predict/stockout', requireAuth, strictBody(['horizon_days', 'produ
 
 router.post('/predict/consumption', requireAuth, strictBody(['horizon_days', 'product_ids']), async (req, res) => {
   try {
+    const aiConfig = await getAiConfig();
+    if (!ensureAiPredictionsEnabled(aiConfig, res)) return;
+    if (!ensureConsumptionAnalysisEnabled(aiConfig, res)) return;
+
     const horizonDays = Math.min(30, asPositiveInt(req.body?.horizon_days, 14));
     const productIds = Array.isArray(req.body?.product_ids) ? req.body.product_ids : null;
     const predictions = await predictConsumption({ horizon_days: horizonDays, product_ids: productIds });
@@ -273,10 +446,12 @@ router.post('/predict/consumption', requireAuth, strictBody(['horizon_days', 'pr
 
 router.post('/predict/anomaly', requireAuth, strictBody(['product_ids']), async (req, res) => {
   try {
+    const aiConfig = await getAiConfig();
+    if (!ensureAiPredictionsEnabled(aiConfig, res)) return;
+
     const productIds = Array.isArray(req.body?.product_ids) ? req.body.product_ids : null;
     const predictions = await predictAnomaly({ product_ids: productIds });
 
-    await AIAlert.deleteMany({ alert_type: 'anomaly', action_taken: 'model:anomaly_detection_v1' });
     const anomalyAlerts = predictions
       .filter((p) => Boolean(p.is_anomaly))
       .slice(0, 100)
@@ -289,12 +464,16 @@ router.post('/predict/anomaly', requireAuth, strictBody(['product_ids']), async 
         status: 'new',
         action_taken: 'model:anomaly_detection_v1',
       }));
-    if (anomalyAlerts.length) await AIAlert.insertMany(anomalyAlerts);
+    if (aiConfig.alertesAuto) {
+      await AIAlert.deleteMany({ alert_type: 'anomaly', action_taken: 'model:anomaly_detection_v1' });
+      if (anomalyAlerts.length) await AIAlert.insertMany(anomalyAlerts);
+    }
 
     return res.json({
       ok: true,
       count: predictions.length,
       anomalies_count: anomalyAlerts.length,
+      alerts_persisted: Boolean(aiConfig.alertesAuto),
       predictions,
     });
   } catch (err) {
@@ -304,6 +483,9 @@ router.post('/predict/anomaly', requireAuth, strictBody(['product_ids']), async 
 
 router.post('/copilot/recommendations', requireAuth, strictBody(['horizon_days', 'top_n', 'simulations']), async (req, res) => {
   try {
+    const aiConfig = await getAiConfig();
+    if (!ensureAiPredictionsEnabled(aiConfig, res)) return;
+
     const horizonDays = Math.min(30, asPositiveInt(req.body?.horizon_days, 14));
     const topN = Math.min(20, asPositiveInt(req.body?.top_n, 10));
     const simulations = Array.isArray(req.body?.simulations) ? req.body.simulations : [];
@@ -311,8 +493,13 @@ router.post('/copilot/recommendations', requireAuth, strictBody(['horizon_days',
       horizon_days: horizonDays,
       top_n: topN,
       simulations,
+      include_consumption: aiConfig.analyseConsommation !== false,
     });
-    return res.json({ ok: true, ...response });
+    return res.json({
+      ok: true,
+      ai_config: aiConfig,
+      ...response,
+    });
   } catch (err) {
     return res.status(500).json({ error: 'Failed to build copilot recommendations', details: err.message });
   }
@@ -354,28 +541,30 @@ router.get('/copilot/applied', requireAuth, async (req, res) => {
 
 router.post('/assistant/ask', requireAuth, strictBody(['question', 'history', 'mode']), async (req, res) => {
   try {
+    if (!ensureResponsable(req, res)) return;
+    const aiConfig = await getAiConfig();
+    if (!ensureAiPredictionsEnabled(aiConfig, res)) return;
+    if (!isGeminiConfigured()) return sendGeminiUnavailable(res);
+
     const questionRaw = String(req.body?.question || '').trim();
     if (!questionRaw) return res.status(400).json({ error: 'question obligatoire' });
     const mode = String(req.body?.mode || 'chat').toLowerCase() === 'report' ? 'report' : 'chat';
-    const [metrics, stockout, consumption, anomaly, copilot] = await Promise.all([
-      getSettingValue('ai_models_metrics_v2', {}),
-      predictStockout({ horizon_days: 7 }),
-      predictConsumption({ horizon_days: 14 }),
-      predictAnomaly({}),
-      buildCopilotRecommendations({ horizon_days: 14, top_n: 5, simulations: [] }),
-    ]);
+    const signals = await buildAssistantSignals({
+      includeConsumption: aiConfig.analyseConsommation !== false,
+    });
 
     const assistant = await askResponsableAssistant({
       question: questionRaw,
       history: Array.isArray(req.body?.history) ? req.body.history : [],
       use_gemini: true,
+      strict_gemini: true,
       mode,
       context: {
-        stockout_top: stockout.slice(0, 5),
-        consumption_top: consumption.slice(0, 5),
-        anomaly_top: anomaly.slice(0, 5),
-        action_plan: Array.isArray(copilot?.action_plan) ? copilot.action_plan.slice(0, 5) : [],
-        metrics: metrics || {},
+        stockout_top: signals.stockout.slice(0, 5),
+        consumption_top: signals.consumption.slice(0, 5),
+        anomaly_top: signals.anomaly.slice(0, 5),
+        action_plan: Array.isArray(signals.copilot?.action_plan) ? signals.copilot.action_plan.slice(0, 5) : [],
+        metrics: signals.metrics || {},
       },
     });
     return res.json({
@@ -383,14 +572,27 @@ router.post('/assistant/ask', requireAuth, strictBody(['question', 'history', 'm
       answer: assistant.answer || 'Aucune reponse produite.',
       source: assistant.source || 'fallback',
       mode: assistant.mode || mode,
+      ai_config: aiConfig,
+      partial_warnings: signals.warnings,
+      gemini_configured: true,
     });
   } catch (err) {
+    if (isGeminiUpstreamError(err)) {
+      return res.status(502).json({
+        error: 'Echec appel Gemini',
+        code: 'GEMINI_UPSTREAM_ERROR',
+        details: err?.details || err?.message || 'Gemini a retourne une erreur',
+      });
+    }
     return res.status(500).json({ error: 'Failed to answer assistant request', details: err.message });
   }
 });
 
 router.post('/assistant/transcribe', requireAuth, strictBody(['audio_base64', 'mime_type', 'language']), async (req, res) => {
   try {
+    if (!ensureResponsable(req, res)) return;
+    if (!isGeminiConfigured()) return sendGeminiUnavailable(res);
+
     const audioBase64 = String(req.body?.audio_base64 || '').trim();
     if (!audioBase64) return res.status(400).json({ error: 'audio_base64 obligatoire' });
     if (audioBase64.length > 12 * 1024 * 1024) {
@@ -415,6 +617,12 @@ router.post('/assistant/transcribe', requireAuth, strictBody(['audio_base64', 'm
 
 router.post('/assistant/voice-ask', requireAuth, strictBody(['audio_base64', 'mime_type', 'history', 'mode', 'language']), async (req, res) => {
   try {
+    if (!ensureResponsable(req, res)) return;
+    const aiConfig = await getAiConfig();
+    if (!ensureAiPredictionsEnabled(aiConfig, res)) return;
+
+    if (!isGeminiConfigured()) return sendGeminiUnavailable(res);
+
     const audioBase64 = String(req.body?.audio_base64 || '').trim();
     if (!audioBase64) return res.status(400).json({ error: 'audio_base64 obligatoire' });
     if (audioBase64.length > 12 * 1024 * 1024) {
@@ -432,25 +640,22 @@ router.post('/assistant/voice-ask', requireAuth, strictBody(['audio_base64', 'mi
     }
 
     const mode = String(req.body?.mode || 'chat').toLowerCase() === 'report' ? 'report' : 'chat';
-    const [metrics, stockout, consumption, anomaly, copilot] = await Promise.all([
-      getSettingValue('ai_models_metrics_v2', {}),
-      predictStockout({ horizon_days: 7 }),
-      predictConsumption({ horizon_days: 14 }),
-      predictAnomaly({}),
-      buildCopilotRecommendations({ horizon_days: 14, top_n: 5, simulations: [] }),
-    ]);
+    const signals = await buildAssistantSignals({
+      includeConsumption: aiConfig.analyseConsommation !== false,
+    });
 
     const assistant = await askResponsableAssistant({
       question: transcript,
       history: Array.isArray(req.body?.history) ? req.body.history : [],
       use_gemini: true,
+      strict_gemini: true,
       mode,
       context: {
-        stockout_top: stockout.slice(0, 5),
-        consumption_top: consumption.slice(0, 5),
-        anomaly_top: anomaly.slice(0, 5),
-        action_plan: Array.isArray(copilot?.action_plan) ? copilot.action_plan.slice(0, 5) : [],
-        metrics: metrics || {},
+        stockout_top: signals.stockout.slice(0, 5),
+        consumption_top: signals.consumption.slice(0, 5),
+        anomaly_top: signals.anomaly.slice(0, 5),
+        action_plan: Array.isArray(signals.copilot?.action_plan) ? signals.copilot.action_plan.slice(0, 5) : [],
+        metrics: signals.metrics || {},
       },
     });
 
@@ -461,8 +666,17 @@ router.post('/assistant/voice-ask', requireAuth, strictBody(['audio_base64', 'mi
       answer: assistant.answer || 'Aucune reponse produite.',
       source: assistant.source || 'fallback',
       mode: assistant.mode || mode,
+      ai_config: aiConfig,
+      partial_warnings: signals.warnings,
     });
   } catch (err) {
+    if (isGeminiUpstreamError(err)) {
+      return res.status(502).json({
+        error: 'Echec appel Gemini',
+        code: 'GEMINI_UPSTREAM_ERROR',
+        details: err?.details || err?.message || 'Gemini a retourne une erreur',
+      });
+    }
     return res.status(500).json({ error: 'Failed to process voice request', details: err.message });
   }
 });

@@ -10,14 +10,14 @@
   --color-text-muted: #9ca3af; 
   --color-border: #e5e7eb; 
   --color-border-light: #f3f4f6; 
-  --color-warning: #7c3aed;
-  --color-warning-soft: rgba(124, 58, 237, 0.12);
-  --color-warning-soft-strong: rgba(124, 58, 237, 0.2);
-  --color-warning-border: rgba(124, 58, 237, 0.35);
+  --color-warning: #7b3ff2;
+  --color-warning-soft: #ece4fb;
+  --color-warning-soft-strong: #dfd0f8;
+  --color-warning-border: rgba(123, 63, 242, 0.45);
 
   /* Legacy HSL tokens used across magasinier/responsable pages */ 
   --primary: 210 79% 46%; 
-  --app-bg: 246 248 251; 
+  --app-bg: 255 44% 96%; 
   --card-bg: 0 0% 100%; 
   --border: 214 32% 91%; 
   --table-header: 220 33% 97%; 
@@ -38,10 +38,10 @@
   --color-text-muted: #9ca3af; 
   --color-border: #374151; 
   --color-border-light: #1f2937; 
-  --color-warning: #a78bfa;
-  --color-warning-soft: rgba(167, 139, 250, 0.16);
-  --color-warning-soft-strong: rgba(167, 139, 250, 0.26);
-  --color-warning-border: rgba(167, 139, 250, 0.45);
+  --color-warning: #b598ff;
+  --color-warning-soft: rgba(181, 152, 255, 0.16);
+  --color-warning-soft-strong: rgba(181, 152, 255, 0.28);
+  --color-warning-border: rgba(181, 152, 255, 0.5);
 
   /* Legacy HSL tokens (dark mode) */ 
   --primary: 210 93% 67%; 

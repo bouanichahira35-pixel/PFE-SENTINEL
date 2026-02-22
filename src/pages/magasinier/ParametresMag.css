@@ -230,7 +230,8 @@
    align-items: center;
    justify-content: space-between;
    padding: 1rem;
-   background: hsl(var(--app-bg));
+   background: var(--color-warning-soft);
+   border: 1px solid var(--color-warning-border);
    border-radius: 8px;
  }
 
@@ -284,7 +285,7 @@
  }
 
  .toggle-switch input:checked + .toggle-slider {
-   background: hsl(var(--primary));
+   background: var(--color-warning);
  }
 
  .toggle-switch input:checked + .toggle-slider:before {

@@ -12,7 +12,7 @@ const { PERMISSIONS } = require('../constants/permissions');
 const { runInTransaction } = require('../services/transactionService');
 const { logSecurityEvent } = require('../services/securityAuditService');
 const { enqueueMail } = require('../services/mailQueueService');
-const { getUserPreferences } = require('../services/userPreferencesService');
+const { getUserPreferences, canSendNotificationEmail } = require('../services/userPreferencesService');
 const { requestStatusTemplate } = require('../services/mailTemplates');
 const { asPositiveNumber, isValidObjectIdLike, asOptionalString } = require('../utils/validation');
 const SAFE_USER_FIELDS = 'username email role status telephone';
@@ -35,11 +35,14 @@ async function notifyDemandeurOnProcessing(requestDoc, actorUsername) {
   const responseNote = String(requestDoc.note || '').trim();
   const dateValue = requestDoc.date_processing || requestDoc.date_served || requestDoc.updatedAt || new Date();
   const dateLabel = new Date(dateValue).toLocaleString('fr-FR');
+  const decisionLine = status === 'served'
+    ? `Execution magasinier: ${statusLabel}`
+    : `Reponse magasinier: ${statusLabel}`;
   const text = [
     `Votre demande a ete ${statusLabel.toLowerCase()}.`,
     `Produit: ${productName}`,
     `Quantite demandee: ${quantity}`,
-    `Reponse magasinier: ${statusLabel}`,
+    decisionLine,
     `Traitee par: ${actor}`,
     `Date de traitement: ${dateLabel}`,
     responseNote ? `Commentaire: ${responseNote}` : null,
@@ -50,7 +53,7 @@ async function notifyDemandeurOnProcessing(requestDoc, actorUsername) {
       <ul>
         <li><strong>Produit:</strong> ${productName}</li>
         <li><strong>Quantite demandee:</strong> ${quantity}</li>
-        <li><strong>Reponse magasinier:</strong> ${statusLabel}</li>
+        <li><strong>${status === 'served' ? 'Execution magasinier' : 'Reponse magasinier'}:</strong> ${statusLabel}</li>
         <li><strong>Traitee par:</strong> ${actor}</li>
         <li><strong>Date de traitement:</strong> ${dateLabel}</li>
         ${responseNote ? `<li><strong>Commentaire:</strong> ${responseNote}</li>` : ''}
@@ -131,8 +134,50 @@ async function notifyStockTeamsOnNewRequest(requestDoc) {
         is_read: false,
       }))
     );
-    // Policy: no email is sent when a demandeur creates a request.
-    // Only request responses (accepted/refused/served) may trigger email for demandeur.
+
+    // Policy: demandeur does not receive email on request creation.
+    // Stock teams (magasinier/responsable) can receive email based on their preferences.
+    const appUrl = process.env.APP_BASE_URL || process.env.FRONTEND_URL || '';
+    for (const teamUser of teams) {
+      if (!teamUser.email) continue;
+      try {
+        const prefs = await getUserPreferences(teamUser._id);
+        if (!canSendNotificationEmail(prefs, 'demandes')) continue;
+
+        const rolePath = teamUser.role === 'magasinier'
+          ? '/magasinier/demandes'
+          : teamUser.role === 'responsable'
+            ? '/responsable'
+            : `/${teamUser.role || ''}`;
+        const targetUrl = appUrl ? `${appUrl}${rolePath}` : '';
+        const teamText = [
+          `Bonjour ${teamUser.username || ''},`,
+          '',
+          text,
+          targetUrl ? `Ouvrir l'application: ${targetUrl}` : null,
+        ].filter(Boolean).join('\n');
+
+        await enqueueMail({
+          kind: 'new_request_team',
+          role: teamUser.role,
+          to: teamUser.email,
+          subject,
+          text: teamText,
+          html: `<p>${teamText.replace(/\n/g, '<br/>')}</p>`,
+          job_id: `new_request_team_${requestDoc?._id || Date.now()}_${teamUser._id}_${Date.now()}`,
+        });
+      } catch (err) {
+        await logSecurityEvent({
+          event_type: 'email_failed',
+          user: teamUser._id,
+          email: teamUser.email,
+          role: teamUser.role,
+          success: false,
+          details: `New request team mail enqueue failed: ${err?.message || 'unknown_error'}`,
+          after: { request_id: requestDoc?._id || null },
+        });
+      }
+    }
   } catch {
     // Keep request creation resilient.
   }
@@ -229,6 +274,10 @@ router.patch(
   strictBody(['status', 'note']),
   async (req, res) => {
   try {
+    if (req.user.role !== 'magasinier') {
+      return res.status(403).json({ error: 'Traitement reserve au magasinier' });
+    }
+
     const status = String(req.body.status || '').trim().toLowerCase();
     if (!['accepted', 'refused'].includes(status)) {
       return res.status(400).json({ error: 'status doit etre accepted ou refused' });
@@ -321,6 +370,7 @@ router.patch(
       if (!reqDoc) throw new Error('Request not found');
       if (reqDoc.status === 'refused') throw new Error('Request refusee');
       if (reqDoc.status === 'served') throw new Error('Request deja servie');
+      if (reqDoc.status !== 'accepted') throw new Error('Decision magasinier requise avant service');
 
       const linked = await StockExit.findById(stockExitId).session(session);
       if (!linked || linked.canceled) throw new Error('Bon de prelevement invalide ou annule');
@@ -338,11 +388,6 @@ router.patch(
       }
 
       const statusBefore = reqDoc.status;
-      if (reqDoc.status === 'pending') {
-        reqDoc.status = 'accepted';
-        reqDoc.date_acceptance = new Date();
-      }
-
       reqDoc.status = 'served';
       reqDoc.date_served = new Date();
       reqDoc.date_processing = reqDoc.date_served;

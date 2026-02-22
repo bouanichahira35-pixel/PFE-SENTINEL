@@ -36,11 +36,7 @@ const ListeDemandes = ({ userName, onLogout }) => {
       refused: 'Rejetee',
       allStatus: 'Tous statuts',
       stockLow: 'Stock insuffisant pour cette demande',
-      acceptedMsg: 'Demande acceptee. Continuez avec la sortie de stock.',
-      refusedMsg: 'Demande rejetee',
       failLoad: 'Impossible de charger les demandes',
-      failAccept: 'Echec acceptation demande',
-      failReject: 'Echec rejet demande',
       ref: 'Reference',
       product: 'Produit',
       qty: 'Quantite',
@@ -50,8 +46,13 @@ const ListeDemandes = ({ userName, onLogout }) => {
       actions: 'Actions',
       noResults: 'Aucune demande trouvee',
       lines: 'ligne(s)',
-      waitingCount: 'demande(s) en attente',
-      reject: 'Rejeter la demande',
+      waitingCount: 'demande(s) en attente traitement magasinier',
+      waitingResponsible: 'En attente traitement magasinier',
+      accept: 'Accepter',
+      reject: 'Rejeter',
+      acceptedOk: 'Demande acceptee',
+      rejectedOk: 'Demande rejetee',
+      processFail: 'Impossible de traiter la demande',
     },
     en: {
       title: 'Product Requests',
@@ -63,11 +64,7 @@ const ListeDemandes = ({ userName, onLogout }) => {
       refused: 'Rejected',
       allStatus: 'All statuses',
       stockLow: 'Insufficient stock for this request',
-      acceptedMsg: 'Request accepted. Continue with stock exit.',
-      refusedMsg: 'Request rejected',
       failLoad: 'Failed to load requests',
-      failAccept: 'Failed to accept request',
-      failReject: 'Failed to reject request',
       ref: 'Reference',
       product: 'Product',
       qty: 'Quantity',
@@ -77,8 +74,13 @@ const ListeDemandes = ({ userName, onLogout }) => {
       actions: 'Actions',
       noResults: 'No request found',
       lines: 'line(s)',
-      waitingCount: 'pending request(s)',
-      reject: 'Reject request',
+      waitingCount: 'pending request(s) awaiting storekeeper handling',
+      waitingResponsible: 'Waiting storekeeper handling',
+      accept: 'Accept',
+      reject: 'Reject',
+      acceptedOk: 'Request accepted',
+      rejectedOk: 'Request rejected',
+      processFail: 'Failed to process request',
     },
     ar: {
       title: 'Product Requests',
@@ -90,11 +92,7 @@ const ListeDemandes = ({ userName, onLogout }) => {
       refused: 'Rejected',
       allStatus: 'All statuses',
       stockLow: 'Insufficient stock for this request',
-      acceptedMsg: 'Request accepted. Continue with stock exit.',
-      refusedMsg: 'Request rejected',
       failLoad: 'Failed to load requests',
-      failAccept: 'Failed to accept request',
-      failReject: 'Failed to reject request',
       ref: 'Reference',
       product: 'Product',
       qty: 'Quantity',
@@ -104,8 +102,13 @@ const ListeDemandes = ({ userName, onLogout }) => {
       actions: 'Actions',
       noResults: 'No request found',
       lines: 'line(s)',
-      waitingCount: 'pending request(s)',
-      reject: 'Reject request',
+      waitingCount: 'pending request(s) awaiting storekeeper handling',
+      waitingResponsible: 'Waiting storekeeper handling',
+      accept: 'Accept',
+      reject: 'Reject',
+      acceptedOk: 'Request accepted',
+      rejectedOk: 'Request rejected',
+      processFail: 'Failed to process request',
     },
   }[lang];
 
@@ -113,8 +116,8 @@ const ListeDemandes = ({ userName, onLogout }) => {
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
   const [demandes, setDemandes] = useState([]);
-  const [processingId, setProcessingId] = useState(null);
   const [isLoading, setIsLoading] = useState(false);
+  const [processingId, setProcessingId] = useState('');
 
   const getStatutInfo = useCallback((statut) => {
     switch (statut) {
@@ -189,37 +192,23 @@ const ListeDemandes = ({ userName, onLogout }) => {
     });
   }, [navigate]);
 
-  const handleAccepter = useCallback(async (demande) => {
-    if (demande.stockDisponible < demande.quantite) {
+  const handleProcess = useCallback(async (demande, status) => {
+    if (!demande?.id || !['accepted', 'refused'].includes(status)) return;
+    if (status === 'accepted' && demande.stockDisponible < demande.quantite) {
       toast.error(i18n.stockLow);
       return;
     }
-
     setProcessingId(demande.id);
     try {
-      await patch(`/requests/${demande.id}/process`, { status: 'accepted' });
-      setDemandes((prev) => prev.map((d) => (d.id === demande.id ? { ...d, statut: 'accepted' } : d)));
-      toast.success(i18n.acceptedMsg);
-      goToSortieStock({ ...demande, statut: 'accepted' });
+      await patch(`/requests/${demande.id}/process`, { status });
+      toast.success(status === 'accepted' ? i18n.acceptedOk : i18n.rejectedOk);
+      await loadDemandes();
     } catch (err) {
-      toast.error(err.message || i18n.failAccept);
+      toast.error(err.message || i18n.processFail);
     } finally {
-      setProcessingId(null);
+      setProcessingId('');
     }
-  }, [goToSortieStock, toast, i18n.stockLow, i18n.acceptedMsg, i18n.failAccept]);
-
-  const handleRejeter = useCallback(async (demandeId) => {
-    setProcessingId(demandeId);
-    try {
-      await patch(`/requests/${demandeId}/process`, { status: 'refused' });
-      setDemandes((prev) => prev.map((d) => (d.id === demandeId ? { ...d, statut: 'refused' } : d)));
-      toast.warning(i18n.refusedMsg);
-    } catch (err) {
-      toast.error(err.message || i18n.failReject);
-    } finally {
-      setProcessingId(null);
-    }
-  }, [toast, i18n.refusedMsg, i18n.failReject]);
+  }, [toast, i18n.stockLow, i18n.acceptedOk, i18n.rejectedOk, i18n.processFail, loadDemandes]);
 
   const filteredDemandes = useMemo(() => {
     const q = searchQuery.toLowerCase().trim();
@@ -298,11 +287,11 @@ const ListeDemandes = ({ userName, onLogout }) => {
                     {filteredDemandes.map((demande) => {
                       const statutInfo = getStatutInfo(demande.statut);
                       const StatutIcon = statutInfo.icon;
-                      const canAccept = demande.statut === 'pending' && demande.stockDisponible >= demande.quantite;
+                      const processing = processingId === demande.id;
                       const canServe = demande.statut === 'accepted' && demande.stockDisponible >= demande.quantite;
+                      const canAccept = demande.statut === 'pending' && demande.stockDisponible >= demande.quantite;
                       const insufficientStock = ['pending', 'accepted'].includes(demande.statut)
                         && demande.stockDisponible < demande.quantite;
-                      const isProcessing = processingId === demande.id;
 
                       return (
                         <tr key={demande.id}>
@@ -339,45 +328,38 @@ const ListeDemandes = ({ userName, onLogout }) => {
                             </span>
                           </td>
                           <td>
-                            {(demande.statut === 'pending' || demande.statut === 'accepted') ? (
+                            {demande.statut === 'pending' ? (
                               <div className="dm-actions">
-                                {isProcessing ? (
-                                  <LoadingSpinner size="small" />
-                                ) : (
-                                  <>
-                                    {demande.statut === 'pending' ? (
-                                      <>
-                                        <button
-                                          className={`dm-action-btn accept ${!canAccept ? 'disabled' : ''}`}
-                                          onClick={() => handleAccepter(demande)}
-                                          disabled={!canAccept}
-                                          title={insufficientStock ? i18n.stockLow : i18n.accepted}
-                                          aria-label={`Accepter ${demande.reference}`}
-                                        >
-                                          <CheckCircle size={15} />
-                                        </button>
-                                        <button
-                                          className="dm-action-btn reject"
-                                          onClick={() => handleRejeter(demande.id)}
-                                          title={i18n.reject}
-                                          aria-label={`${i18n.reject} ${demande.reference}`}
-                                        >
-                                          <XCircle size={15} />
-                                        </button>
-                                      </>
-                                    ) : (
-                                      <button
-                                        className={`dm-action-btn serve ${!canServe ? 'disabled' : ''}`}
-                                        onClick={() => goToSortieStock(demande)}
-                                        disabled={!canServe}
-                                        title={insufficientStock ? i18n.stockLow : i18n.served}
-                                        aria-label={`Servir ${demande.reference}`}
-                                      >
-                                        <Truck size={15} />
-                                      </button>
-                                    )}
-                                  </>
-                                )}
+                                <button
+                                  className={`dm-action-btn accept ${(!canAccept || processing) ? 'disabled' : ''}`}
+                                  onClick={() => handleProcess(demande, 'accepted')}
+                                  disabled={!canAccept || processing}
+                                  title={!canAccept ? i18n.stockLow : i18n.accept}
+                                  aria-label={`${i18n.accept} ${demande.reference}`}
+                                >
+                                  <CheckCircle size={15} />
+                                </button>
+                                <button
+                                  className={`dm-action-btn reject ${processing ? 'disabled' : ''}`}
+                                  onClick={() => handleProcess(demande, 'refused')}
+                                  disabled={processing}
+                                  title={i18n.reject}
+                                  aria-label={`${i18n.reject} ${demande.reference}`}
+                                >
+                                  <XCircle size={15} />
+                                </button>
+                              </div>
+                            ) : demande.statut === 'accepted' ? (
+                              <div className="dm-actions">
+                                <button
+                                  className={`dm-action-btn serve ${(!canServe || processing) ? 'disabled' : ''}`}
+                                  onClick={() => goToSortieStock(demande)}
+                                  disabled={!canServe || processing}
+                                  title={insufficientStock ? i18n.stockLow : i18n.served}
+                                  aria-label={`Servir ${demande.reference}`}
+                                >
+                                  <Truck size={15} />
+                                </button>
                               </div>
                             ) : (
                               <span className="dm-no-action">-</span>

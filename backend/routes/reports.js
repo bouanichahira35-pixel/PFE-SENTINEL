@@ -124,7 +124,7 @@ router.get('/consumption/person', requireAuth, requirePermission(PERMISSIONS.HIS
     }).populate('product', 'name family').lean();
 
     const rows = exits
-      .filter((x) => ['economat', 'consommable_informatique'].includes(x.product?.family))
+      .filter((x) => ['economat', 'consommable_laboratoire'].includes(x.product?.family))
       .map((x) => ({
         beneficiaire: x.beneficiary || 'N/A',
         designation: x.product?.name || '-',

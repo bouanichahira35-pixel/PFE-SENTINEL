@@ -3,7 +3,11 @@ const axios = require('axios');
 const GEMINI_BASE_URL = 'https://generativelanguage.googleapis.com/v1beta';
 
 function isGeminiConfigured() {
-  return Boolean(process.env.GEMINI_API_KEY);
+  const key = String(process.env.GEMINI_API_KEY || '').trim();
+  if (!key) return false;
+  if (key === '...' || key.toLowerCase() === 'changeme') return false;
+  // Gemini API keys generally start with "AIza". Keep this strict to avoid false "configured" state.
+  return /^AIza[0-9A-Za-z_-]{20,}$/.test(key);
 }
 
 function normalizeHistory(history) {

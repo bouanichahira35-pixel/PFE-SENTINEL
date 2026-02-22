@@ -11,7 +11,7 @@ const { PERMISSIONS } = require('../constants/permissions');
 const History = require('../models/History');
 const { logSecurityEvent } = require('../services/securityAuditService');
 const { enqueueMail } = require('../services/mailQueueService');
-const { getUserPreferences } = require('../services/userPreferencesService');
+const { getUserPreferences, canSendNotificationEmail } = require('../services/userPreferencesService');
 const {
   asDate,
   asNonNegativeNumber,
@@ -37,8 +37,9 @@ function normalizeFamily(value) {
     'produit chimique': 'produit_chimique',
     produit_chimique: 'produit_chimique',
     gaz: 'gaz',
-    'consommable informatique': 'consommable_informatique',
-    consommable_informatique: 'consommable_informatique',
+    // Compat legacy: old "informatique" inputs are remapped to a business family.
+    'consommable informatique': 'consommable_laboratoire',
+    consommable_informatique: 'consommable_laboratoire',
     'consommable laboratoire': 'consommable_laboratoire',
     consommable_laboratoire: 'consommable_laboratoire',
   };
@@ -90,7 +91,8 @@ async function notifyCreatorOnValidationDecision(product, actorUser, fromStatus,
 
     if (!creator.email) return;
     const creatorPrefs = await getUserPreferences(creator._id);
-    if (!creatorPrefs?.notifications?.email) return;
+    const creatorCategory = creator.role === 'magasinier' ? 'demandes' : 'generic';
+    if (!canSendNotificationEmail(creatorPrefs, creatorCategory)) return;
     try {
       await enqueueMail({
         kind: 'product_validation',
@@ -154,7 +156,7 @@ async function notifyResponsablesOnPendingValidation(product, creatorUser) {
       if (!r.email) continue;
       try {
         const prefs = await getUserPreferences(r._id);
-        if (!prefs?.notifications?.email || !prefs?.notifications?.demandesAlerts) continue;
+        if (!canSendNotificationEmail(prefs, 'demandes')) continue;
         await enqueueMail({
           kind: 'product_pending_validation',
           role: r.role,
@@ -180,7 +182,7 @@ async function getNextProductCode() {
   const counter = await Sequence.findOneAndUpdate(
     { counter_name: counterName },
     { $inc: { seq: 1 } },
-    { new: true, upsert: true }
+    { returnDocument: 'after', upsert: true }
   );
 
   return `PRD-${year}-${String(counter.seq).padStart(4, '0')}`;
@@ -268,7 +270,7 @@ router.post(
     const errors = [];
     const family = normalizeFamily(req.body.family);
     if (!family) {
-      errors.push('family invalide (economat, produit_chimique, gaz, consommable_informatique, consommable_laboratoire)');
+      errors.push('family invalide (economat, produit_chimique, gaz, consommable_laboratoire)');
     }
     const name = asTrimmedString(req.body.name);
     if (!name) errors.push('name obligatoire');

@@ -1,23 +1,20 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'; 
 import { 
   AlertTriangle, 
-  TrendingDown, 
   Package, 
   Activity,
+  CheckCircle2,
   ArrowUpRight,
   ArrowDownRight,
   LineChart,
-  BarChart3,
   PieChart,
-  Bot,
 } from 'lucide-react';
-import { useNavigate } from 'react-router-dom';
 import SidebarResp from '../../components/responsable/SidebarResp';
 import HeaderPage from '../../components/shared/HeaderPage';
 import ProtectedPage from '../../components/shared/ProtectedPage';
 import LoadingSpinner from '../../components/shared/LoadingSpinner';
 import { useToast } from '../../components/shared/Toast';
-import { get, post, getApiPerfMetrics, subscribeApiPerf } from '../../services/api';
+import { get, post } from '../../services/api';
 import './DashboardResp.css';
 
 const CHART_WIDTH = 360;
@@ -28,14 +25,6 @@ const CHART_PAD_Y = 16;
 function clamp(value, min, max) { 
   return Math.min(max, Math.max(min, value)); 
 } 
-
-function shortReason(row) {
-  const fromExplanation = String(row?.explanation || '').trim();
-  if (fromExplanation) return fromExplanation;
-  const factors = Array.isArray(row?.factors) ? row.factors.filter(Boolean) : [];
-  if (!factors.length) return 'Variation recente detectee.';
-  return factors.slice(0, 2).join(' + ');
-}
 
 function mean(values = []) {
   if (!values.length) return 0;
@@ -49,26 +38,11 @@ function formatDayLabel(dayValue) {
   return date.toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit' });
 }
 
-function aggregateCurve(curves, key) {
-  const sumByLabel = new Map();
-  for (const curve of curves) {
-    const labels = curve?.[key]?.labels || [];
-    const values = curve?.[key]?.values || [];
-    for (let i = 0; i < labels.length; i += 1) {
-      const label = labels[i];
-      const value = Number(values[i] || 0);
-      if (!label) continue;
-      sumByLabel.set(label, Number((sumByLabel.get(label) || 0) + value));
-    }
-  }
-  return Array.from(sumByLabel.entries())
-    .map(([label, value]) => ({ label, value }))
-    .sort((a, b) => new Date(a.label) - new Date(b.label));
-}
-
-function levelFromRisk(probability, underThreshold) {
-  if (underThreshold || Number(probability || 0) >= 70) return 'Critique';
-  if (Number(probability || 0) >= 40) return 'Moyen';
+function levelFromRisk(probability, stock, seuil) {
+  const inRupture = Number(stock || 0) <= 0;
+  const underThreshold = Number(stock || 0) > 0 && Number(stock || 0) <= Number(seuil || 0);
+  if (inRupture || Number(probability || 0) >= 70) return 'Critique';
+  if (underThreshold || Number(probability || 0) >= 40) return 'Moyen';
   return 'Faible';
 }
 
@@ -107,39 +81,25 @@ function toAreaPath(coords) {
 }
 
 const DashboardResp = ({ userName, onLogout }) => {
-  const navigate = useNavigate();
   const toast = useToast();
 
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [allProducts, setAllProducts] = useState([]);
   const [historyTrend, setHistoryTrend] = useState([]);
-  const [aiStockout, setAiStockout] = useState([]);
-  const [aiConsumption, setAiConsumption] = useState([]);
-  const [aiAnomaly, setAiAnomaly] = useState([]);
-  const [aiCopilot, setAiCopilot] = useState(null);
+  const [stockoutForecast, setStockoutForecast] = useState([]);
   const [isLoading, setIsLoading] = useState(false);
-  const [lastLoadMs, setLastLoadMs] = useState(0);
-  const [lastSyncAt, setLastSyncAt] = useState('');
-  const [apiPerf, setApiPerf] = useState(() => getApiPerfMetrics());
 
   const loadData = useCallback(async () => {
-    const startedAt = Date.now();
     setIsLoading(true);
     try {
-      const [all, insights, stockoutRes, consumptionRes, anomalyRes, copilotRes] = await Promise.all([
+      const [all, insights, stockoutRes] = await Promise.all([
         get('/products'),
         get('/history/insights').catch(() => ({ daily_trend: [] })),
         post('/ai/predict/stockout', { horizon_days: 7 }).catch(() => ({ predictions: [] })),
-        post('/ai/predict/consumption', { horizon_days: 14 }).catch(() => ({ predictions: [] })),
-        post('/ai/predict/anomaly', {}).catch(() => ({ predictions: [] })),
-        post('/ai/copilot/recommendations', { horizon_days: 14, top_n: 10, simulations: [] }).catch(() => null),
       ]);
 
       setAllProducts(Array.isArray(all) ? all : []);
-      setAiStockout(Array.isArray(stockoutRes?.predictions) ? stockoutRes.predictions : []);
-      setAiConsumption(Array.isArray(consumptionRes?.predictions) ? consumptionRes.predictions : []);
-      setAiAnomaly(Array.isArray(anomalyRes?.predictions) ? anomalyRes.predictions : []);
-      setAiCopilot(copilotRes || null);
+      setStockoutForecast(Array.isArray(stockoutRes?.predictions) ? stockoutRes.predictions : []);
 
       const dailyRows = Array.isArray(insights?.daily_trend) ? insights.daily_trend : [];
       const byDay = new Map();
@@ -161,9 +121,6 @@ const DashboardResp = ({ userName, onLogout }) => {
     } catch (err) {
       toast.error(err.message || 'Erreur chargement dashboard');
     } finally {
-      setLastLoadMs(Math.max(0, Date.now() - startedAt));
-      setLastSyncAt(new Date().toISOString());
-      setApiPerf(getApiPerfMetrics());
       setIsLoading(false);
     }
   }, [toast]);
@@ -179,74 +136,80 @@ const DashboardResp = ({ userName, onLogout }) => {
     return () => clearInterval(interval);
   }, [loadData]);
 
-  useEffect(() => {
-    setApiPerf(getApiPerfMetrics());
-    const unsubscribe = subscribeApiPerf((metrics) => {
-      setApiPerf(metrics);
-    });
-    return unsubscribe;
-  }, []);
-
   const stats = useMemo(() => {
     const totalProduits = allProducts.length;
     const sousSeuilCount = allProducts.filter(
       (p) => Number(p.quantity_current || 0) <= Number(p.seuil_minimum || 0) && Number(p.quantity_current || 0) > 0
     ).length;
     const ruptureCount = allProducts.filter((p) => Number(p.quantity_current || 0) === 0).length;
-    return { totalProduits, sousSeuilCount, ruptureCount };
+    const disponiblesCount = Math.max(0, totalProduits - sousSeuilCount - ruptureCount);
+    return { totalProduits, sousSeuilCount, ruptureCount, disponiblesCount };
   }, [allProducts]);
 
+  const fallbackRiskSource = useMemo(() => (
+    allProducts.map((row) => {
+      const stock = Number(row.quantity_current || 0);
+      const seuil = Number(row.seuil_minimum || 0);
+      const inRupture = stock <= 0;
+      const underThreshold = stock > 0 && stock <= seuil;
+      const closeToThreshold = seuil > 0 && stock > seuil && stock <= seuil * 1.2;
+
+      const baseRisk = inRupture
+        ? 100
+        : underThreshold
+          ? clamp(60 + ((seuil - stock) / Math.max(1, seuil)) * 40, 60, 98)
+          : (closeToThreshold ? 35 : 10);
+
+      const recommendedOrder = Math.max(0, Math.ceil((seuil * 1.25) - stock));
+      return {
+        product_id: row._id || row.id,
+        product_name: row.name || row.code_product || 'Produit',
+        risk_probability: Number(baseRisk.toFixed(1)),
+        current_stock: stock,
+        seuil_minimum: seuil,
+        recommended_order_qty: recommendedOrder,
+      };
+    })
+  ), [allProducts]);
+
   const riskSource = useMemo(() => {
-    const fromCopilot = Array.isArray(aiCopilot?.top_risk_products) ? aiCopilot.top_risk_products : [];
-    const source = fromCopilot.length ? fromCopilot : aiStockout;
+    const source = stockoutForecast.length ? stockoutForecast : fallbackRiskSource;
     return [...source].sort((a, b) => Number(b.risk_probability || 0) - Number(a.risk_probability || 0));
-  }, [aiCopilot, aiStockout]);
+  }, [fallbackRiskSource, stockoutForecast]);
 
   const topRiskProduct = useMemo(() => (riskSource.length ? riskSource[0] : null), [riskSource]);
 
-  const aiScoreGlobal = useMemo(() => {
-    const avgRisk = mean(riskSource.slice(0, 8).map((x) => Number(x.risk_probability || 0)));
-    const avgAnomaly = mean(
-      [...aiAnomaly]
-        .sort((a, b) => Number(b.anomaly_score || 0) - Number(a.anomaly_score || 0))
-        .slice(0, 8)
-        .map((x) => Number(x.anomaly_score || 0))
-    );
-    const ratioSousSeuil = stats.totalProduits ? stats.sousSeuilCount / stats.totalProduits : 0;
-    const ratioRupture = stats.totalProduits ? stats.ruptureCount / stats.totalProduits : 0;
-
-    const penalty = avgRisk * 0.45 + avgAnomaly * 0.2 + ratioSousSeuil * 25 + ratioRupture * 35;
-    return clamp(Number((100 - penalty).toFixed(1)), 0, 100);
-  }, [aiAnomaly, riskSource, stats]);
-
   const smartAlerts = useMemo(() => ( 
-    riskSource.slice(0, 6).map((row, idx) => { 
-      const stock = Number(row.current_stock || 0); 
-      const seuil = Number(row.seuil_minimum || 0); 
-      const underThreshold = stock <= seuil; 
-      return {
-        id: `${row.product_id || 'p'}-${idx}`,
-        productName: row.product_name || 'Produit', 
-        level: levelFromRisk(row.risk_probability, underThreshold), 
-        action: `Commander ${Number(row.recommended_order_qty || 0)} u.`, 
-        reason: shortReason(row),
-        riskProbability: Number(row.risk_probability || 0), 
-      }; 
-    }) 
+    riskSource
+      .filter((row) => Number(row.risk_probability || 0) >= 25 || Number(row.current_stock || 0) <= Number(row.seuil_minimum || 0))
+      .slice(0, 6)
+      .map((row, idx) => { 
+        const stock = Number(row.current_stock || 0); 
+        const seuil = Number(row.seuil_minimum || 0); 
+        const inRupture = stock <= 0;
+        const underThreshold = stock > 0 && stock <= seuil;
+        const suggestedOrder = Number(row.recommended_order_qty || 0);
+        return {
+          id: `${row.product_id || 'p'}-${idx}`,
+          productName: row.product_name || 'Produit', 
+          level: levelFromRisk(row.risk_probability, stock, seuil), 
+          action: suggestedOrder > 0 ? `Commander ${suggestedOrder} u.` : 'Surveillance active.',
+          reason: inRupture
+            ? 'Rupture immediate: stock a zero.'
+            : underThreshold
+              ? `Stock sous seuil minimum (${stock} / ${seuil}).`
+              : `Stock proche du seuil (${stock} / ${seuil}).`,
+          riskProbability: Number(row.risk_probability || 0), 
+        }; 
+      }) 
   ), [riskSource]); 
 
   const consumptionSeries = useMemo(() => {
-    const curves = Array.isArray(aiCopilot?.dashboard_curves) ? aiCopilot.dashboard_curves : [];
-    if (curves.length) {
-      return aggregateCurve(curves, 'history_30d')
-        .slice(-10)
-        .map((x) => ({ label: formatDayLabel(x.label), value: Number(x.value || 0) }));
-    }
     return historyTrend.slice(-10).map((x) => ({
       label: formatDayLabel(x.day),
       value: Number(x.exit || 0),
     }));
-  }, [aiCopilot, historyTrend]);
+  }, [historyTrend]);
 
   const consumptionInsight = useMemo(() => {
     const values = consumptionSeries.map((x) => Number(x.value || 0));
@@ -293,66 +256,6 @@ const DashboardResp = ({ userName, onLogout }) => {
   const stockVsSeuilCoords = toLineCoords(stockVsSeuil.stock, 0, stockVsSeuilMax);
   const seuilCoords = toLineCoords(stockVsSeuil.seuil, 0, stockVsSeuilMax);
 
-  const forecastSeries = useMemo(() => {
-    const curves = Array.isArray(aiCopilot?.dashboard_curves) ? aiCopilot.dashboard_curves : [];
-    const preferred = curves.find((x) => String(x.product_id) === String(topRiskProduct?.product_id || '')) || curves[0];
-
-    if (preferred) {
-      return {
-        productName: preferred.product_name || topRiskProduct?.product_name || 'Produit',
-        historyLabels: (preferred.history_30d?.labels || []).slice(-8).map(formatDayLabel),
-        historyValues: (preferred.history_30d?.values || []).slice(-8).map((v) => Number(v || 0)),
-        futureLabels: (preferred.forecast_14d?.labels || []).slice(0, 8).map(formatDayLabel),
-        futureValues: (preferred.forecast_14d?.values || []).slice(0, 8).map((v) => Number(v || 0)),
-      };
-    }
-
-    const fallbackHistory = consumptionSeries.slice(-8);
-    const fallbackHistoryValues = fallbackHistory.map((x) => Number(x.value || 0));
-    const fallbackDaily = Number(aiConsumption?.[0]?.expected_daily || mean(fallbackHistoryValues) || 0);
-
-    return {
-      productName: topRiskProduct?.product_name || aiConsumption?.[0]?.product_name || 'Produit',
-      historyLabels: fallbackHistory.map((x) => x.label),
-      historyValues: fallbackHistoryValues,
-      futureLabels: Array.from({ length: 8 }, (_, idx) => `J+${idx + 1}`),
-      futureValues: Array.from({ length: 8 }, () => fallbackDaily),
-    };
-  }, [aiConsumption, aiCopilot, consumptionSeries, topRiskProduct]);
-
-  const forecastCombinedValues = [...forecastSeries.historyValues, ...forecastSeries.futureValues];
-  const forecastMax = Math.max(1, ...forecastCombinedValues);
-  const forecastCoords = toLineCoords(forecastCombinedValues, 0, forecastMax);
-  const historyCount = forecastSeries.historyValues.length;
-  const forecastHistoryCoords = forecastCoords.slice(0, historyCount);
-  const forecastFutureCoords = forecastCoords.slice(Math.max(0, historyCount - 1));
-  const forecastInsight = useMemo(() => {
-    if (!forecastSeries.futureValues.length) return 'Prevision indisponible pour le moment.';
-    const avgFuture = mean(forecastSeries.futureValues);
-    const avgPast = Math.max(0.0001, mean(forecastSeries.historyValues));
-    const delta = ((avgFuture - avgPast) / avgPast) * 100;
-    const state = delta > 10 ? 'hausse attendue' : delta < -10 ? 'baisse attendue' : 'tendance stable';
-    return `Prevision ${forecastSeries.productName}: ${state} (${delta.toFixed(1)}% vs historique).`;
-  }, [forecastSeries]);
-
-  const anomalySeries = useMemo(() => (
-    [...aiAnomaly]
-      .sort((a, b) => Number(b.anomaly_score || 0) - Number(a.anomaly_score || 0))
-      .slice(0, 6)
-      .map((item, idx) => ({
-        id: `${item.product_id || idx}`,
-        label: String(item.product_name || item.code_product || `P${idx + 1}`).slice(0, 12),
-        score: Number(item.anomaly_score || 0),
-      }))
-  ), [aiAnomaly]);
-
-  const anomalyMax = Math.max(1, ...anomalySeries.map((x) => x.score));
-  const anomalyInsight = useMemo(() => { 
-    if (!anomalySeries.length) return 'Aucune anomalie forte detectee.'; 
-    const top = anomalySeries[0]; 
-    return `Anomalie prioritaire: ${top.label} (${top.score.toFixed(1)}%). Verification conseillee aujourd'hui.`; 
-  }, [anomalySeries]); 
-
   const decisionSummary = useMemo(() => {
     if (!topRiskProduct) {
       return {
@@ -374,21 +277,6 @@ const DashboardResp = ({ userName, onLogout }) => {
       thresholdSignal: crossingSignal,
     };
   }, [topRiskProduct, stockVsSeuil.crossingDay]);
-
-  const performanceSummary = useMemo(() => {
-    const totalRequests = Number(apiPerf?.total_requests || 0);
-    const networkRequests = Number(apiPerf?.network_requests || 0);
-    const cacheHits = Number(apiPerf?.cached_requests || 0);
-    const failed = Number(apiPerf?.failed_requests || 0);
-    const avgLatency = Number(apiPerf?.avg_latency_ms || 0);
-    const cacheRate = totalRequests > 0 ? ((cacheHits / totalRequests) * 100) : 0;
-    const successRate = networkRequests > 0 ? (((networkRequests - failed) / networkRequests) * 100) : 100;
-    return {
-      cacheRate,
-      successRate,
-      avgLatency,
-    };
-  }, [apiPerf]);
 
   return (
     <ProtectedPage userName={userName}>
@@ -435,35 +323,16 @@ const DashboardResp = ({ userName, onLogout }) => {
                 </div>
 
                 <div className="kpi-card info">
-                  <div className="kpi-icon"><TrendingDown size={20} /></div>
+                  <div className="kpi-icon"><CheckCircle2 size={20} /></div>
                   <div className="kpi-content">
-                    <span className="kpi-value">{aiScoreGlobal.toFixed(1)}%</span>
-                    <span className="kpi-label">Score global stabilite</span>
+                    <span className="kpi-value">{stats.disponiblesCount}</span>
+                    <span className="kpi-label">Produits disponibles</span>
                   </div>
-                  <div className={`kpi-trend ${aiScoreGlobal >= 75 ? 'up' : 'down'}`}>
-                    {aiScoreGlobal >= 75 ? <ArrowUpRight size={14} /> : <ArrowDownRight size={14} />}
-                    <span>{aiScoreGlobal >= 75 ? 'Stable' : 'Risque'}</span>
+                  <div className={`kpi-trend ${stats.disponiblesCount >= stats.sousSeuilCount ? 'up' : 'down'}`}>
+                    {stats.disponiblesCount >= stats.sousSeuilCount ? <ArrowUpRight size={14} /> : <ArrowDownRight size={14} />}
+                    <span>{stats.disponiblesCount >= stats.sousSeuilCount ? 'Maitrise' : 'A surveiller'}</span>
                   </div>
                 </div>
-              </div>
-
-              <div className="perf-strip"> 
-                <div className="perf-chip"> 
-                  <span>Latence API moyenne</span> 
-                  <strong>{performanceSummary.avgLatency.toFixed(1)} ms</strong> 
-                </div> 
-                <div className="perf-chip"> 
-                  <span>Fiabilite API</span> 
-                  <strong>{performanceSummary.successRate.toFixed(1)}%</strong> 
-                </div> 
-                <div className="perf-chip"> 
-                  <span>Derniere sync</span> 
-                  <strong>{lastSyncAt ? new Date(lastSyncAt).toLocaleTimeString('fr-FR') : '-'}</strong> 
-                </div> 
-                <div className="perf-chip"> 
-                  <span>Dernier chargement</span> 
-                  <strong>{lastLoadMs} ms</strong> 
-                </div> 
               </div>
 
               <div className="decision-strip">
@@ -475,7 +344,7 @@ const DashboardResp = ({ userName, onLogout }) => {
                 <div className="decision-chip">
                   <span>Action recommandee</span>
                   <strong>{decisionSummary.nextDecision}</strong>
-                  <small>Base: stock vs demande projetee</small>
+                  <small>Base: stock actuel, seuil minimum et horizon J+7</small>
                 </div>
                 <div className="decision-chip">
                   <span>Signal seuil</span>
@@ -547,59 +416,6 @@ const DashboardResp = ({ userName, onLogout }) => {
                       : "Pas de croisement seuil detecte sur l'horizon J+7."}
                   </p>
                 </article>
-
-                <article className="chart-card"> 
-                  <div className="chart-head"> 
-                    <h3><LineChart size={17} /> Projection 14 jours</h3> 
-                  </div> 
-                  {forecastCombinedValues.length > 1 ? ( 
-                    <div className="chart-wrap"> 
-                      <svg viewBox={`0 0 ${CHART_WIDTH} ${CHART_HEIGHT}`} className="chart-svg" preserveAspectRatio="none"> 
-                        <line x1={CHART_PAD_X} y1={CHART_HEIGHT - CHART_PAD_Y} x2={CHART_WIDTH - CHART_PAD_X} y2={CHART_HEIGHT - CHART_PAD_Y} className="axis-line" />
-                        <path d={toAreaPath(forecastFutureCoords)} className="area-fill teal" />
-                        <polyline points={toPolylinePoints(forecastHistoryCoords)} className="line-main blue" />
-                        <polyline points={toPolylinePoints(forecastFutureCoords)} className="line-main forecast" />
-                      </svg>
-                      <div className="legend-row">
-                        <span><i className="legend-dot blue" />Historique</span>
-                        <span><i className="legend-dot forecast" />Projection</span>
-                      </div>
-                      <div className="x-labels dual">
-                        {[...forecastSeries.historyLabels.slice(-4), ...forecastSeries.futureLabels.slice(0, 4)].map((label, idx) => (
-                          <span key={`${label}-${idx}`}>{label}</span>
-                        ))}
-                      </div>
-                    </div>
-                  ) : (
-                    <div className="chart-empty">Prevision indisponible.</div>
-                  )}
-                  <p className="chart-insight">{forecastInsight}</p>
-                </article>
-
-                <article className="chart-card"> 
-                  <div className="chart-head"> 
-                    <h3><BarChart3 size={17} /> Anomalies recentes</h3> 
-                  </div> 
-                  {anomalySeries.length ? (
-                    <div className="bar-chart-wrap">
-                      {anomalySeries.map((item) => (
-                        <div key={item.id} className="bar-row">
-                          <span className="bar-label">{item.label}</span>
-                          <div className="bar-track">
-                            <div
-                              className="bar-fill"
-                              style={{ width: `${Math.max(6, (item.score / anomalyMax) * 100)}%` }}
-                            />
-                          </div>
-                          <span className="bar-value">{item.score.toFixed(1)}%</span>
-                        </div>
-                      ))}
-                    </div>
-                  ) : (
-                    <div className="chart-empty">Aucune anomalie forte detectee.</div>
-                  )}
-                  <p className="chart-insight">{anomalyInsight}</p>
-                </article>
               </div>
 
               <div className="dashboard-card alert-table-card compact-alerts">
@@ -629,22 +445,13 @@ const DashboardResp = ({ userName, onLogout }) => {
                       ))} 
                       {!smartAlerts.length && ( 
                         <tr> 
-                          <td colSpan={5} className="empty-cell">Aucune alerte critique actuellement.</td> 
+                          <td colSpan={5} className="empty-cell">Aucune alerte prioritaire actuellement.</td> 
                         </tr> 
                       )} 
                     </tbody> 
                   </table> 
                 </div>
               </div>
-
-              <button
-                className="chatbot-logo-fab"
-                onClick={() => navigate('/responsable/chatbot')}
-                aria-label="Ouvrir le chatbot"
-                title="Ouvrir le chatbot"
-              >
-                <Bot size={20} />
-              </button>
             </div>
           </main>
         </div>

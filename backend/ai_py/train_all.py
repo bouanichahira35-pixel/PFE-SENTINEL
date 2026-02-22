@@ -9,6 +9,7 @@ from typing import Any, Dict, Tuple
 def run_step(script_name: str, payload: Dict[str, Any]) -> Dict[str, Any]:
     base_dir = os.path.dirname(__file__)
     script_path = os.path.join(base_dir, script_name)
+    python_bin = os.getenv("AI_PYTHON_BIN", "python")
     fd_in, input_path = tempfile.mkstemp(prefix=f"{script_name}_", suffix="_in.json")
     fd_out, output_path = tempfile.mkstemp(prefix=f"{script_name}_", suffix="_out.json")
     os.close(fd_in)
@@ -17,7 +18,7 @@ def run_step(script_name: str, payload: Dict[str, Any]) -> Dict[str, Any]:
         with open(input_path, "w", encoding="utf-8") as f:
             json.dump(payload, f, ensure_ascii=True)
         proc = subprocess.run(
-            ["python", script_path, "--input", input_path, "--output", output_path],
+            [python_bin, script_path, "--input", input_path, "--output", output_path],
             capture_output=True,
             text=True,
             check=False,

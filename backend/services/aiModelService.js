@@ -348,6 +348,21 @@ function generateSyntheticFallbackRows(ctx) {
   return { stockoutRows, consumptionRows };
 }
 
+function buildPredictionItems(ctx, productIds = null) {
+  const productFilter = Array.isArray(productIds) ? new Set(productIds.map(String)) : null;
+  const items = [];
+  for (const p of ctx.products) {
+    const pid = String(p._id);
+    if (productFilter && !productFilter.has(pid)) continue;
+    const series = ctx.dailySeriesByProduct.get(pid);
+    if (!series || !series.dates.length) continue;
+    const features = buildRecentFeatures(ctx, pid, series.dates.length - 1);
+    if (!features) continue;
+    items.push(features);
+  }
+  return items;
+}
+
 async function trainAndBuildDatasets(options = {}) {
   const lookbackDays = Math.min(730, asPositiveInt(options.lookback_days, 240));
   const ctx = await buildAIContext();
@@ -371,111 +386,127 @@ async function trainAndBuildDatasets(options = {}) {
   fs.mkdirSync(AI_DATA_DIR, { recursive: true });
   const now = new Date();
   const versionTag = makeVersionTag(now);
-  const datasetsResult = runPythonScript('dataset_builder.py', {
+  const trainResult = runPythonScript('train_all.py', {
     version_tag: versionTag,
     base_dir: AI_DATA_DIR,
     stockout_rows: stockoutRows,
     consumption_rows: consumptionRows,
-  });
-  const metricsStockout = runPythonScript('stockout_model.py', {
-    mode: 'evaluate',
     split_ratio: 0.8,
-    rows: stockoutRows,
-  });
-  const metricsConsumption = runPythonScript('consumption_model.py', {
-    mode: 'evaluate',
-    split_ratio: 0.8,
-    rows: consumptionRows,
-  });
-  const metricsAnomaly = runPythonScript('anomaly_model.py', {
-    mode: 'evaluate',
-    split_ratio: 0.8,
-    rows: stockoutRows,
   });
 
   const metrics = {
     generated_at: now.toISOString(),
-    stockout_j7: metricsStockout.metrics,
-    consumption_j14: metricsConsumption.metrics,
-    anomaly_detection: metricsAnomaly.metrics,
+    ...(trainResult?.metrics || {}),
   };
   const backtesting = {
     generated_at: now.toISOString(),
-    stockout_j7: metricsStockout.backtesting,
-    consumption_j14: metricsConsumption.backtesting,
-    anomaly_detection: metricsAnomaly.backtesting,
+    ...(trainResult?.backtesting || {}),
   };
 
   const realStockoutRows = stockoutRows.filter((r) => r.data_source === 'real').length;
   const realConsumptionRows = consumptionRows.filter((r) => r.data_source === 'real').length;
+  const builtCounts = trainResult?.counts || {};
+  const builtQuality = trainResult?.quality || {};
 
   const registry = {
     trained_at: now.toISOString(),
     model_version: versionTag,
     lookback_days: lookbackDays,
     model_files: {
-      stockout: 'ai_py/stockout_model.py',
-      consumption: 'ai_py/consumption_model.py',
-      dataset_builder: 'ai_py/dataset_builder.py',
-      anomaly: 'ai_py/anomaly_model.py',
+      build_features: 'ai_py/00_build_features.py',
+      stockout: 'ai_py/02_stockout_risk_classifier.py',
+      consumption: 'ai_py/01_consumption_forecast.py',
+      anomaly: 'ai_py/03_anomaly_detector.py',
+      adaptive_threshold: 'ai_py/04_adaptive_threshold_model.py',
+      behavioral_classification: 'ai_py/05_behavioral_classification.py',
+      operational_intelligence: 'ai_py/06_operational_intelligence_score.py',
+      copilot: 'ai_py/07_copilot_decision_engine.py',
+      orchestrator: 'ai_py/train_all.py',
       chatbot: 'ai_py/chatbot_responsable.py',
     },
     models: {
-      stockout_j7_v1: {
+      stockout_risk_classifier_v1: {
         type: 'classification',
         language: 'python',
         algorithm: 'heuristic_classifier_python',
         train_rows: stockoutRows.length,
       },
-      consumption_j14_v1: {
+      consumption_forecast_v1: {
         type: 'regression',
         language: 'python',
         algorithm: 'weighted_trend_regression_python',
         train_rows: consumptionRows.length,
       },
-      anomaly_detection_v1: {
+      anomaly_detector_v1: {
         type: 'anomaly_detection',
         language: 'python',
         algorithm: 'heuristic_anomaly_detector_python',
-        train_rows: stockoutRows.length,
+        train_rows: Number(builtCounts.anomaly_rows || stockoutRows.length),
+      },
+      adaptive_threshold_v1: {
+        type: 'hybrid',
+        language: 'python',
+        algorithm: 'formula_data_hybrid_python',
+        train_rows: Number(builtCounts.adaptive_rows || stockoutRows.length),
+      },
+      behavioral_classification_v1: {
+        type: 'classification',
+        language: 'python',
+        algorithm: 'behavioral_scoring_classifier_python',
+        train_rows: Number(builtCounts.adaptive_rows || stockoutRows.length),
+      },
+      operational_intelligence_score_v1: {
+        type: 'scoring',
+        language: 'python',
+        algorithm: 'composite_operational_score_python',
+        train_rows: Number(builtCounts.adaptive_rows || stockoutRows.length),
+      },
+      copilot_decision_engine_v1: {
+        type: 'decision_engine',
+        language: 'python',
+        algorithm: 'hybrid_rules_plus_models_python',
+        train_rows: Number(builtCounts.stockout_rows || stockoutRows.length),
       },
     },
-    datasets: datasetsResult.files,
+    datasets: trainResult?.files || {},
     stats: {
       products_count: ctx.products.length,
-      stockout_rows: stockoutRows.length,
-      consumption_rows: consumptionRows.length,
+      stockout_rows: Number(builtCounts.stockout_rows || stockoutRows.length),
+      consumption_rows: Number(builtCounts.consumption_rows || consumptionRows.length),
+      adaptive_rows: Number(builtCounts.adaptive_rows || stockoutRows.length),
+      anomaly_rows: Number(builtCounts.anomaly_rows || stockoutRows.length),
       stockout_real_rows: realStockoutRows,
       consumption_real_rows: realConsumptionRows,
       synthetic_fallback_used: !initiallyHadRealData,
     },
     data_quality: {
-      real_ratio_stockout: Number(safeDiv(realStockoutRows, Math.max(1, stockoutRows.length), 0).toFixed(4)),
-      real_ratio_consumption: Number(safeDiv(realConsumptionRows, Math.max(1, consumptionRows.length), 0).toFixed(4)),
-      recommendation: (!initiallyHadRealData || realStockoutRows < 200 || realConsumptionRows < 200)
-        ? 'Collecter plus de mouvements reels pour fiabiliser les modeles.'
-        : 'Qualite data acceptable.',
+      real_ratio_stockout: Number((
+        Number.isFinite(Number(builtQuality.real_ratio_stockout))
+          ? Number(builtQuality.real_ratio_stockout)
+          : safeDiv(realStockoutRows, Math.max(1, stockoutRows.length), 0)
+      ).toFixed(4)),
+      real_ratio_consumption: Number((
+        Number.isFinite(Number(builtQuality.real_ratio_consumption))
+          ? Number(builtQuality.real_ratio_consumption)
+          : safeDiv(realConsumptionRows, Math.max(1, consumptionRows.length), 0)
+      ).toFixed(4)),
+      recommendation: String(
+        builtQuality.recommendation
+        || ((!initiallyHadRealData || realStockoutRows < 200 || realConsumptionRows < 200)
+          ? 'Collecter plus de mouvements reels pour fiabiliser les modeles.'
+          : 'Qualite data acceptable.')
+      ),
     },
   };
 
-  return { registry, files: datasetsResult.files, metrics, backtesting };
+  return { registry, files: trainResult?.files || {}, metrics, backtesting };
 }
 
 async function predictStockout(options = {}) {
   const horizonDays = Math.min(30, asPositiveInt(options.horizon_days, 7));
-  const productFilter = Array.isArray(options.product_ids) ? new Set(options.product_ids.map(String)) : null;
   const ctx = await buildAIContext();
-  const items = [];
-  for (const p of ctx.products) {
-    const pid = String(p._id);
-    if (productFilter && !productFilter.has(pid)) continue;
-    const series = ctx.dailySeriesByProduct.get(pid);
-    if (!series || !series.dates.length) continue;
-    const features = buildRecentFeatures(ctx, pid, series.dates.length - 1);
-    if (!features) continue;
-    items.push(features);
-  }
-  const result = runPythonScript('stockout_model.py', {
+  const items = buildPredictionItems(ctx, options.product_ids);
+  const result = runPythonScript('02_stockout_risk_classifier.py', {
     mode: 'predict',
     horizon_days: horizonDays,
     items,
@@ -485,19 +516,9 @@ async function predictStockout(options = {}) {
 
 async function predictConsumption(options = {}) {
   const horizonDays = Math.min(30, asPositiveInt(options.horizon_days, 14));
-  const productFilter = Array.isArray(options.product_ids) ? new Set(options.product_ids.map(String)) : null;
   const ctx = await buildAIContext();
-  const items = [];
-  for (const p of ctx.products) {
-    const pid = String(p._id);
-    if (productFilter && !productFilter.has(pid)) continue;
-    const series = ctx.dailySeriesByProduct.get(pid);
-    if (!series || !series.dates.length) continue;
-    const features = buildRecentFeatures(ctx, pid, series.dates.length - 1);
-    if (!features) continue;
-    items.push(features);
-  }
-  const result = runPythonScript('consumption_model.py', {
+  const items = buildPredictionItems(ctx, options.product_ids);
+  const result = runPythonScript('01_consumption_forecast.py', {
     mode: 'predict',
     horizon_days: horizonDays,
     items,
@@ -506,19 +527,9 @@ async function predictConsumption(options = {}) {
 }
 
 async function predictAnomaly(options = {}) {
-  const productFilter = Array.isArray(options.product_ids) ? new Set(options.product_ids.map(String)) : null;
   const ctx = await buildAIContext();
-  const items = [];
-  for (const p of ctx.products) {
-    const pid = String(p._id);
-    if (productFilter && !productFilter.has(pid)) continue;
-    const series = ctx.dailySeriesByProduct.get(pid);
-    if (!series || !series.dates.length) continue;
-    const features = buildRecentFeatures(ctx, pid, series.dates.length - 1);
-    if (!features) continue;
-    items.push(features);
-  }
-  const result = runPythonScript('anomaly_model.py', {
+  const items = buildPredictionItems(ctx, options.product_ids);
+  const result = runPythonScript('03_anomaly_detector.py', {
     mode: 'predict',
     items,
   });
@@ -529,77 +540,49 @@ async function buildCopilotRecommendations(options = {}) {
   const horizonDays = Math.min(30, asPositiveInt(options.horizon_days, 14));
   const topN = Math.min(20, asPositiveInt(options.top_n, 10));
   const simulations = Array.isArray(options.simulations) ? options.simulations : [];
+  const includeConsumption = options.include_consumption !== false;
 
-  const [stockout, consumption, anomalies, ctx] = await Promise.all([
-    predictStockout({ horizon_days: horizonDays }),
-    predictConsumption({ horizon_days: horizonDays }),
-    predictAnomaly({}),
-    buildAIContext(),
-  ]);
-
-  const consumptionByPid = new Map(consumption.map((x) => [String(x.product_id), x]));
-  const anomalyByPid = new Map(anomalies.map((x) => [String(x.product_id), x]));
-  const merged = stockout.map((s) => {
-    const c = consumptionByPid.get(String(s.product_id));
-    const a = anomalyByPid.get(String(s.product_id));
-    const anomalyFact = a?.is_anomaly ? `anomalie ${a.anomaly_score}%` : null;
-    const factors = Array.isArray(s.factors) ? [...s.factors] : [];
-    if (anomalyFact) factors.push(anomalyFact);
-    return {
-      ...s,
-      expected_need: c?.expected_quantity ?? s.expected_need ?? 0,
-      urgency: s.days_cover_estimate <= 3 ? 'critique' : s.days_cover_estimate <= 7 ? 'haute' : 'normale',
-      anomaly_score: a?.anomaly_score ?? 0,
-      explanation: factors.join(' + '),
-    };
-  }).sort((a, b) => Number(b.risk_probability || 0) - Number(a.risk_probability || 0));
-
-  const top = merged.slice(0, topN);
-  const actionPlan = top.map((x, idx) => ({
-    rank: idx + 1,
-    product_id: x.product_id,
-    code_product: x.code_product,
-    product_name: x.product_name,
-    urgency: x.urgency,
-    action: `Commander ${x.recommended_order_qty} unite(s)`,
-    why: x.explanation,
-  }));
-
-  const simulationResults = [];
-  for (const s of simulations) {
-    const pid = String(s?.product_id || '');
-    const qty = Number(s?.order_qty || 0);
-    if (!pid || !Number.isFinite(qty) || qty < 0) continue;
-    const series = ctx.dailySeriesByProduct.get(pid);
-    if (!series || !series.dates.length) continue;
-    const base = buildRecentFeatures(ctx, pid, series.dates.length - 1);
-    if (!base) continue;
-    const before = runPythonScript('stockout_model.py', {
+  const ctx = await buildAIContext();
+  const items = buildPredictionItems(ctx);
+  const stockout = runPythonScript('02_stockout_risk_classifier.py', {
+    mode: 'predict',
+    horizon_days: horizonDays,
+    items,
+  }).predictions || [];
+  const consumption = includeConsumption
+    ? (runPythonScript('01_consumption_forecast.py', {
       mode: 'predict',
       horizon_days: horizonDays,
-      items: [base],
-    }).predictions?.[0];
-    const after = runPythonScript('stockout_model.py', {
-      mode: 'predict',
-      horizon_days: horizonDays,
-      items: [{ ...base, stock_anchor: Number(base.stock_anchor || 0) + qty }],
-    }).predictions?.[0];
-    if (!before || !after) continue;
-    simulationResults.push({
-      product_id: pid,
-      code_product: before.code_product,
-      product_name: before.product_name,
-      order_qty: qty,
-      risk_before_pct: before.risk_probability,
-      risk_after_pct: after.risk_probability,
-      projected_stock_end_before: before.projected_stock_end,
-      projected_stock_end_after: after.projected_stock_end,
-    });
-  }
+      items,
+    }).predictions || [])
+    : [];
+  const anomalies = runPythonScript('03_anomaly_detector.py', {
+    mode: 'predict',
+    items,
+  }).predictions || [];
+  const adaptiveThreshold = runPythonScript('04_adaptive_threshold_model.py', {
+    mode: 'predict',
+    items,
+  }).predictions || [];
+  const behavior = runPythonScript('05_behavioral_classification.py', {
+    mode: 'predict',
+    items,
+  }).predictions || [];
+  const intelligence = runPythonScript('06_operational_intelligence_score.py', {
+    mode: 'predict',
+    items,
+    stockout_predictions: stockout,
+    anomaly_predictions: anomalies,
+    behavior_predictions: behavior,
+  });
 
   const curves = [];
+  const consumptionByPid = new Map(consumption.map((x) => [String(x.product_id), x]));
+  const topForCurves = [...stockout]
+    .sort((a, b) => Number(b.risk_probability || 0) - Number(a.risk_probability || 0))
+    .slice(0, topN);
   const maxCurveCount = Math.min(10, Math.max(5, topN));
-  for (const x of top.slice(0, maxCurveCount)) {
+  for (const x of topForCurves.slice(0, maxCurveCount)) {
     const series = ctx.dailySeriesByProduct.get(String(x.product_id));
     if (!series) continue;
     const n = series.dates.length;
@@ -607,7 +590,11 @@ async function buildCopilotRecommendations(options = {}) {
     const labels = series.dates.slice(start, n);
     const historyExit = series.exits.slice(start, n).map((v) => Number(v || 0));
     const c = consumptionByPid.get(String(x.product_id));
-    const daily = Number((Number(c?.expected_daily || 0)).toFixed(4));
+    const dailyValueRaw = Number.isFinite(Number(c?.expected_daily))
+      ? Number(c.expected_daily)
+      : Number(Number(x?.expected_need || 0) / Math.max(1, horizonDays));
+    const dailyValue = Number.isFinite(dailyValueRaw) ? dailyValueRaw : 0;
+    const daily = Number(dailyValue.toFixed(4));
     const forecastLabels = [];
     const forecastValues = [];
     const lastDate = new Date(`${series.dates[n - 1]}T00:00:00.000Z`);
@@ -624,14 +611,22 @@ async function buildCopilotRecommendations(options = {}) {
     });
   }
 
-  return {
+  return runPythonScript('07_copilot_decision_engine.py', {
     generated_at: new Date().toISOString(),
     horizon_days: horizonDays,
-    top_risk_products: top,
-    action_plan: actionPlan,
-    simulations: simulationResults,
+    top_n: topN,
+    stockout_predictions: stockout,
+    consumption_predictions: consumption,
+    anomaly_predictions: anomalies,
+    adaptive_threshold_predictions: adaptiveThreshold,
+    behavior_predictions: behavior,
+    intelligence_scores: intelligence,
+    simulations,
+    model_switches: {
+      consumption_enabled: includeConsumption,
+    },
     dashboard_curves: curves,
-  };
+  });
 }
 
 async function askResponsableAssistant(options = {}) {
@@ -641,6 +636,7 @@ async function askResponsableAssistant(options = {}) {
   const history = Array.isArray(options.history) ? options.history : [];
   const providedContext = options.context && typeof options.context === 'object' ? options.context : null;
   const useGemini = options.use_gemini !== false;
+  const strictGemini = options.strict_gemini === true;
   const mode = String(options.mode || 'chat').toLowerCase() === 'report' ? 'report' : 'chat';
 
   let context = providedContext;
@@ -665,8 +661,15 @@ async function askResponsableAssistant(options = {}) {
     history,
     context,
     use_gemini: useGemini,
+    strict_gemini: strictGemini,
     mode,
   });
+  if (result?.error) {
+    const err = new Error(String(result.error || 'Assistant error'));
+    err.code = String(result?.source || 'assistant_error').toUpperCase();
+    if (result?.details) err.details = String(result.details);
+    throw err;
+  }
   return {
     answer: String(result?.answer || ''),
     source: result?.source || 'fallback',

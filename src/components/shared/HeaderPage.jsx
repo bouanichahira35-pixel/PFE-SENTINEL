@@ -1,6 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
 import { Search, Bell, Moon, Sun, User, RefreshCw } from 'lucide-react';
-import logoETAP from '../../assets/logoETAP.png';
 import useTheme from '../../hooks/useTheme';
 import { get, patch } from '../../services/api';
 import { useUiLanguage } from '../../utils/uiLanguage';
@@ -24,8 +23,14 @@ const HeaderPage = ({ userName, title, searchValue, onSearchChange, showSearch =
   const [notificationsOpen, setNotificationsOpen] = useState(false);
   const [notifications, setNotifications] = useState([]);
   const [loadingNotifications, setLoadingNotifications] = useState(false);
+  const [requestReplyMailEnabled, setRequestReplyMailEnabled] = useState(true);
+  const [notifPrefLoading, setNotifPrefLoading] = useState(false);
+  const [notifPrefSaving, setNotifPrefSaving] = useState(false);
+  const [notifPrefLoaded, setNotifPrefLoaded] = useState(false);
   const notifRef = useRef(null);
   const [profileImage, setProfileImage] = useState(sessionStorage.getItem('imageProfile') || localStorage.getItem('imageProfile') || '');
+  const currentRole = (sessionStorage.getItem('userRole') || localStorage.getItem('userRole') || '').toLowerCase();
+  const isDemandeur = currentRole === 'demandeur';
 
   const unreadCount = notifications.filter((n) => !n.is_read).length;
   const displayName = sessionStorage.getItem('userName') || localStorage.getItem('userName') || userName;
@@ -45,6 +50,10 @@ const HeaderPage = ({ userName, title, searchValue, onSearchChange, showSearch =
       lightAria: 'Activer le mode clair',
       darkAria: 'Activer le mode sombre',
       notifAria: 'Voir les notifications',
+      replyMailLabel: 'Email reponses de mes demandes',
+      replyMailDesc: 'Recevoir un email seulement quand la demande est traitee',
+      enabled: 'Active',
+      disabled: 'Desactive',
     },
     en: {
       search: 'Search...',
@@ -60,6 +69,10 @@ const HeaderPage = ({ userName, title, searchValue, onSearchChange, showSearch =
       lightAria: 'Enable light mode',
       darkAria: 'Enable dark mode',
       notifAria: 'Open notifications',
+      replyMailLabel: 'Request response emails',
+      replyMailDesc: 'Receive email only when your request is processed',
+      enabled: 'Enabled',
+      disabled: 'Disabled',
     },
     ar: {
       search: 'بحث...',
@@ -90,10 +103,49 @@ const HeaderPage = ({ userName, title, searchValue, onSearchChange, showSearch =
     }
   };
 
+  const loadDemandeurMailPreference = async () => {
+    if (!isDemandeur || notifPrefLoaded || notifPrefLoading) return;
+    setNotifPrefLoading(true);
+    try {
+      const me = await get('/settings/me');
+      const enabled = me?.preferences?.notifications?.demandesAlerts ?? true;
+      setRequestReplyMailEnabled(Boolean(enabled));
+      setNotifPrefLoaded(true);
+    } catch {
+      // keep notification panel usable even if settings load fails
+    } finally {
+      setNotifPrefLoading(false);
+    }
+  };
+
+  const handleToggleReplyMail = async (nextEnabled) => {
+    if (!isDemandeur || notifPrefSaving) return;
+    const previous = requestReplyMailEnabled;
+    setRequestReplyMailEnabled(nextEnabled);
+    setNotifPrefSaving(true);
+    try {
+      await patch('/settings/me/preferences', {
+        notifications: {
+          demandesAlerts: nextEnabled,
+        },
+      });
+      setNotifPrefLoaded(true);
+    } catch {
+      setRequestReplyMailEnabled(previous);
+    } finally {
+      setNotifPrefSaving(false);
+    }
+  };
+
   const toggleNotifications = async () => {
     const next = !notificationsOpen;
     setNotificationsOpen(next);
-    if (next) await loadNotifications();
+    if (next) {
+      await Promise.all([
+        loadNotifications(),
+        loadDemandeurMailPreference(),
+      ]);
+    }
   };
 
   const markNotificationRead = async (id) => {
@@ -132,7 +184,6 @@ const HeaderPage = ({ userName, title, searchValue, onSearchChange, showSearch =
   return (
     <header className="header-page" role="banner">
       <div className="header-left">
-        <img src={logoETAP} alt="ETAP Logo" className="header-logo" />
         <h1 className="header-title">{title}</h1>
       </div>
 
@@ -187,6 +238,26 @@ const HeaderPage = ({ userName, title, searchValue, onSearchChange, showSearch =
               <div className="notif-panel-header">
                 <strong>{i18n.notifications}</strong>
               </div>
+              {isDemandeur && (
+                <div className="notif-settings-row">
+                  <div className="notif-settings-text">
+                    <div className="notif-settings-title">{i18n.replyMailLabel || 'Email des reponses de demandes'}</div>
+                    <div className="notif-settings-desc">{i18n.replyMailDesc || 'Recevoir un email uniquement quand la demande est traitee'}</div>
+                    <div className="notif-settings-state">
+                      {notifPrefLoading ? i18n.loading : (requestReplyMailEnabled ? (i18n.enabled || 'Active') : (i18n.disabled || 'Desactive'))}
+                    </div>
+                  </div>
+                  <label className="notif-switch" aria-label={i18n.replyMailLabel || 'Email des reponses de demandes'}>
+                    <input
+                      type="checkbox"
+                      checked={requestReplyMailEnabled}
+                      disabled={notifPrefLoading || notifPrefSaving}
+                      onChange={(e) => handleToggleReplyMail(e.target.checked)}
+                    />
+                    <span className="notif-switch-slider"></span>
+                  </label>
+                </div>
+              )}
               <div className="notif-list">
                 {loadingNotifications && <div className="notif-empty">{i18n.loading}</div>}
                 {!loadingNotifications && notifications.length === 0 && (

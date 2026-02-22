@@ -11,6 +11,11 @@ import './ParametresResp.css';
 const API_BASE = process.env.REACT_APP_API_URL || 'http://localhost:5000/api'; 
 const API_ORIGIN = API_BASE.replace(/\/api\/?$/, ''); 
 const MAX_AVATAR_SIZE_BYTES = 5 * 1024 * 1024;
+const STOCK_RULES_FRONT_DEFAULT = Object.freeze({
+  seuilAlerte: 10,
+  joursInactivite: 30,
+  validationObligatoire: true,
+});
 
 function resolveFileUrl(path) {
   if (!path) return '';
@@ -27,6 +32,15 @@ const roleLabel = (role) => {
   if (role === 'responsable') return 'Responsable';
   return role;
 };
+
+function formatTimeFr(value) {
+  if (!value) return '';
+  try {
+    return new Date(value).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
+  } catch {
+    return '';
+  }
+}
 
 const ParametresResp = ({ userName, onLogout }) => {
   const toast = useToast();
@@ -62,6 +76,7 @@ const ParametresResp = ({ userName, onLogout }) => {
     joursInactivite: 30,
     validationObligatoire: true,
   });
+  const [stockRulesSavedAt, setStockRulesSavedAt] = useState('');
 
   const [aiSettings, setAiSettings] = useState({
     predictionsEnabled: true,
@@ -107,6 +122,17 @@ const ParametresResp = ({ userName, onLogout }) => {
     () => magasiniers.filter((u) => (u.activeSessionsCount || 0) > 0),
     [magasiniers]
   );
+  const stockRulesPreview = useMemo(() => {
+    const seuil = Number(stockRules.seuilAlerte);
+    const jours = Number(stockRules.joursInactivite);
+    const validSeuil = Number.isFinite(seuil) && seuil >= 0;
+    const validJours = Number.isFinite(jours) && jours >= 1;
+    return {
+      valid: validSeuil && validJours,
+      seuil: validSeuil ? Math.round(seuil) : null,
+      jours: validJours ? Math.round(jours) : null,
+    };
+  }, [stockRules.joursInactivite, stockRules.seuilAlerte]);
 
   const loadMagasiniers = async () => {
     setUsersLoading(true);
@@ -172,6 +198,7 @@ const ParametresResp = ({ userName, onLogout }) => {
         joursInactivite: Number(rules?.value?.joursInactivite ?? 30),
         validationObligatoire: Boolean(rules?.value?.validationObligatoire ?? true),
       });
+      setStockRulesSavedAt('');
 
       setAiSettings({
         predictionsEnabled: Boolean(ai?.value?.predictionsEnabled ?? true),
@@ -330,19 +357,39 @@ const ParametresResp = ({ userName, onLogout }) => {
   };
 
   const saveStockRules = async () => {
+    const seuilAlerte = Number(stockRules.seuilAlerte);
+    const joursInactivite = Number(stockRules.joursInactivite);
+    if (!Number.isFinite(seuilAlerte) || seuilAlerte < 0) {
+      toast.error("Le seuil d'alerte doit etre un nombre >= 0.");
+      return;
+    }
+    if (!Number.isFinite(joursInactivite) || joursInactivite < 1) {
+      toast.error("Les jours d'inactivite doivent etre >= 1.");
+      return;
+    }
+
     setIsSaving(true);
     try {
-      await patch('/settings/stock-rules/config', {
-        seuilAlerte: Number(stockRules.seuilAlerte),
-        joursInactivite: Number(stockRules.joursInactivite),
+      const payload = {
+        seuilAlerte: Math.round(seuilAlerte),
+        joursInactivite: Math.round(joursInactivite),
         validationObligatoire: Boolean(stockRules.validationObligatoire),
+      };
+      await patch('/settings/stock-rules/config', {
+        ...payload,
       });
+      setStockRules(payload);
+      setStockRulesSavedAt(new Date().toISOString());
       toast.success('Regles de stock enregistrees');
     } catch (err) {
       toast.error(err.message || 'Erreur enregistrement regles');
     } finally {
       setIsSaving(false);
     }
+  };
+  const resetStockRules = () => {
+    setStockRules({ ...STOCK_RULES_FRONT_DEFAULT });
+    toast.info('Valeurs par defaut chargees. Cliquez sur "Enregistrer les regles".');
   };
 
   const saveAiSettings = async () => {
@@ -607,6 +654,15 @@ const ParametresResp = ({ userName, onLogout }) => {
               {activeTab === 'regles' && (
                 <div className="param-section">
                   <h2>Regles de gestion du stock</h2>
+                  <div className="rules-help-card">
+                    <h3>A quoi sert cet onglet ?</h3>
+                    <p>Ces regles sont appliquees globalement sur tout le stock pour declencher les alertes et les validations.</p>
+                    <ol>
+                      <li>Definir le seuil global d'alerte stock.</li>
+                      <li>Definir la duree d'inactivite d'un produit.</li>
+                      <li>Activer ou non la validation des nouveaux produits.</li>
+                    </ol>
+                  </div>
                   <div className="form-group">
                     <label>Seuil d'alerte par defaut</label>
                     <input type="number" value={stockRules.seuilAlerte} onChange={(e) => setStockRules({ ...stockRules, seuilAlerte: e.target.value })} />
@@ -627,9 +683,29 @@ const ParametresResp = ({ userName, onLogout }) => {
                       <span className="toggle-slider"></span>
                     </label>
                   </div>
-                  <button className="btn-save resp" type="button" onClick={saveStockRules} disabled={isSaving}>
-                    <Save size={16} /> Enregistrer les regles
-                  </button>
+                  <div className="rules-preview">
+                    <h3>Apercu operationnel</h3>
+                    {stockRulesPreview.valid ? (
+                      <>
+                        <p>Le systeme classe un produit en alerte a partir de <strong>{stockRulesPreview.seuil}</strong> unite(s).</p>
+                        <p>Le systeme classe un produit inactif apres <strong>{stockRulesPreview.jours}</strong> jour(s) sans mouvement.</p>
+                        <p>Validation nouveaux produits: <strong>{stockRules.validationObligatoire ? 'obligatoire' : 'non obligatoire'}</strong>.</p>
+                      </>
+                    ) : (
+                      <p>Valeurs invalides detectees. Corrigez les champs avant sauvegarde.</p>
+                    )}
+                    {stockRulesSavedAt && (
+                      <p className="rules-saved-at">Derniere sauvegarde: {formatTimeFr(stockRulesSavedAt)}</p>
+                    )}
+                  </div>
+                  <div className="rules-actions">
+                    <button className="btn-save resp" type="button" onClick={saveStockRules} disabled={isSaving || !stockRulesPreview.valid}>
+                      <Save size={16} /> Enregistrer les regles
+                    </button>
+                    <button className="btn-secondary" type="button" onClick={resetStockRules} disabled={isSaving}>
+                      Valeurs par defaut
+                    </button>
+                  </div>
                 </div>
               )}
 

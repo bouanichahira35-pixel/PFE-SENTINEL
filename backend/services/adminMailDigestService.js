@@ -1,7 +1,6 @@
 const AppSetting = require('../models/AppSetting');
 const SecurityAudit = require('../models/SecurityAudit');
 const User = require('../models/User');
-const { enqueueMail } = require('./mailQueueService');
 const { getUserPreferences } = require('./userPreferencesService');
 
 const DIGEST_KEY = 'admin_email_failure_digest_state';
@@ -15,11 +14,12 @@ async function setState(value) {
   await AppSetting.findOneAndUpdate(
     { setting_key: DIGEST_KEY },
     { $set: { setting_value: value } },
-    { upsert: true, new: true }
+    { upsert: true, returnDocument: 'after' }
   );
 }
 
 async function sendAdminCriticalFailureDigestIfDue() {
+  const { enqueueMail } = require('./mailQueueService');
   const intervalMinutes = Number(process.env.ADMIN_DIGEST_MINUTES || 30);
   const now = new Date();
   const state = await getState();
@@ -87,4 +87,3 @@ async function sendAdminCriticalFailureDigestIfDue() {
 module.exports = {
   sendAdminCriticalFailureDigestIfDue,
 };
-

@@ -1,5 +1,5 @@
 import { Link, useLocation } from 'react-router-dom';
-import { Package, History, FileText, MessageCircle, Settings, ChevronLeft, ChevronRight, LogOut, ShieldCheck } from 'lucide-react';
+import { Package, History, FileText, MessageCircle, Settings, ChevronLeft, ChevronRight, LogOut } from 'lucide-react';
 import logoETAP from '../../assets/logoETAP.png';
 import { useUiLanguage } from '../../utils/uiLanguage';
 import './SidebarMag.css';
@@ -29,15 +29,10 @@ const SidebarMag = ({ collapsed, onToggle, onLogout, userName }) => {
     ar: { produits: 'Ø§Ù„Ù…Ù†ØªØ¬Ø§Øª', demandes: 'Ø§Ù„Ø·Ù„Ø¨Ø§Øª', historique: 'Ø§Ù„Ø³Ø¬Ù„', chat: 'Ø§Ù„Ø¯Ø±Ø¯Ø´Ø©', parametres: 'Ø§Ù„Ø¥Ø¹Ø¯Ø§Ø¯Ø§Øª', logout: 'ØªØ³Ø¬ÙŠÙ„ Ø§Ù„Ø®Ø±ÙˆØ¬' },
   }[language] || {};
 
-  if (!labels.audit_fifo) {
-    labels.audit_fifo = language === 'en' ? 'FIFO Audit' : 'Audit FIFO';
-  }
-
   const menuItems = [
     { icon: Package, label: labels.produits, path: '/magasinier' },
     { icon: FileText, label: labels.demandes, path: '/magasinier/demandes' },
     { icon: History, label: labels.historique, path: '/magasinier/historique' },
-    { icon: ShieldCheck, label: labels.audit_fifo, path: '/magasinier/audit-fifo' },
     { icon: MessageCircle, label: labels.chat, path: '/magasinier/chat' },
     { icon: Settings, label: labels.parametres, path: '/magasinier/parametres' },
   ];

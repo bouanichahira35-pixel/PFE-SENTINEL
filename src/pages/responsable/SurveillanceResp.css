@@ -408,6 +408,11 @@
   cursor: pointer;
 }
 
+.pending-btn.disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
 .pending-btn.ok {
   background: #16a34a;
   color: #ffffff;

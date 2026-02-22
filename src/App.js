@@ -12,7 +12,6 @@ import SortieStock from "./pages/magasinier/SortieStock.jsx";
 import AjouterProduit from "./pages/magasinier/AjouterProduit";
 import VoirDetails from "./pages/magasinier/VoirDetails";
 import HistoriqueMag from "./pages/magasinier/HistoriqueMag";
-import AuditFifoMag from "./pages/magasinier/AuditFifoMag";
 import ChatMag from "./pages/magasinier/ChatMag";
 import ParametresMag from "./pages/magasinier/ParametresMag";
 
@@ -284,7 +283,7 @@ const App = () => {
                   <Route path="/magasinier/ajouter-produit" element={<AjouterProduit userName={userName} onLogout={handleLogout} />} />
                   <Route path="/magasinier/voir-details" element={<VoirDetails userName={userName} onLogout={handleLogout} />} />
                   <Route path="/magasinier/historique" element={<HistoriqueMag userName={userName} onLogout={handleLogout} />} />
-                  <Route path="/magasinier/audit-fifo" element={<AuditFifoMag userName={userName} onLogout={handleLogout} />} />
+                  <Route path="/magasinier/audit-fifo" element={<Navigate to="/magasinier/historique" replace />} />
                   <Route path="/magasinier/chat" element={<ChatMag userName={userName} onLogout={handleLogout} />} />
                   <Route path="/magasinier/parametres" element={<ParametresMag userName={userName} onLogout={handleLogout} />} />
                   <Route path="/" element={<Navigate to="/magasinier" replace />} />
@@ -309,6 +308,7 @@ const App = () => {
                 <>
                   <Route path="/demandeur" element={<ProduitsDem userName={userName} onLogout={handleLogout} />} />
                   <Route path="/demandeur/mes-demandes" element={<MesDemandes userName={userName} onLogout={handleLogout} />} />
+                  <Route path="/demandeur/parametres" element={<Navigate to="/demandeur" replace />} />
                   <Route path="/" element={<Navigate to="/demandeur" replace />} />
                 </>
               )}

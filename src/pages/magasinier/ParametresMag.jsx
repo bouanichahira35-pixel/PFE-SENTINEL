@@ -462,7 +462,12 @@ const ParametresMag = ({ userName, onLogout }) => {
                     <Save size={16} />
                     Enregistrer
                   </button>
-                  <button className="btn-save" onClick={sendTestEmail} disabled={isSaving}>
+                  <button
+                    className="btn-save"
+                    onClick={sendTestEmail}
+                    disabled={isSaving || !notifications.email}
+                    title={!notifications.email ? 'Activez d abord Notifications par email' : ''}
+                  >
                     <Bell size={16} />
                     Tester email
                   </button>

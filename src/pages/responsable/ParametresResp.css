@@ -199,6 +199,88 @@
    opacity: 0.7;
  }
 
+ .btn-secondary {
+   margin-top: 1rem;
+   padding: 0.75rem 1.2rem;
+   border-radius: 8px;
+   border: 1px solid hsl(var(--border));
+   background: hsl(var(--app-bg));
+   color: hsl(var(--text-primary));
+   cursor: pointer;
+   transition: all 0.2s ease;
+ }
+
+ .btn-secondary:hover {
+   background: hsl(var(--border));
+ }
+
+ .btn-secondary:disabled {
+   opacity: 0.6;
+   cursor: not-allowed;
+ }
+
+ .rules-help-card {
+   margin-bottom: 1rem;
+   padding: 0.9rem 1rem;
+   border: 1px solid hsl(var(--border));
+   border-radius: 10px;
+   background: hsl(var(--app-bg));
+ }
+
+ .rules-help-card h3 {
+   margin: 0 0 0.45rem;
+   font-size: 0.95rem;
+   color: hsl(var(--text-primary));
+ }
+
+ .rules-help-card p {
+   margin: 0;
+   color: hsl(var(--text-secondary));
+   font-size: 0.84rem;
+   line-height: 1.45;
+ }
+
+ .rules-help-card ol {
+   margin: 0.6rem 0 0;
+   padding-left: 1rem;
+   color: hsl(var(--text-secondary));
+   font-size: 0.82rem;
+   line-height: 1.5;
+ }
+
+ .rules-preview {
+   margin-top: 1rem;
+   padding: 0.9rem 1rem;
+   border-radius: 10px;
+   border: 1px solid hsl(var(--border));
+   background: hsl(var(--app-bg));
+ }
+
+ .rules-preview h3 {
+   margin: 0 0 0.45rem;
+   font-size: 0.95rem;
+   color: hsl(var(--text-primary));
+ }
+
+ .rules-preview p {
+   margin: 0.25rem 0;
+   color: hsl(var(--text-secondary));
+   font-size: 0.83rem;
+ }
+
+ .rules-saved-at {
+   margin-top: 0.55rem;
+   font-weight: 600;
+   color: #065f46;
+ }
+
+ .rules-actions {
+   display: flex;
+   flex-wrap: wrap;
+   gap: 0.7rem;
+   align-items: center;
+ }
+
  /* Theme selector */
  .theme-selector {
    display: flex;
@@ -293,7 +375,8 @@
    align-items: center;
    justify-content: space-between;
    padding: 1rem;
-   background: hsl(var(--app-bg));
+   background: var(--color-warning-soft);
+   border: 1px solid var(--color-warning-border);
    border-radius: 8px;
  }
 
@@ -347,7 +430,7 @@
  }
 
  .toggle-switch input:checked + .toggle-slider {
-   background: #7c3aed;
+   background: var(--color-warning);
  }
 
  .toggle-switch input:checked + .toggle-slider:before {

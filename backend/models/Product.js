@@ -8,7 +8,7 @@ const productSchema = new mongoose.Schema(
     category: { type: mongoose.Schema.Types.ObjectId, ref: 'Category', required: true },
     family: {
       type: String,
-      enum: ['economat', 'produit_chimique', 'gaz', 'consommable_informatique', 'consommable_laboratoire'],
+      enum: ['economat', 'produit_chimique', 'gaz', 'consommable_laboratoire'],
       required: true,
     },
     emplacement: String,

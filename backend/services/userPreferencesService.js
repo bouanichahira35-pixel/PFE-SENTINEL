@@ -27,8 +27,16 @@ async function getUserPreferences(userId) {
   };
 }
 
+function canSendNotificationEmail(preferences, category = 'generic') {
+  const notif = preferences?.notifications || {};
+  if (!notif.email) return false;
+  if (category === 'stock') return notif.stockAlerts !== false;
+  if (category === 'demandes') return notif.demandesAlerts !== false;
+  return true;
+}
+
 module.exports = {
   USER_PREFS_DEFAULT,
   getUserPreferences,
+  canSendNotificationEmail,
 };
-

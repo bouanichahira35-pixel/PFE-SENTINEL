@@ -44,7 +44,7 @@ async function setAppSettingValue(settingKey, value, userId) {
   return AppSetting.findOneAndUpdate(
     { setting_key: settingKey },
     { $set: { setting_value: value, updated_by: userId } },
-    { new: true, upsert: true }
+    { returnDocument: 'after', upsert: true }
   );
 }
 
@@ -183,6 +183,10 @@ router.post('/me/test-email', async (req, res) => {
   try {
     const user = await User.findById(req.user.id).select('email username role').lean();
     if (!user?.email) return res.status(400).json({ error: 'Email utilisateur introuvable' });
+    const prefs = await getUserPreferences(req.user.id);
+    if (!prefs?.notifications?.email) {
+      return res.status(400).json({ error: 'Activez "Notifications par email" pour envoyer un test email' });
+    }
 
     await enqueueMail({
       kind: 'settings_test_mail',

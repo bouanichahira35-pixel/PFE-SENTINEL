@@ -11,6 +11,7 @@ const Notification = require('../models/Notification');
 const History = require('../models/History');
 const { enqueueMail } = require('../services/mailQueueService');
 const { logSecurityEvent } = require('../services/securityAuditService');
+const { getUserPreferences, canSendNotificationEmail } = require('../services/userPreferencesService');
 const { ERROR_CODES } = require('../constants/errorCodes');
 
 // Toutes les routes ici sont protégées
@@ -187,15 +188,18 @@ router.patch(
       });
 
       if (user.email) {
-        await enqueueMail({
-          kind: 'user_status_change',
-          role: user.role,
-          to: user.email,
-          subject,
-          text: message,
-          html: `<p>${message}</p>`,
-          job_id: `user_status_${user._id}_${status}_${Date.now()}`,
-        });
+        const prefs = await getUserPreferences(user._id);
+        if (canSendNotificationEmail(prefs, 'generic')) {
+          await enqueueMail({
+            kind: 'user_status_change',
+            role: user.role,
+            to: user.email,
+            subject,
+            text: message,
+            html: `<p>${message}</p>`,
+            job_id: `user_status_${user._id}_${status}_${Date.now()}`,
+          });
+        }
       }
 
       await History.create({

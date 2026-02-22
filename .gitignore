@@ -25,3 +25,12 @@ node_modules
 .env
 build
 dist
+
+# backend generated artifacts
+backend/ai_py/__pycache__/
+backend/data/ai/*_v*.csv
+backend/data/ai/*_v*.jsonl
+backend/data/ai/adaptive_features_*.csv
+backend/data/ai/adaptive_features_*.jsonl
+backend/uploads/*
+!backend/uploads/.gitkeep

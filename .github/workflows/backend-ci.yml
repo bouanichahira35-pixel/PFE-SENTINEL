@@ -1,0 +1,108 @@
+name: backend-ci
+
+on:
+  push:
+    paths:
+      - "backend/**"
+      - "src/**"
+      - "public/**"
+      - "package.json"
+      - "package-lock.json"
+      - ".github/workflows/backend-ci.yml"
+  pull_request:
+    paths:
+      - "backend/**"
+      - "src/**"
+      - "public/**"
+      - "package.json"
+      - "package-lock.json"
+      - ".github/workflows/backend-ci.yml"
+
+jobs:
+  backend-test:
+    runs-on: ubuntu-latest
+
+    services:
+      mongo:
+        image: mongo:7
+        ports:
+          - 27017:27017
+        options: >-
+          --health-cmd "mongosh --quiet --eval 'db.adminCommand({ ping: 1 }).ok'"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+
+    defaults:
+      run:
+        working-directory: backend
+
+    env:
+      NODE_ENV: test
+      PORT: 5011
+      MONGODB_URI: mongodb://127.0.0.1:27017/pfe_sentinel_ci
+      JWT_SECRET: ci_jwt_secret_for_tests
+      JWT_EXPIRES_IN: 1d
+      RESET_JWT_EXPIRES_IN: 15m
+      RESET_CODE_TTL_MINUTES: 10
+      BCRYPT_SALT_ROUNDS: 12
+      FRONTEND_URL: http://localhost:3000
+      FRONTEND_URLS: http://localhost:3000
+      INTERNAL_BOND_QR_SECRET: ci_internal_bond_qr_secret
+      MAIL_QUEUE_ENABLED: "false"
+      AI_AUTO_TRAIN_ON_BOOT: "false"
+      AI_AUTO_TRAINING_ENABLED: "false"
+      TEST_DEMANDEUR_EMAIL: demandeur@example.local
+      TEST_DEMANDEUR_PASSWORD: ChangeMe_Demandeur_123
+      TEST_MAGASINIER_EMAIL: magasinier@example.local
+      TEST_MAGASINIER_PASSWORD: ChangeMe_Magasinier_123
+      TEST_RESPONSABLE_EMAIL: responsable@example.local
+      TEST_RESPONSABLE_PASSWORD: ChangeMe_Responsable_123
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: backend/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Syntax check
+        run: |
+          for file in $(find . -name "*.js"); do
+            node --check "$file"
+          done
+
+      - name: Run regression tests
+        run: npm test
+
+  frontend-test:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build frontend
+        run: npm run build
+
+      - name: Run frontend tests
+        env:
+          CI: "true"
+        run: npm test -- --watchAll=false --passWithNoTests

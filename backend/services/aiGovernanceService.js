@@ -1,5 +1,6 @@
 const AppSetting = require('../models/AppSetting');
 const { trainAndBuildDatasets } = require('./aiModelService');
+const logger = require('../utils/logger');
 
 let intervalRef = null;
 
@@ -12,7 +13,7 @@ async function setSettingValue(key, value) {
   return AppSetting.findOneAndUpdate(
     { setting_key: key },
     { $set: { setting_value: value } },
-    { new: true, upsert: true }
+    { returnDocument: 'after', upsert: true }
   );
 }
 
@@ -68,7 +69,10 @@ async function runGovernedAutoTrain() {
   await setSettingValue('ai_models_metrics_v2', metrics);
   await setSettingValue('ai_models_backtesting_v2', backtesting);
   await appendVersionSnapshot(nextRegistry, metrics, backtesting, governance.max_versions_kept);
-  console.log(`[AI] Auto-training completed version=${nextRegistry.model_version}`);
+  logger.info({
+    model_version: nextRegistry.model_version,
+    trained_at: nextRegistry.trained_at,
+  }, '[AI] Auto-training completed');
 }
 
 function startAiAutoTrainingJob() {
@@ -77,13 +81,13 @@ function startAiAutoTrainingJob() {
   const intervalMs = Math.max(5, everyMinutes) * 60 * 1000;
   intervalRef = setInterval(() => {
     runGovernedAutoTrain().catch((err) => {
-      console.warn('[AI] Auto-training failed:', err?.message || err);
+      logger.warn({ err: err?.message || err }, '[AI] Auto-training failed');
     });
   }, intervalMs);
 
   if (String(process.env.AI_AUTO_TRAIN_ON_BOOT || 'true') === 'true') {
     runGovernedAutoTrain().catch((err) => {
-      console.warn('[AI] Auto-training boot run failed:', err?.message || err);
+      logger.warn({ err: err?.message || err }, '[AI] Auto-training boot run failed');
     });
   }
 }

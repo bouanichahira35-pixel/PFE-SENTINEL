@@ -3,14 +3,16 @@
   "version": "1.0.0",
   "description": "",
   "main": "index.js",
-  "scripts": { 
-    "start": "node server.js", 
-    "test": "node scripts/test-critical-flow.js", 
-    "backfill:requests": "node scripts/backfill-request-fields.js", 
-    "test:critical-flow": "node scripts/test-critical-flow.js", 
-    "ai:export-dataset": "node scripts/export-ai-dataset.js", 
-    "seed:magasinier-large": "node scripts/seed-magasinier-large-data.js" 
-  }, 
+  "scripts": {
+    "start": "node server.js",
+    "test": "npm run test:critical-flow && npm run test:guardrails && npm run test:ai-chatbot",
+    "test:guardrails": "node scripts/test-guardrails.js",
+    "test:ai-chatbot": "node scripts/test-ai-chatbot-config.js",
+    "backfill:requests": "node scripts/backfill-request-fields.js",
+    "test:critical-flow": "node scripts/test-critical-flow.js",
+    "ai:export-dataset": "node scripts/export-ai-dataset.js",
+    "seed:magasinier-large": "node scripts/seed-magasinier-large-data.js"
+  },
   "keywords": [],
   "author": "",
   "license": "ISC",
@@ -30,6 +32,7 @@
     "multer": "^2.0.2",
     "nodemailer": "^8.0.1",
     "pino": "^10.3.1",
-    "pino-http": "^11.0.0"
+    "pino-http": "^11.0.0",
+    "qrcode": "^1.5.4"
   }
 }

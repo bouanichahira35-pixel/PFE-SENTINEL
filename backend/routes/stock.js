@@ -1,4 +1,5 @@
 const router = require('express').Router();
+const QRCode = require('qrcode');
 const StockEntry = require('../models/StockEntry');
 const StockExit = require('../models/StockExit');
 const StockLot = require('../models/StockLot');
@@ -14,6 +15,7 @@ const { PERMISSIONS } = require('../constants/permissions');
 const { runInTransaction } = require('../services/transactionService');
 const { evaluateProductAlerts } = require('../services/alertService');
 const { signQrPayload, verifyQrToken } = require('../services/qrTokenService');
+const logger = require('../utils/logger');
 const { ERROR_CODES } = require('../constants/errorCodes');
 const {
   asDate,
@@ -32,6 +34,14 @@ function parsePeriod(fromRaw, toRaw) {
   return { from, to };
 }
 
+function ensureResponsableRole(req, res) {
+  if (req.user?.role !== 'responsable') {
+    res.status(403).json({ error: 'Acces reserve au responsable' });
+    return false;
+  }
+  return true;
+}
+
 function sanitizeDurationMs(value) {
   const n = asNonNegativeNumber(value);
   if (n === undefined) return undefined;
@@ -48,8 +58,12 @@ function escapeHtml(value) {
     .replace(/'/g, '&#39;');
 }
 
-function buildInternalBondPrintHtml({ qrValue, payload, generatedBy }) {
-  const qrImageUrl = `https://api.qrserver.com/v1/create-qr-code/?size=280x280&data=${encodeURIComponent(qrValue)}`;
+async function buildInternalBondPrintHtml({ qrValue, payload, generatedBy }) {
+  const qrImageUrl = await QRCode.toDataURL(qrValue, {
+    width: 280,
+    margin: 1,
+    errorCorrectionLevel: 'M',
+  });
   const issuedAt = payload?.iat ? new Date(Number(payload.iat) * 1000) : null;
   const expiresAt = payload?.exp ? new Date(Number(payload.exp) * 1000) : null;
 
@@ -129,7 +143,7 @@ async function logFifoScanAudit(payload, session) {
     if (session) await FifoScanAudit.create([auditPayload], { session });
     else await FifoScanAudit.create(auditPayload);
   } catch (err) {
-    console.warn('FIFO audit log failed:', err?.message || err);
+    logger.warn({ err: err?.message || err }, 'FIFO audit log failed');
   }
 }
 
@@ -146,7 +160,7 @@ async function getNextEntryNumber() {
   const counter = await Sequence.findOneAndUpdate(
     { counter_name: counterName },
     { $inc: { seq: 1 } },
-    { new: true, upsert: true }
+    { returnDocument: 'after', upsert: true }
   );
 
   return `BE-${year}-${String(counter.seq).padStart(5, '0')}`;
@@ -159,7 +173,7 @@ async function getNextExitNumber() {
   const counter = await Sequence.findOneAndUpdate(
     { counter_name: counterName },
     { $inc: { seq: 1 } },
-    { new: true, upsert: true }
+    { returnDocument: 'after', upsert: true }
   );
 
   return `BP-${year}-${String(counter.seq).padStart(5, '0')}`;
@@ -171,7 +185,7 @@ async function getNextInternalBondNumber() {
   const counter = await Sequence.findOneAndUpdate(
     { counter_name: counterName },
     { $inc: { seq: 1 } },
-    { new: true, upsert: true }
+    { returnDocument: 'after', upsert: true }
   );
   return `IB-${year}-${String(counter.seq).padStart(5, '0')}`;
 }
@@ -395,7 +409,7 @@ router.post(
       if (!qrValue) return res.status(400).json({ error: 'qr_value obligatoire' });
 
       const payload = verifyQrToken(qrValue, { expected_type: 'internal_bond' });
-      const html = buildInternalBondPrintHtml({
+      const html = await buildInternalBondPrintHtml({
         qrValue,
         payload,
         generatedBy: req.user?.username || req.user?.id || '-',
@@ -418,6 +432,7 @@ router.get(
   requirePermission(PERMISSIONS.HISTORY_READ),
   async (req, res) => {
     try {
+      if (!ensureResponsableRole(req, res)) return;
       const period = parsePeriod(req.query.from, req.query.to);
       if (!period) return res.status(400).json({ error: 'from/to invalides' });
 
@@ -461,6 +476,7 @@ router.get(
   requirePermission(PERMISSIONS.HISTORY_READ),
   async (req, res) => {
     try {
+      if (!ensureResponsableRole(req, res)) return;
       const period = parsePeriod(req.query.from, req.query.to);
       if (!period) return res.status(400).json({ error: 'from/to invalides' });
 

@@ -6,20 +6,31 @@ const axios = require('axios');
 const TEST_PORT = Number(process.env.CRITICAL_TEST_PORT || 5011);
 const API_BASE = `http://127.0.0.1:${TEST_PORT}/api`;
 
+function getTestEnv(name, fallbackForLocal) {
+  const value = String(process.env[name] || '').trim();
+  if (value) return value;
+
+  const isCi = String(process.env.CI || '').toLowerCase() === 'true';
+  if (isCi || fallbackForLocal === undefined) {
+    throw new Error(`Missing required env var: ${name}`);
+  }
+  return fallbackForLocal;
+}
+
 const CREDS = {
   demandeur: {
-    identifier: process.env.TEST_DEMANDEUR_EMAIL || 'chahirabouani9@gmail.com',
-    password: process.env.TEST_DEMANDEUR_PASSWORD || 'Demandeur123',
+    identifier: getTestEnv('TEST_DEMANDEUR_EMAIL', 'demandeur@example.local'),
+    password: getTestEnv('TEST_DEMANDEUR_PASSWORD', 'ChangeMe_Demandeur_123'),
     role: 'demandeur',
   },
   magasinier: {
-    identifier: process.env.TEST_MAGASINIER_EMAIL || 'chahira772014@gmail.com',
-    password: process.env.TEST_MAGASINIER_PASSWORD || 'Magasinier123',
+    identifier: getTestEnv('TEST_MAGASINIER_EMAIL', 'magasinier@example.local'),
+    password: getTestEnv('TEST_MAGASINIER_PASSWORD', 'ChangeMe_Magasinier_123'),
     role: 'magasinier',
   },
   responsable: {
-    identifier: process.env.TEST_RESPONSABLE_EMAIL || 'chahirabbyyoussef@gmail.com',
-    password: process.env.TEST_RESPONSABLE_PASSWORD || 'Responsable123',
+    identifier: getTestEnv('TEST_RESPONSABLE_EMAIL', 'responsable@example.local'),
+    password: getTestEnv('TEST_RESPONSABLE_PASSWORD', 'ChangeMe_Responsable_123'),
     role: 'responsable',
   },
 };
@@ -32,7 +43,7 @@ async function waitForHealth(client, retries = 60) {
   for (let i = 0; i < retries; i += 1) {
     try {
       const { data } = await client.get('/health');
-      if (data?.status === 'ok') return;
+      if (['ok', 'degraded'].includes(String(data?.status || '').toLowerCase())) return;
     } catch {
       // retry
     }
@@ -57,7 +68,11 @@ async function run() {
     throw new Error('Unable to seed human users for critical flow test');
   }
 
-  const env = { ...process.env, PORT: String(TEST_PORT) };
+  const env = {
+    ...process.env,
+    PORT: String(TEST_PORT),
+    AI_AUTO_TRAIN_ON_BOOT: 'false',
+  };
   const server = spawn('node', ['server.js'], {
     cwd: process.cwd(),
     env,

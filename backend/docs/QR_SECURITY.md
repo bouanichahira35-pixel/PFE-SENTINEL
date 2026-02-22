@@ -14,6 +14,7 @@ En production, si aucune de ces 2 cles n'est definie, la signature QR est refuse
 - Utiliser une cle longue et aleatoire (au moins 32 caracteres).
 - Ne pas reutiliser `JWT_SECRET` pour les QR en production.
 - Changer la cle si vous suspectez une fuite.
+- La generation du QR d'impression est locale (data URL), sans appel a un service QR tiers.
 
 ## Verification rapide
 

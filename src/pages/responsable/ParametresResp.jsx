@@ -3,28 +3,18 @@ import { User, Lock, Moon, Sun, Camera, Save, Layers, Settings, Users, Bot, Glob
 import SidebarResp from '../../components/responsable/SidebarResp';
 import HeaderPage from '../../components/shared/HeaderPage';
 import useTheme from '../../hooks/useTheme';
+import useProtectedFileUrl from '../../hooks/useProtectedFileUrl';
 import { get, patch, post, uploadFile } from '../../services/api';
 import { useToast } from '../../components/shared/Toast';
 import { setUiLanguage, useUiLanguage } from '../../utils/uiLanguage';
 import './ParametresResp.css';
 
-const API_BASE = process.env.REACT_APP_API_URL || 'http://localhost:5000/api'; 
-const API_ORIGIN = API_BASE.replace(/\/api\/?$/, ''); 
 const MAX_AVATAR_SIZE_BYTES = 5 * 1024 * 1024;
 const STOCK_RULES_FRONT_DEFAULT = Object.freeze({
   seuilAlerte: 10,
   joursInactivite: 30,
   validationObligatoire: true,
 });
-
-function resolveFileUrl(path) {
-  if (!path) return '';
-  const token = sessionStorage.getItem('token') || localStorage.getItem('token') || '';
-  const base = /^https?:\/\//i.test(path) ? path : `${API_ORIGIN}${path.startsWith('/') ? '' : '/'}${path}`;
-  if (!token) return base;
-  const sep = base.includes('?') ? '&' : '?';
-  return `${base}${sep}token=${encodeURIComponent(token)}`;
-}
 
 const roleLabel = (role) => {
   if (role === 'magasinier') return 'Magasinier';
@@ -109,7 +99,7 @@ const ParametresResp = ({ userName, onLogout }) => {
     ar: { title: 'الإعدادات', loading: 'جار التحميل...', languageSaved: 'تم حفظ اللغة' },
   }[uiLanguage];
 
-  const avatarUrl = useMemo(() => resolveFileUrl(profileData.imageProfile), [profileData.imageProfile]); 
+  const avatarUrl = useProtectedFileUrl(profileData.imageProfile);
   const displayAvatarUrl = avatarPreviewUrl || avatarUrl;
 
   useEffect(() => {

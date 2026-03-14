@@ -1,25 +1,14 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { User, Lock, Moon, Sun, Globe, Bell, Camera, Save, Eye, EyeOff } from 'lucide-react';
 import SidebarMag from '../../components/magasinier/SidebarMag';
 import HeaderPage from '../../components/shared/HeaderPage';
 import useTheme from '../../hooks/useTheme';
+import useProtectedFileUrl from '../../hooks/useProtectedFileUrl';
 import { get, patch, post, uploadFile } from '../../services/api';
 import { useToast } from '../../components/shared/Toast';
 import { setUiLanguage, useUiLanguage } from '../../utils/uiLanguage';
 import './ParametresMag.css';
-
-const API_BASE = process.env.REACT_APP_API_URL || 'http://localhost:5000/api'; 
-const API_ORIGIN = API_BASE.replace(/\/api\/?$/, ''); 
 const MAX_AVATAR_SIZE_BYTES = 5 * 1024 * 1024;
-
-function resolveFileUrl(path) {
-  if (!path) return '';
-  const token = sessionStorage.getItem('token') || localStorage.getItem('token') || '';
-  const base = /^https?:\/\//i.test(path) ? path : `${API_ORIGIN}${path.startsWith('/') ? '' : '/'}${path}`;
-  if (!token) return base;
-  const sep = base.includes('?') ? '&' : '?';
-  return `${base}${sep}token=${encodeURIComponent(token)}`;
-}
 
 const ParametresMag = ({ userName, onLogout }) => {
   const toast = useToast();
@@ -86,7 +75,7 @@ const ParametresMag = ({ userName, onLogout }) => {
     },
   }[uiLanguage];
 
-  const avatarUrl = useMemo(() => resolveFileUrl(profileData.imageProfile), [profileData.imageProfile]); 
+  const avatarUrl = useProtectedFileUrl(profileData.imageProfile);
   const displayAvatarUrl = avatarPreviewUrl || avatarUrl;
 
   useEffect(() => {

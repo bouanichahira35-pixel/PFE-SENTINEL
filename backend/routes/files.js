@@ -3,12 +3,9 @@ const fs = require('fs');
 const fsp = require('fs/promises');
 const path = require('path');
 const { randomUUID } = require('crypto');
-const jwt = require('jsonwebtoken');
 const multer = require('multer');
 const requireAuth = require('../middlewares/requireAuth');
 const requirePermission = require('../middlewares/requirePermission');
-const UserSession = require('../models/UserSession');
-const { normalizeRole } = require('../constants/roles');
 const { PERMISSIONS } = require('../constants/permissions');
 const { validateFileType, hasBasicMalwareSignature, scanFileWithOptionalAntivirus } = require('../utils/fileSecurity');
 
@@ -24,40 +21,6 @@ const upload = multer({
   storage: multer.memoryStorage(),
   limits: { fileSize: MAX_FILE_SIZE_BYTES },
 });
-
-async function requireAuthHeaderOrQueryToken(req, res, next) {
-  const authHeader = req.headers.authorization || '';
-  if (authHeader.startsWith('Bearer ')) {
-    return requireAuth(req, res, next);
-  }
-
-  const token = String(req.query?.token || '');
-  if (!token) return res.status(401).json({ error: 'Authentification requise' });
-
-  try {
-    const payload = jwt.verify(token, process.env.JWT_SECRET);
-    if (!payload?.sid) return res.status(401).json({ error: 'Token session invalide' });
-
-    const session = await UserSession.findOne({
-      session_id: payload.sid,
-      user: payload.id,
-      is_active: true,
-      expires_at: { $gt: new Date() },
-    }).select('_id');
-
-    if (!session) return res.status(401).json({ error: 'Session invalide ou expiree' });
-
-    req.user = {
-      id: payload.id,
-      role: normalizeRole(payload.role),
-      username: payload.username,
-      sessionId: payload.sid,
-    };
-    return next();
-  } catch {
-    return res.status(401).json({ error: 'Token invalide ou expire' });
-  }
-}
 
 router.post(
   '/upload',
@@ -100,7 +63,7 @@ router.post(
   }
 );
 
-router.get('/download/:storedName', requireAuthHeaderOrQueryToken, async (req, res) => {
+router.get('/download/:storedName', requireAuth, async (req, res) => {
   try {
     const storedName = String(req.params.storedName || '');
     if (!/^[a-zA-Z0-9._-]+$/.test(storedName)) {

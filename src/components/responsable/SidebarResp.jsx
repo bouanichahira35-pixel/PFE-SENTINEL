@@ -12,26 +12,15 @@ import {
 } from 'lucide-react';
 import logoETAP from '../../assets/logoETAP.png';
 import { useUiLanguage } from '../../utils/uiLanguage';
+import useProtectedFileUrl from '../../hooks/useProtectedFileUrl';
 import './SidebarResp.css';
-
-const API_BASE = process.env.REACT_APP_API_URL || 'http://localhost:5000/api';
-const API_ORIGIN = API_BASE.replace(/\/api\/?$/, '');
-
-function resolveProfileUrl(path) {
-  if (!path) return '';
-  const token = sessionStorage.getItem('token') || localStorage.getItem('token') || '';
-  const base = /^https?:\/\//i.test(path) ? path : `${API_ORIGIN}${path.startsWith('/') ? '' : '/'}${path}`;
-  if (!token) return base;
-  const sep = base.includes('?') ? '&' : '?';
-  return `${base}${sep}token=${encodeURIComponent(token)}`;
-}
 
 const SidebarResp = ({ collapsed, onToggle, onLogout, userName }) => {
   const language = useUiLanguage();
   const location = useLocation();
   const sessionUserName = sessionStorage.getItem('userName') || localStorage.getItem('userName') || userName || 'Utilisateur';
   const profileImage = sessionStorage.getItem('imageProfile') || localStorage.getItem('imageProfile') || '';
-  const avatarUrl = resolveProfileUrl(profileImage);
+  const avatarUrl = useProtectedFileUrl(profileImage);
 
   const labels = {
     fr: {

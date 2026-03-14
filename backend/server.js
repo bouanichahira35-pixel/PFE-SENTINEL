@@ -56,6 +56,7 @@ app.use(cors({
     if (!isProduction && isLocalDevOrigin(origin)) return cb(null, true);
     return cb(new Error(`CORS blocked for origin: ${origin}`));
   },
+  credentials: true,
 }));
 app.use(helmet({ crossOriginResourcePolicy: false }));
 app.use(requestContext);

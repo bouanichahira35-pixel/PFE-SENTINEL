@@ -1,4 +1,4 @@
-const API_BASE = process.env.REACT_APP_API_URL || "http://localhost:5000/api";
+export const API_BASE = process.env.REACT_APP_API_URL || "http://localhost:5000/api";
 
 const API_CACHE_TTL_MS = 45 * 1000;
 const API_CACHE_MAX_ITEMS = 60;
@@ -169,6 +169,7 @@ async function request(path, method, payload, retried = false) {
     res = await fetch(`${API_BASE}${path}`, {
       method: normalizedMethod,
       headers,
+      credentials: "include",
       body: payload ? JSON.stringify(payload) : undefined,
     });
     data = await res.json().catch(() => ({}));
@@ -181,13 +182,13 @@ async function request(path, method, payload, retried = false) {
   const latencyMs = Math.max(0, Math.round(nowMs() - startedAt));
 
   if (res.status === 401 && !retried && path !== "/auth/refresh") {
-    const refreshToken = getRefreshToken();
-    if (refreshToken) {
-      const refreshRes = await fetch(`${API_BASE}/auth/refresh`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ refreshToken }),
-      });
+      const refreshToken = getRefreshToken();
+    const refreshRes = await fetch(`${API_BASE}/auth/refresh`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      credentials: "include",
+      body: JSON.stringify(refreshToken ? { refreshToken } : {}),
+    });
       const refreshData = await refreshRes.json().catch(() => ({}));
       if (refreshRes.ok && refreshData.token) {
         sessionStorage.setItem("token", refreshData.token);
@@ -198,7 +199,6 @@ async function request(path, method, payload, retried = false) {
         const refreshReason = typeof refreshData?.error === "string" ? refreshData.error : "";
         triggerAuthLogout(refreshReason || "Session expiree. Veuillez vous reconnecter.");
       }
-    }
   }
 
   if ((res.status === 401 || res.status === 403) && token) {
@@ -262,17 +262,18 @@ async function uploadFileInternal(path, file, fieldName, retried = false) {
   const res = await fetch(`${API_BASE}${path}`, {
     method: "POST",
     headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+    credentials: "include",
     body: formData,
   });
 
   if (res.status === 401 && !retried && path !== "/auth/refresh") {
     const refreshToken = getRefreshToken();
-    if (refreshToken) {
-      const refreshRes = await fetch(`${API_BASE}/auth/refresh`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ refreshToken }),
-      });
+    const refreshRes = await fetch(`${API_BASE}/auth/refresh`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      credentials: "include",
+      body: JSON.stringify(refreshToken ? { refreshToken } : {}),
+    });
       const refreshData = await refreshRes.json().catch(() => ({}));
       if (refreshRes.ok && refreshData.token) {
         sessionStorage.setItem("token", refreshData.token);
@@ -283,7 +284,6 @@ async function uploadFileInternal(path, file, fieldName, retried = false) {
         const refreshReason = typeof refreshData?.error === "string" ? refreshData.error : "";
         triggerAuthLogout(refreshReason || "Session expiree. Veuillez vous reconnecter.");
       }
-    }
   }
 
   const latencyMs = Math.max(0, Math.round(nowMs() - startedAt));

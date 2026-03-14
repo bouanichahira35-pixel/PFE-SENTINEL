@@ -3,19 +3,8 @@ import { Search, Bell, Moon, Sun, User, RefreshCw } from 'lucide-react';
 import useTheme from '../../hooks/useTheme';
 import { get, patch } from '../../services/api';
 import { useUiLanguage } from '../../utils/uiLanguage';
+import useProtectedFileUrl from '../../hooks/useProtectedFileUrl';
 import './HeaderPage.css';
-
-const API_BASE = process.env.REACT_APP_API_URL || 'http://localhost:5000/api';
-const API_ORIGIN = API_BASE.replace(/\/api\/?$/, '');
-
-function resolveProfileUrl(path) {
-  if (!path) return '';
-  const token = sessionStorage.getItem('token') || localStorage.getItem('token') || '';
-  const base = /^https?:\/\//i.test(path) ? path : `${API_ORIGIN}${path.startsWith('/') ? '' : '/'}${path}`;
-  if (!token) return base;
-  const sep = base.includes('?') ? '&' : '?';
-  return `${base}${sep}token=${encodeURIComponent(token)}`;
-}
 
 const HeaderPage = ({ userName, title, searchValue, onSearchChange, showSearch = true, onRefresh }) => {
   const language = useUiLanguage();
@@ -34,7 +23,7 @@ const HeaderPage = ({ userName, title, searchValue, onSearchChange, showSearch =
 
   const unreadCount = notifications.filter((n) => !n.is_read).length;
   const displayName = sessionStorage.getItem('userName') || localStorage.getItem('userName') || userName;
-  const avatarUrl = resolveProfileUrl(profileImage);
+  const avatarUrl = useProtectedFileUrl(profileImage);
   const i18n = {
     fr: {
       search: 'Rechercher...',

@@ -30,6 +30,7 @@ import MesDemandes from "./pages/demandeur/MesDemandes";
 import NotFound from "./pages/NotFound";
 import { HOME_PATH_BY_ROLE, ROLES, isKnownRole } from "./constants/roles";
 import { applyUiLanguage, getUiLanguage } from "./utils/uiLanguage";
+import { API_BASE } from "./services/api";
 
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 
@@ -93,50 +94,65 @@ const App = () => {
   }, [handleLogout]);
 
   useEffect(() => {
-    const token = sessionStorage.getItem("token") || localStorage.getItem("token");
-    const refreshToken = sessionStorage.getItem("refreshToken") || localStorage.getItem("refreshToken");
-    const savedRole = sessionStorage.getItem("userRole") || localStorage.getItem("userRole");
-    const savedName = sessionStorage.getItem("userName") || localStorage.getItem("userName");
+    let cancelled = false;
 
-    if ((!token && !refreshToken) || !savedRole || !savedName) return;
+    async function restoreSession() {
+      const existingToken = sessionStorage.getItem("token") || "";
+      const decodedExisting = existingToken ? decodeJwtPayload(existingToken) : null;
+      const roleFromToken = String(decodedExisting?.role || "").toLowerCase();
+      const nameFromToken = String(decodedExisting?.username || "").trim();
 
-    if (!isKnownRole(savedRole)) {
-      handleLogout("Role session invalide.");
-      return;
-    }
-
-    if (token) {
-      const payload = decodeJwtPayload(token);
-      if (!payload) {
-        if (!refreshToken) {
-          handleLogout("Session invalide. Veuillez vous reconnecter.");
-          return;
+      if (decodedExisting && isKnownRole(roleFromToken) && nameFromToken) {
+        sessionStorage.setItem(
+          LAST_ACTIVITY_KEY,
+          sessionStorage.getItem(LAST_ACTIVITY_KEY) || String(Date.now())
+        );
+        if (!cancelled) {
+          setUserRole(roleFromToken);
+          setUserName(nameFromToken);
+          setIsAuthenticated(true);
         }
+        return;
+      }
+
+      if (existingToken && !decodedExisting) {
         sessionStorage.removeItem("token");
-      } else {
-        sessionStorage.setItem("token", token);
+      }
+
+      try {
+        // Try to refresh using HttpOnly cookie (set by backend on login).
+        const res = await fetch(`${API_BASE}/auth/refresh`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          credentials: "include",
+          body: JSON.stringify({}),
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok || !data?.token) return;
+
+        const decoded = decodeJwtPayload(data.token);
+        const nextRole = String(decoded?.role || "").toLowerCase();
+        const nextName = String(decoded?.username || "").trim();
+
+        if (!decoded || !isKnownRole(nextRole) || !nextName) return;
+
+        sessionStorage.setItem("token", data.token);
+        sessionStorage.setItem(LAST_ACTIVITY_KEY, String(Date.now()));
+
+        if (!cancelled) {
+          setUserRole(nextRole);
+          setUserName(nextName);
+          setIsAuthenticated(true);
+        }
+      } catch {
+        // ignore restore errors, user stays logged out
       }
     }
 
-    if (refreshToken) {
-      sessionStorage.setItem("refreshToken", refreshToken);
-    }
-
-    sessionStorage.setItem("userRole", savedRole);
-    sessionStorage.setItem("userName", savedName);
-    sessionStorage.setItem(
-      LAST_ACTIVITY_KEY,
-      sessionStorage.getItem(LAST_ACTIVITY_KEY) || String(Date.now())
-    );
-
-    localStorage.removeItem("token");
-    localStorage.removeItem("refreshToken");
-    localStorage.removeItem("userRole");
-    localStorage.removeItem("userName");
-
-    setUserRole(savedRole);
-    setUserName(savedName);
-    setIsAuthenticated(true);
+    restoreSession();
+    return () => {
+      cancelled = true;
+    };
   }, [handleLogout]);
 
   // Inactivity timeout timer (15 min max without activity, even after tab/app switch).
@@ -247,7 +263,6 @@ const App = () => {
     setIsAuthenticated(true);
 
     sessionStorage.setItem("token", token);
-    if (refreshToken) sessionStorage.setItem("refreshToken", refreshToken);
     if (sessionId) sessionStorage.setItem("sessionId", sessionId);
     sessionStorage.setItem("userName", user.username);
     sessionStorage.setItem("userRole", normalizedRole);

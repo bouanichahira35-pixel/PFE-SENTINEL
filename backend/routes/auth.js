@@ -31,8 +31,49 @@ const IS_PROD = String(process.env.NODE_ENV || '').trim().toLowerCase() === 'pro
 const RESET_DEV_OTP_ENABLED =
   !IS_PROD && String(process.env.RESET_DEV_OTP_ENABLED || 'true').trim().toLowerCase() === 'true';
 
+const REFRESH_COOKIE_NAME = String(process.env.REFRESH_COOKIE_NAME || 'sentinel_refresh').trim();
+
 const ACTIVE_STATUS_ALIASES = new Set(['active', 'actif', 'enabled', 'enable', 'true', '1']);
 const BLOCKED_STATUS_ALIASES = new Set(['blocked', 'bloque', 'disabled', 'inactive', 'false', '0']);
+
+function parseCookies(header) {
+  const raw = String(header || '').trim();
+  if (!raw) return {};
+
+  const out = {};
+  for (const part of raw.split(';')) {
+    const idx = part.indexOf('=');
+    if (idx <= 0) continue;
+    const key = part.slice(0, idx).trim();
+    const value = part.slice(idx + 1).trim();
+    if (!key) continue;
+    try {
+      out[key] = decodeURIComponent(value);
+    } catch {
+      out[key] = value;
+    }
+  }
+  return out;
+}
+
+function readCookie(req, name) {
+  const cookies = parseCookies(req?.headers?.cookie);
+  return cookies[String(name || '').trim()] || '';
+}
+
+function getRefreshCookieOptions() {
+  // Refresh token cookie is HttpOnly to reduce token exfiltration risk via XSS.
+  // `SameSite=Lax` is a pragmatic default for SPAs on localhost.
+  // For production, `Secure` is enabled automatically.
+  const maxAge = 7 * 24 * 60 * 60 * 1000;
+  return {
+    httpOnly: true,
+    sameSite: 'lax',
+    secure: IS_PROD,
+    maxAge,
+    path: '/api/auth/refresh',
+  };
+}
 
 function generateOtpCode() {
   return String(Math.floor(100000 + Math.random() * 900000));
@@ -306,6 +347,8 @@ router.post('/login', async (req, res) => {
       process.env.JWT_SECRET,
       { expiresIn: REFRESH_JWT_EXPIRES_IN }
     );
+
+    res.cookie(REFRESH_COOKIE_NAME, refreshToken, getRefreshCookieOptions());
 
     await logSecurityEvent({
       event_type: 'login_success',
@@ -634,7 +677,7 @@ router.post('/forgot-password/reset', async (req, res) => {
 
 router.post('/refresh', async (req, res) => {
   try {
-    const { refreshToken } = req.body;
+    const refreshToken = String(req.body?.refreshToken || readCookie(req, REFRESH_COOKIE_NAME) || '');
     if (!refreshToken) return res.status(400).json({ error: 'refreshToken obligatoire' });
 
     let payload;
@@ -711,6 +754,7 @@ router.post('/logout', requireAuth, async (req, res) => {
       success: true,
     });
 
+    res.clearCookie(REFRESH_COOKIE_NAME, getRefreshCookieOptions());
     return res.json({ message: 'Logout OK' });
   } catch (err) {
     return res.status(500).json({ error: 'Erreur serveur' });
@@ -733,6 +777,7 @@ router.post('/logout-all', requireAuth, async (req, res) => {
       success: true,
     });
 
+    res.clearCookie(REFRESH_COOKIE_NAME, getRefreshCookieOptions());
     return res.json({ message: 'Toutes les sessions ont ete fermees' });
   } catch (err) {
     return res.status(500).json({ error: 'Erreur serveur' });

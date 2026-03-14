@@ -1,0 +1,368 @@
+﻿# PFE-SENTINEL — File inventory (auto-generated)
+
+Generated: 2026-03-14 23:19:31
+
+## Counts
+- Total files (including node_modules/build/.git): 56749
+- Project files (excluding node_modules/build/.git/__pycache__/ *.pyc): 355
+
+## Notes
+- ``node_modules/`` contains third-party dependencies: you generally do not read those files.
+- This list excludes ``node_modules/``, ``build/``, ``.git/``, Python ``__pycache__/``, and ``*.pyc``.
+
+## Files
+- `.env` — Environment variables (DO NOT commit secrets)
+- `.github\workflows\backend-ci.yml` — YAML config (CI/workflows/etc.)
+- `.gitignore` — Project file
+- `backend\.dockerignore` — Project file
+- `backend\.env` — Environment variables (DO NOT commit secrets)
+- `backend\.env.example` — Environment variables (DO NOT commit secrets)
+- `backend\ai_py\_common.py` — Project file
+- `backend\ai_py\00_build_features.py` — Project file
+- `backend\ai_py\01_consumption_forecast.py` — Project file
+- `backend\ai_py\02_stockout_risk_classifier.py` — Project file
+- `backend\ai_py\03_anomaly_detector.py` — Project file
+- `backend\ai_py\04_adaptive_threshold_model.py` — Project file
+- `backend\ai_py\05_behavioral_classification.py` — Project file
+- `backend\ai_py\06_operational_intelligence_score.py` — Project file
+- `backend\ai_py\07_copilot_decision_engine.py` — Project file
+- `backend\ai_py\anomaly_model.py` — Project file
+- `backend\ai_py\chatbot_responsable.py` — Project file
+- `backend\ai_py\consumption_model.py` — Project file
+- `backend\ai_py\dataset_builder.py` — Project file
+- `backend\ai_py\stockout_model.py` — Project file
+- `backend\ai_py\train_all.py` — Project file
+- `backend\constants\errorCodes.js` — JavaScript/React source
+- `backend\constants\permissions.js` — JavaScript/React source
+- `backend\constants\roles.js` — JavaScript/React source
+- `backend\data\ai\_tmp\manual_in.json` — Backend data fixture (seed/test input)
+- `backend\data\ai\_tmp\node_in.json` — Backend data fixture (seed/test input)
+- `backend\data\ai\_tmp\node_in2.json` — Backend data fixture (seed/test input)
+- `backend\data\ai\_tmp\probe_in.json` — Backend data fixture (seed/test input)
+- `backend\data\ai\_tmp\probe2_in.json` — Backend data fixture (seed/test input)
+- `backend\data\ai\_tmp\probe2_out.json` — Backend data fixture (seed/test input)
+- `backend\data\ai\adaptive_features_v20260220104012.csv` — Backend data fixture (seed/test input)
+- `backend\data\ai\adaptive_features_v20260220104012.jsonl` — Backend data fixture (seed/test input)
+- `backend\data\ai\adaptive_features_v20260220205056.csv` — Backend data fixture (seed/test input)
+- `backend\data\ai\adaptive_features_v20260220205056.jsonl` — Backend data fixture (seed/test input)
+- `backend\data\ai\adaptive_features_v20260222201337.csv` — Backend data fixture (seed/test input)
+- `backend\data\ai\adaptive_features_v20260222201337.jsonl` — Backend data fixture (seed/test input)
+- `backend\data\ai\adaptive_features_v20260223085242.csv` — Backend data fixture (seed/test input)
+- `backend\data\ai\adaptive_features_v20260223085242.jsonl` — Backend data fixture (seed/test input)
+- `backend\data\ai\adaptive_features_v20260228201802.csv` — Backend data fixture (seed/test input)
+- `backend\data\ai\adaptive_features_v20260228201802.jsonl` — Backend data fixture (seed/test input)
+- `backend\data\ai\adaptive_features_v20260301134135.csv` — Backend data fixture (seed/test input)
+- `backend\data\ai\adaptive_features_v20260301134135.jsonl` — Backend data fixture (seed/test input)
+- `backend\data\ai\adaptive_features_v20260303082357.csv` — Backend data fixture (seed/test input)
+- `backend\data\ai\adaptive_features_v20260303082357.jsonl` — Backend data fixture (seed/test input)
+- `backend\data\ai\adaptive_features_v20260313140112.csv` — Backend data fixture (seed/test input)
+- `backend\data\ai\adaptive_features_v20260313140112.jsonl` — Backend data fixture (seed/test input)
+- `backend\data\ai\adaptive_features_v20260314084211.csv` — Backend data fixture (seed/test input)
+- `backend\data\ai\adaptive_features_v20260314084211.jsonl` — Backend data fixture (seed/test input)
+- `backend\data\ai\anomaly_dataset_v20260220104012.csv` — Backend data fixture (seed/test input)
+- `backend\data\ai\anomaly_dataset_v20260220104012.jsonl` — Backend data fixture (seed/test input)
+- `backend\data\ai\anomaly_dataset_v20260220205056.csv` — Backend data fixture (seed/test input)
+- `backend\data\ai\anomaly_dataset_v20260220205056.jsonl` — Backend data fixture (seed/test input)
+- `backend\data\ai\anomaly_dataset_v20260222201337.csv` — Backend data fixture (seed/test input)
+- `backend\data\ai\anomaly_dataset_v20260222201337.jsonl` — Backend data fixture (seed/test input)
+- `backend\data\ai\anomaly_dataset_v20260223085242.csv` — Backend data fixture (seed/test input)
+- `backend\data\ai\anomaly_dataset_v20260223085242.jsonl` — Backend data fixture (seed/test input)
+- `backend\data\ai\anomaly_dataset_v20260228201802.csv` — Backend data fixture (seed/test input)
+- `backend\data\ai\anomaly_dataset_v20260228201802.jsonl` — Backend data fixture (seed/test input)
+- `backend\data\ai\anomaly_dataset_v20260301134135.csv` — Backend data fixture (seed/test input)
+- `backend\data\ai\anomaly_dataset_v20260301134135.jsonl` — Backend data fixture (seed/test input)
+- `backend\data\ai\anomaly_dataset_v20260303082357.csv` — Backend data fixture (seed/test input)
+- `backend\data\ai\anomaly_dataset_v20260303082357.jsonl` — Backend data fixture (seed/test input)
+- `backend\data\ai\anomaly_dataset_v20260313140112.csv` — Backend data fixture (seed/test input)
+- `backend\data\ai\anomaly_dataset_v20260313140112.jsonl` — Backend data fixture (seed/test input)
+- `backend\data\ai\anomaly_dataset_v20260314084211.csv` — Backend data fixture (seed/test input)
+- `backend\data\ai\anomaly_dataset_v20260314084211.jsonl` — Backend data fixture (seed/test input)
+- `backend\data\ai\consumption_dataset_20260218.csv` — Backend data fixture (seed/test input)
+- `backend\data\ai\consumption_dataset_20260218.jsonl` — Backend data fixture (seed/test input)
+- `backend\data\ai\consumption_dataset_v20260218085748.csv` — Backend data fixture (seed/test input)
+- `backend\data\ai\consumption_dataset_v20260218085748.jsonl` — Backend data fixture (seed/test input)
+- `backend\data\ai\consumption_dataset_v20260218093205.csv` — Backend data fixture (seed/test input)
+- `backend\data\ai\consumption_dataset_v20260218093205.jsonl` — Backend data fixture (seed/test input)
+- `backend\data\ai\consumption_dataset_v20260218094543.csv` — Backend data fixture (seed/test input)
+- `backend\data\ai\consumption_dataset_v20260218094543.jsonl` — Backend data fixture (seed/test input)
+- `backend\data\ai\consumption_dataset_v20260218095317.csv` — Backend data fixture (seed/test input)
+- `backend\data\ai\consumption_dataset_v20260218095317.jsonl` — Backend data fixture (seed/test input)
+- `backend\data\ai\consumption_dataset_v20260218100542.csv` — Backend data fixture (seed/test input)
+- `backend\data\ai\consumption_dataset_v20260218100542.jsonl` — Backend data fixture (seed/test input)
+- `backend\data\ai\consumption_dataset_v20260218161557.csv` — Backend data fixture (seed/test input)
+- `backend\data\ai\consumption_dataset_v20260218161557.jsonl` — Backend data fixture (seed/test input)
+- `backend\data\ai\consumption_dataset_v20260219075941.csv` — Backend data fixture (seed/test input)
+- `backend\data\ai\consumption_dataset_v20260219075941.jsonl` — Backend data fixture (seed/test input)
+- `backend\data\ai\consumption_dataset_v20260219192853.csv` — Backend data fixture (seed/test input)
+- `backend\data\ai\consumption_dataset_v20260219192853.jsonl` — Backend data fixture (seed/test input)
+- `backend\data\ai\consumption_dataset_v20260220084059.csv` — Backend data fixture (seed/test input)
+- `backend\data\ai\consumption_dataset_v20260220084059.jsonl` — Backend data fixture (seed/test input)
+- `backend\data\ai\consumption_dataset_v20260220104012.csv` — Backend data fixture (seed/test input)
+- `backend\data\ai\consumption_dataset_v20260220104012.jsonl` — Backend data fixture (seed/test input)
+- `backend\data\ai\consumption_dataset_v20260220205056.csv` — Backend data fixture (seed/test input)
+- `backend\data\ai\consumption_dataset_v20260220205056.jsonl` — Backend data fixture (seed/test input)
+- `backend\data\ai\consumption_dataset_v20260222201337.csv` — Backend data fixture (seed/test input)
+- `backend\data\ai\consumption_dataset_v20260222201337.jsonl` — Backend data fixture (seed/test input)
+- `backend\data\ai\consumption_dataset_v20260223085242.csv` — Backend data fixture (seed/test input)
+- `backend\data\ai\consumption_dataset_v20260223085242.jsonl` — Backend data fixture (seed/test input)
+- `backend\data\ai\consumption_dataset_v20260228201802.csv` — Backend data fixture (seed/test input)
+- `backend\data\ai\consumption_dataset_v20260228201802.jsonl` — Backend data fixture (seed/test input)
+- `backend\data\ai\consumption_dataset_v20260301134135.csv` — Backend data fixture (seed/test input)
+- `backend\data\ai\consumption_dataset_v20260301134135.jsonl` — Backend data fixture (seed/test input)
+- `backend\data\ai\consumption_dataset_v20260303082357.csv` — Backend data fixture (seed/test input)
+- `backend\data\ai\consumption_dataset_v20260303082357.jsonl` — Backend data fixture (seed/test input)
+- `backend\data\ai\consumption_dataset_v20260313140112.csv` — Backend data fixture (seed/test input)
+- `backend\data\ai\consumption_dataset_v20260313140112.jsonl` — Backend data fixture (seed/test input)
+- `backend\data\ai\consumption_dataset_v20260314084211.csv` — Backend data fixture (seed/test input)
+- `backend\data\ai\consumption_dataset_v20260314084211.jsonl` — Backend data fixture (seed/test input)
+- `backend\data\ai\stockout_dataset_20260218.csv` — Backend data fixture (seed/test input)
+- `backend\data\ai\stockout_dataset_20260218.jsonl` — Backend data fixture (seed/test input)
+- `backend\data\ai\stockout_dataset_v20260218085748.csv` — Backend data fixture (seed/test input)
+- `backend\data\ai\stockout_dataset_v20260218085748.jsonl` — Backend data fixture (seed/test input)
+- `backend\data\ai\stockout_dataset_v20260218093205.csv` — Backend data fixture (seed/test input)
+- `backend\data\ai\stockout_dataset_v20260218093205.jsonl` — Backend data fixture (seed/test input)
+- `backend\data\ai\stockout_dataset_v20260218094543.csv` — Backend data fixture (seed/test input)
+- `backend\data\ai\stockout_dataset_v20260218094543.jsonl` — Backend data fixture (seed/test input)
+- `backend\data\ai\stockout_dataset_v20260218095317.csv` — Backend data fixture (seed/test input)
+- `backend\data\ai\stockout_dataset_v20260218095317.jsonl` — Backend data fixture (seed/test input)
+- `backend\data\ai\stockout_dataset_v20260218100542.csv` — Backend data fixture (seed/test input)
+- `backend\data\ai\stockout_dataset_v20260218100542.jsonl` — Backend data fixture (seed/test input)
+- `backend\data\ai\stockout_dataset_v20260218161557.csv` — Backend data fixture (seed/test input)
+- `backend\data\ai\stockout_dataset_v20260218161557.jsonl` — Backend data fixture (seed/test input)
+- `backend\data\ai\stockout_dataset_v20260219075941.csv` — Backend data fixture (seed/test input)
+- `backend\data\ai\stockout_dataset_v20260219075941.jsonl` — Backend data fixture (seed/test input)
+- `backend\data\ai\stockout_dataset_v20260219192853.csv` — Backend data fixture (seed/test input)
+- `backend\data\ai\stockout_dataset_v20260219192853.jsonl` — Backend data fixture (seed/test input)
+- `backend\data\ai\stockout_dataset_v20260220084059.csv` — Backend data fixture (seed/test input)
+- `backend\data\ai\stockout_dataset_v20260220084059.jsonl` — Backend data fixture (seed/test input)
+- `backend\data\ai\stockout_dataset_v20260220104012.csv` — Backend data fixture (seed/test input)
+- `backend\data\ai\stockout_dataset_v20260220104012.jsonl` — Backend data fixture (seed/test input)
+- `backend\data\ai\stockout_dataset_v20260220205056.csv` — Backend data fixture (seed/test input)
+- `backend\data\ai\stockout_dataset_v20260220205056.jsonl` — Backend data fixture (seed/test input)
+- `backend\data\ai\stockout_dataset_v20260222201337.csv` — Backend data fixture (seed/test input)
+- `backend\data\ai\stockout_dataset_v20260222201337.jsonl` — Backend data fixture (seed/test input)
+- `backend\data\ai\stockout_dataset_v20260223085242.csv` — Backend data fixture (seed/test input)
+- `backend\data\ai\stockout_dataset_v20260223085242.jsonl` — Backend data fixture (seed/test input)
+- `backend\data\ai\stockout_dataset_v20260228201802.csv` — Backend data fixture (seed/test input)
+- `backend\data\ai\stockout_dataset_v20260228201802.jsonl` — Backend data fixture (seed/test input)
+- `backend\data\ai\stockout_dataset_v20260301134135.csv` — Backend data fixture (seed/test input)
+- `backend\data\ai\stockout_dataset_v20260301134135.jsonl` — Backend data fixture (seed/test input)
+- `backend\data\ai\stockout_dataset_v20260303082357.csv` — Backend data fixture (seed/test input)
+- `backend\data\ai\stockout_dataset_v20260303082357.jsonl` — Backend data fixture (seed/test input)
+- `backend\data\ai\stockout_dataset_v20260313140112.csv` — Backend data fixture (seed/test input)
+- `backend\data\ai\stockout_dataset_v20260313140112.jsonl` — Backend data fixture (seed/test input)
+- `backend\data\ai\stockout_dataset_v20260314084211.csv` — Backend data fixture (seed/test input)
+- `backend\data\ai\stockout_dataset_v20260314084211.jsonl` — Backend data fixture (seed/test input)
+- `backend\db.js` — JavaScript/React source
+- `backend\docker-compose.yml` — Docker Compose: backend + mongo + redis
+- `backend\Dockerfile` — Docker build instructions
+- `backend\docs\ARCHITECTURE.md` — Documentation
+- `backend\docs\BUSINESS_RULES.md` — Documentation
+- `backend\docs\ERROR_CODES.md` — Documentation
+- `backend\docs\GEMINI_API.md` — Documentation
+- `backend\docs\QR_SECURITY.md` — Documentation
+- `backend\docs\RELEASE_CHECKLIST.md` — Documentation
+- `backend\loadEnv.js` — JavaScript/React source
+- `backend\middlewares\idempotencyGuard.js` — Express middleware (auth, context, guards)
+- `backend\middlewares\requestContext.js` — Express middleware (auth, context, guards)
+- `backend\middlewares\requireAuth.js` — Express middleware (auth, context, guards)
+- `backend\middlewares\requirePermission.js` — Express middleware (auth, context, guards)
+- `backend\middlewares\requireRole.js` — Express middleware (auth, context, guards)
+- `backend\middlewares\strictBody.js` — Express middleware (auth, context, guards)
+- `backend\models\AIAlert.js` — Mongoose model (MongoDB collection schema)
+- `backend\models\AIPrediction.js` — Mongoose model (MongoDB collection schema)
+- `backend\models\AIRecommendationTrace.js` — Mongoose model (MongoDB collection schema)
+- `backend\models\AppSetting.js` — Mongoose model (MongoDB collection schema)
+- `backend\models\Category.js` — Mongoose model (MongoDB collection schema)
+- `backend\models\ChatConversation.js` — Mongoose model (MongoDB collection schema)
+- `backend\models\ChatMessage.js` — Mongoose model (MongoDB collection schema)
+- `backend\models\FifoScanAudit.js` — Mongoose model (MongoDB collection schema)
+- `backend\models\History.js` — Mongoose model (MongoDB collection schema)
+- `backend\models\IdempotencyKey.js` — Mongoose model (MongoDB collection schema)
+- `backend\models\Laboratory.js` — Mongoose model (MongoDB collection schema)
+- `backend\models\Location.js` — Mongoose model (MongoDB collection schema)
+- `backend\models\Notification.js` — Mongoose model (MongoDB collection schema)
+- `backend\models\PasswordReset.js` — Mongoose model (MongoDB collection schema)
+- `backend\models\Product.js` — Mongoose model (MongoDB collection schema)
+- `backend\models\Request.js` — Mongoose model (MongoDB collection schema)
+- `backend\models\SecurityAudit.js` — Mongoose model (MongoDB collection schema)
+- `backend\models\Sequence.js` — Mongoose model (MongoDB collection schema)
+- `backend\models\StockEntry.js` — Mongoose model (MongoDB collection schema)
+- `backend\models\StockExit.js` — Mongoose model (MongoDB collection schema)
+- `backend\models\StockLot.js` — Mongoose model (MongoDB collection schema)
+- `backend\models\StockRule.js` — Mongoose model (MongoDB collection schema)
+- `backend\models\User.js` — Mongoose model (MongoDB collection schema)
+- `backend\models\UserSession.js` — Mongoose model (MongoDB collection schema)
+- `backend\package.json` — Project file
+- `backend\package-lock.json` — Project file
+- `backend\README.md` — Documentation
+- `backend\reset-demandeur.js` — JavaScript/React source
+- `backend\reset-known-passwords.js` — JavaScript/React source
+- `backend\routes\ai.js` — Express router (API endpoints for a domain)
+- `backend\routes\auth.js` — Express router (API endpoints for a domain)
+- `backend\routes\categories.js` — Express router (API endpoints for a domain)
+- `backend\routes\chat.js` — Express router (API endpoints for a domain)
+- `backend\routes\files.js` — Express router (API endpoints for a domain)
+- `backend\routes\history.js` — Express router (API endpoints for a domain)
+- `backend\routes\laboratories.js` — Express router (API endpoints for a domain)
+- `backend\routes\locations.js` — Express router (API endpoints for a domain)
+- `backend\routes\notifications.js` — Express router (API endpoints for a domain)
+- `backend\routes\products.js` — Express router (API endpoints for a domain)
+- `backend\routes\reports.js` — Express router (API endpoints for a domain)
+- `backend\routes\requests.js` — Express router (API endpoints for a domain)
+- `backend\routes\security-audit.js` — Express router (API endpoints for a domain)
+- `backend\routes\settings.js` — Express router (API endpoints for a domain)
+- `backend\routes\stock.js` — Express router (API endpoints for a domain)
+- `backend\routes\users.js` — Express router (API endpoints for a domain)
+- `backend\scripts\backfill-request-fields.js` — Backend script (tests, seeds, maintenance)
+- `backend\scripts\export-ai-dataset.js` — Backend script (tests, seeds, maintenance)
+- `backend\scripts\seed-magasinier-large-data.js` — Backend script (tests, seeds, maintenance)
+- `backend\scripts\test-ai-chatbot-config.js` — Backend script (tests, seeds, maintenance)
+- `backend\scripts\test-auth-recovery-flow.js` — Backend script (tests, seeds, maintenance)
+- `backend\scripts\test-critical-flow.js` — Backend script (tests, seeds, maintenance)
+- `backend\scripts\test-guardrails.js` — Backend script (tests, seeds, maintenance)
+- `backend\seed-human-users.js` — JavaScript/React source
+- `backend\seed-roles-real.js` — JavaScript/React source
+- `backend\seed-user.js` — JavaScript/React source
+- `backend\server.js` — JavaScript/React source
+- `backend\services\adminMailDigestService.js` — Backend service (business logic / integrations)
+- `backend\services\aiGovernanceService.js` — Backend service (business logic / integrations)
+- `backend\services\aiModelService.js` — Backend service (business logic / integrations)
+- `backend\services\alertService.js` — Backend service (business logic / integrations)
+- `backend\services\domainCleanupService.js` — Backend service (business logic / integrations)
+- `backend\services\geminiService.js` — Backend service (business logic / integrations)
+- `backend\services\mailerService.js` — Backend service (business logic / integrations)
+- `backend\services\mailQueueService.js` — Backend service (business logic / integrations)
+- `backend\services\mailTemplates.js` — Backend service (business logic / integrations)
+- `backend\services\qrTokenService.js` — Backend service (business logic / integrations)
+- `backend\services\securityAuditService.js` — Backend service (business logic / integrations)
+- `backend\services\transactionService.js` — Backend service (business logic / integrations)
+- `backend\services\userPreferencesService.js` — Backend service (business logic / integrations)
+- `backend\tmp-list-users.js` — JavaScript/React source
+- `backend\update-email.js` — JavaScript/React source
+- `backend\uploads\1771327158617-24c23b43-b3cb-4f6b-b225-61f15d662ad8.jpg` — Uploaded files storage (dev/local)
+- `backend\uploads\1771337623922-10ecf959-50df-460c-95dd-c4e7a785fb51.jpeg` — Uploaded files storage (dev/local)
+- `backend\uploads\1771337631234-3fe35501-ba6c-426a-ab59-28ecf7bb5515.jpeg` — Uploaded files storage (dev/local)
+- `backend\uploads\1771620899149-d65ccc9d-0d5e-444c-9bbf-bd1f791572a2.jpg` — Uploaded files storage (dev/local)
+- `backend\utils\fileSecurity.js` — Backend helper (logger, formatting, etc.)
+- `backend\utils\logger.js` — Backend helper (logger, formatting, etc.)
+- `backend\utils\validation.js` — Backend helper (logger, formatting, etc.)
+- `diagrams\dcu draw io numero 1.png` — Project file
+- `diagrams\DIAGRAMME DE CLASSE VERSION 1.drawio` — Project file
+- `diagrams\DIAGRAMME DE CLASSE VERSION 1.png` — Project file
+- `docs\file-inventory.md` — Documentation
+- `package.json` — Frontend (React/CRA) dependencies & scripts
+- `package-lock.json` — Frontend lockfile (npm)
+- `public\favicon.ico` — Project file
+- `public\index.html` — Project file
+- `public\logo192.png` — Project file
+- `public\logo512.png` — Project file
+- `public\manifest.json` — Project file
+- `public\robots.txt` — Project file
+- `rapport00.pdf` — PDF document
+- `README.md` — Frontend README (Create React App template)
+- `src\App.css` — Stylesheet
+- `src\App.js` — Frontend main router + auth session logic
+- `src\App.test.js` — JavaScript/React source
+- `src\assets\logoETAP.png` — Frontend static asset (image/icon)
+- `src\components\data\mockData.js` — React component (UI building block)
+- `src\components\demandeur\SidebarDem.css` — React component (UI building block)
+- `src\components\demandeur\SidebarDem.jsx` — React component (UI building block)
+- `src\components\magasinier\ForgotPassword.css` — React component (UI building block)
+- `src\components\magasinier\ForgotPassword.jsx` — React component (UI building block)
+- `src\components\magasinier\LoginMag.css` — React component (UI building block)
+- `src\components\magasinier\LoginMag.jsx` — React component (UI building block)
+- `src\components\magasinier\SidebarMag.css` — React component (UI building block)
+- `src\components\magasinier\SidebarMag.jsx` — React component (UI building block)
+- `src\components\magasinier\SplashScreen.css` — React component (UI building block)
+- `src\components\magasinier\SplashScreen.jsx` — React component (UI building block)
+- `src\components\responsable\SidebarResp.css` — React component (UI building block)
+- `src\components\responsable\SidebarResp.jsx` — React component (UI building block)
+- `src\components\shared\AppTable.css` — React component (UI building block)
+- `src\components\shared\AppTable.jsx` — React component (UI building block)
+- `src\components\shared\ForgotPassword.css` — React component (UI building block)
+- `src\components\shared\ForgotPassword.jsx` — React component (UI building block)
+- `src\components\shared\HeaderMag.css` — React component (UI building block)
+- `src\components\shared\HeaderMag.jsx` — React component (UI building block)
+- `src\components\shared\HeaderPage.css` — React component (UI building block)
+- `src\components\shared\HeaderPage.jsx` — React component (UI building block)
+- `src\components\shared\HistoryTable.css` — React component (UI building block)
+- `src\components\shared\HistoryTable.jsx` — React component (UI building block)
+- `src\components\shared\HoverCard.css` — React component (UI building block)
+- `src\components\shared\HoverCard.jsx` — React component (UI building block)
+- `src\components\shared\HoverCardExamples.jsx` — React component (UI building block)
+- `src\components\shared\InlineQrScanner.css` — React component (UI building block)
+- `src\components\shared\InlineQrScanner.jsx` — React component (UI building block)
+- `src\components\shared\LoadingSpinner.css` — React component (UI building block)
+- `src\components\shared\LoadingSpinner.jsx` — React component (UI building block)
+- `src\components\shared\LoginPage.css` — React component (UI building block)
+- `src\components\shared\LoginPage.jsx` — React component (UI building block)
+- `src\components\shared\ProduitsMag.css` — React component (UI building block)
+- `src\components\shared\ProduitsMag.jsx` — React component (UI building block)
+- `src\components\shared\ProtectedPage.jsx` — React component (UI building block)
+- `src\components\shared\QrReader.jsx` — React component (UI building block)
+- `src\components\shared\SidebarMag.css` — React component (UI building block)
+- `src\components\shared\SidebarMag.jsx` — React component (UI building block)
+- `src\components\shared\SplashScreen.css` — React component (UI building block)
+- `src\components\shared\SplashScreen.jsx` — React component (UI building block)
+- `src\components\shared\StockModal.css` — React component (UI building block)
+- `src\components\shared\StockModal.jsx` — React component (UI building block)
+- `src\components\shared\Toast.css` — React component (UI building block)
+- `src\components\shared\Toast.jsx` — React component (UI building block)
+- `src\constants\permissions.js` — Frontend constants (roles, config, etc.)
+- `src\constants\roles.js` — Frontend constants (roles, config, etc.)
+- `src\ErrorBoundary.jsx` — JavaScript/React source
+- `src\hooks\useProtectedFileUrl.js` — Custom React hook
+- `src\hooks\useTheme.js` — Custom React hook
+- `src\index.css` — Stylesheet
+- `src\index.js` — Frontend entrypoint: mounts <App />
+- `src\logo.svg` — Project file
+- `src\main.jsx` — JavaScript/React source
+- `src\pages\demandeur\MesDemandes.css` — React page (route screen)
+- `src\pages\demandeur\MesDemandes.jsx` — React page (route screen)
+- `src\pages\demandeur\ProduitsDem.css` — React page (route screen)
+- `src\pages\demandeur\ProduitsDem.jsx` — React page (route screen)
+- `src\pages\magasinier\AjouterProduit.css` — React page (route screen)
+- `src\pages\magasinier\AjouterProduit.jsx` — React page (route screen)
+- `src\pages\magasinier\AuditFifoMag.css` — React page (route screen)
+- `src\pages\magasinier\AuditFifoMag.jsx` — React page (route screen)
+- `src\pages\magasinier\ChatMag.css` — React page (route screen)
+- `src\pages\magasinier\ChatMag.jsx` — React page (route screen)
+- `src\pages\magasinier\EntreeStock.css` — React page (route screen)
+- `src\pages\magasinier\EntreeStock.jsx` — React page (route screen)
+- `src\pages\magasinier\HistoriqueMag.css` — React page (route screen)
+- `src\pages\magasinier\HistoriqueMag.jsx` — React page (route screen)
+- `src\pages\magasinier\ListeDemandes.css` — React page (route screen)
+- `src\pages\magasinier\ListeDemandes.jsx` — React page (route screen)
+- `src\pages\magasinier\ParametresMag.css` — React page (route screen)
+- `src\pages\magasinier\ParametresMag.jsx` — React page (route screen)
+- `src\pages\magasinier\ProduitsMag.css` — React page (route screen)
+- `src\pages\magasinier\ProduitsMag.jsx` — React page (route screen)
+- `src\pages\magasinier\SortieStock.css` — React page (route screen)
+- `src\pages\magasinier\SortieStock.jsx` — React page (route screen)
+- `src\pages\magasinier\VoirDetails.css` — React page (route screen)
+- `src\pages\magasinier\VoirDetails.jsx` — React page (route screen)
+- `src\pages\NotFound.jsx` — React page (route screen)
+- `src\pages\responsable\AnalyseResp.css` — React page (route screen)
+- `src\pages\responsable\AnalyseResp.jsx` — React page (route screen)
+- `src\pages\responsable\ChatbotResp.css` — React page (route screen)
+- `src\pages\responsable\ChatbotResp.jsx` — React page (route screen)
+- `src\pages\responsable\ChatResp.css` — React page (route screen)
+- `src\pages\responsable\ChatResp.jsx` — React page (route screen)
+- `src\pages\responsable\DashboardResp.css` — React page (route screen)
+- `src\pages\responsable\DashboardResp.jsx` — React page (route screen)
+- `src\pages\responsable\HistoriqueResp.css` — React page (route screen)
+- `src\pages\responsable\HistoriqueResp.jsx` — React page (route screen)
+- `src\pages\responsable\ParametresResp.css` — React page (route screen)
+- `src\pages\responsable\ParametresResp.jsx` — React page (route screen)
+- `src\pages\responsable\SurveillanceResp.css` — React page (route screen)
+- `src\pages\responsable\SurveillanceResp.jsx` — React page (route screen)
+- `src\pages\responsable\TransactionsResp.css` — React page (route screen)
+- `src\pages\responsable\TransactionsResp.jsx` — React page (route screen)
+- `src\pages\RoleSelection.css` — React page (route screen)
+- `src\pages\RoleSelection.jsx` — React page (route screen)
+- `src\ProtectedRoute.jsx` — JavaScript/React source
+- `src\reportWebVitals.js` — JavaScript/React source
+- `src\services\api.js` — Frontend API client (fetch wrapper, auth refresh, caching)
+- `src\setupTests.js` — JavaScript/React source
+- `src\utils\uiLanguage.js` — Frontend utility function(s)

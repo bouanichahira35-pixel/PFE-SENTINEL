@@ -35,3 +35,6 @@ backend/data/ai/adaptive_features_*.jsonl
 backend/data/ai/_tmp/
 backend/uploads/*
 !backend/uploads/.gitkeep
+
+# local report artifacts
+rapport00.pdf

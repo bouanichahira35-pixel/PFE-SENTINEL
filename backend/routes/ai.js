@@ -544,7 +544,7 @@ router.post('/assistant/ask', requireAuth, strictBody(['question', 'history', 'm
     if (!ensureResponsable(req, res)) return;
     const aiConfig = await getAiConfig();
     if (!ensureAiPredictionsEnabled(aiConfig, res)) return;
-    if (!isGeminiConfigured()) return sendGeminiUnavailable(res);
+    const geminiConfigured = isGeminiConfigured();
 
     const questionRaw = String(req.body?.question || '').trim();
     if (!questionRaw) return res.status(400).json({ error: 'question obligatoire' });
@@ -556,8 +556,8 @@ router.post('/assistant/ask', requireAuth, strictBody(['question', 'history', 'm
     const assistant = await askResponsableAssistant({
       question: questionRaw,
       history: Array.isArray(req.body?.history) ? req.body.history : [],
-      use_gemini: true,
-      strict_gemini: true,
+      use_gemini: geminiConfigured,
+      strict_gemini: geminiConfigured,
       mode,
       context: {
         stockout_top: signals.stockout.slice(0, 5),
@@ -574,7 +574,7 @@ router.post('/assistant/ask', requireAuth, strictBody(['question', 'history', 'm
       mode: assistant.mode || mode,
       ai_config: aiConfig,
       partial_warnings: signals.warnings,
-      gemini_configured: true,
+      gemini_configured: geminiConfigured,
     });
   } catch (err) {
     if (isGeminiUpstreamError(err)) {
@@ -648,7 +648,7 @@ router.post('/assistant/voice-ask', requireAuth, strictBody(['audio_base64', 'mi
       question: transcript,
       history: Array.isArray(req.body?.history) ? req.body.history : [],
       use_gemini: true,
-      strict_gemini: true,
+      strict_gemini: false,
       mode,
       context: {
         stockout_top: signals.stockout.slice(0, 5),

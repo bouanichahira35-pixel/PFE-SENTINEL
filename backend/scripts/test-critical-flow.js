@@ -59,7 +59,7 @@ async function login(client, creds) {
 
 async function run() {
   // Ensure known test users/passwords exist before login checks.
-  const seedRun = spawnSync('node', ['seed-human-users.js'], {
+  const seedRun = spawnSync(process.execPath, ['seed-human-users.js'], {
     cwd: process.cwd(),
     env: process.env,
     stdio: 'ignore',
@@ -73,14 +73,11 @@ async function run() {
     PORT: String(TEST_PORT),
     AI_AUTO_TRAIN_ON_BOOT: 'false',
   };
-  const server = spawn('node', ['server.js'], {
+  const server = spawn(process.execPath, ['server.js'], {
     cwd: process.cwd(),
     env,
-    stdio: ['ignore', 'pipe', 'pipe'],
+    stdio: ['ignore', 'ignore', 'ignore'],
   });
-
-  server.stdout.on('data', () => {});
-  server.stderr.on('data', () => {});
 
   const client = axios.create({ baseURL: API_BASE, timeout: 15000 });
 

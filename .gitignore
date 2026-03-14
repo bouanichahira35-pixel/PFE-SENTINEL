@@ -32,5 +32,6 @@ backend/data/ai/*_v*.csv
 backend/data/ai/*_v*.jsonl
 backend/data/ai/adaptive_features_*.csv
 backend/data/ai/adaptive_features_*.jsonl
+backend/data/ai/_tmp/
 backend/uploads/*
 !backend/uploads/.gitkeep

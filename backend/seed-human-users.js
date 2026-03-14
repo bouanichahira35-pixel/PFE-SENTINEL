@@ -15,6 +15,12 @@ function getTestEnv(name, fallbackForLocal) {
 }
 
 (async () => {
+  try {
+    await User.db?.asPromise?.();
+  } catch {
+    // best-effort: mongoose connection is initialized by ./db
+  }
+
   const users = [
     {
       username: 'Sarra Ben Youssef',
@@ -41,31 +47,60 @@ function getTestEnv(name, fallbackForLocal) {
 
   for (const u of users) {
     const hash = await bcrypt.hash(u.password, 12);
-    const existing = await User.findOne({
-      $or: [
-        { email: u.email },
-        { username: u.username },
-      ],
-    }).select('_id');
+    const normalizedEmail = String(u.email || '').trim().toLowerCase();
+    const normalizedUsername = String(u.username || '').trim();
+
+    let existing = null;
+    if (normalizedEmail) {
+      existing = await User.findOne({ email: normalizedEmail }).select('_id email username');
+    }
+    if (!existing && normalizedUsername) {
+      existing = await User.findOne({ username: normalizedUsername }).select('_id email username');
+    }
 
     if (existing?._id) {
-      await User.updateOne(
-        { _id: existing._id },
-        {
-          $set: {
-            username: u.username,
-            email: u.email,
-            telephone: u.telephone,
-            role: u.role,
-            status: 'active',
-            password_hash: hash
+      const patch = {
+        telephone: u.telephone,
+        role: u.role,
+        status: 'active',
+        password_hash: hash,
+      };
+
+      // Email is unique: only set it if it is either unchanged or unused.
+      if (normalizedEmail && String(existing.email || '').toLowerCase() === normalizedEmail) {
+        patch.email = normalizedEmail;
+      } else if (normalizedEmail) {
+        const emailTaken = await User.findOne({ email: normalizedEmail }).select('_id');
+        if (!emailTaken?._id) {
+          patch.email = normalizedEmail;
+        }
+      }
+
+      if (normalizedUsername) {
+        const currentUsername = String(existing.username || '').trim();
+        if (currentUsername === normalizedUsername) {
+          patch.username = normalizedUsername;
+        } else {
+          const usernameTaken = await User.findOne({ username: normalizedUsername }).select('_id');
+          if (!usernameTaken?._id || String(usernameTaken._id) === String(existing._id)) {
+            patch.username = normalizedUsername;
           }
         }
-      );
+      }
+
+      await User.updateOne({ _id: existing._id }, { $set: patch });
     } else {
+      let createUsername = normalizedUsername || 'Utilisateur';
+      if (createUsername) {
+        const taken = await User.findOne({ username: createUsername }).select('_id');
+        if (taken?._id) {
+          createUsername = `${createUsername} ${String(Date.now()).slice(-5)}`;
+        }
+      }
+
       await User.create({
-        username: u.username,
-        email: u.email,
+        username: createUsername,
+        email: normalizedEmail,
         telephone: u.telephone,
         role: u.role,
         status: 'active',

@@ -4,12 +4,15 @@ const { spawnSync } = require('child_process');
 const Product = require('../models/Product');
 const History = require('../models/History');
 const StockEntry = require('../models/StockEntry');
+const { isGeminiConfigured, generateGeminiContent } = require('./geminiService');
 
 const AI_DATA_DIR = path.join(process.cwd(), 'data', 'ai');
 const AI_PY_DIR = path.join(process.cwd(), 'ai_py');
 const AI_TMP_DIR = path.join(AI_DATA_DIR, '_tmp');
 const PYTHON_BIN = process.env.AI_PYTHON_BIN || 'python';
 const DAY_MS = 24 * 60 * 60 * 1000;
+
+let pythonDisabled = null;
 
 function asPositiveInt(value, fallback) {
   const n = Number(value);
@@ -47,6 +50,12 @@ function safeDiv(a, b, fallback = 0) {
   return a / b;
 }
 
+function clamp(value, low, high) {
+  const n = Number(value);
+  if (!Number.isFinite(n)) return low;
+  return Math.max(low, Math.min(high, n));
+}
+
 function rangeSum(arr, start, end) {
   let s = 0;
   for (let i = Math.max(0, start); i <= Math.min(arr.length - 1, end); i += 1) s += Number(arr[i] || 0);
@@ -59,6 +68,13 @@ function makeVersionTag(now = new Date()) {
 }
 
 function runPythonScript(scriptName, payload) {
+  if (pythonDisabled) {
+    const err = new Error(pythonDisabled.message);
+    err.code = pythonDisabled.code;
+    err.details = pythonDisabled.details;
+    throw err;
+  }
+
   fs.mkdirSync(AI_TMP_DIR, { recursive: true });
   const stamp = `${Date.now()}_${Math.floor(Math.random() * 100000)}`;
   const inputPath = path.join(AI_TMP_DIR, `${scriptName.replace('.py', '')}_${stamp}_in.json`);
@@ -67,13 +83,28 @@ function runPythonScript(scriptName, payload) {
 
   fs.writeFileSync(inputPath, JSON.stringify(payload), 'utf8');
   const proc = spawnSync(PYTHON_BIN, [scriptPath, '--input', inputPath, '--output', outputPath], {
-    encoding: 'utf8',
+    // In some locked-down Windows environments, piping stdio can fail with EPERM.
+    // We rely on the JSON output file for results.
+    stdio: ['ignore', 'ignore', 'ignore'],
     cwd: process.cwd(),
+    windowsHide: true,
   });
 
   try {
+    if (proc.error) {
+      const msg = `Python spawn failed (${proc.error.code || 'UNKNOWN'}): ${proc.error.message || scriptName}`;
+      pythonDisabled = {
+        code: 'PYTHON_UNAVAILABLE',
+        message: msg,
+        details: 'Backend IA: configurez `AI_PYTHON_BIN` vers un python executable, ou lancez via `backend/docker-compose.yml`.',
+      };
+      const err = new Error(msg);
+      err.code = pythonDisabled.code;
+      err.details = pythonDisabled.details;
+      throw err;
+    }
     if (proc.status !== 0) {
-      throw new Error(proc.stderr || proc.stdout || `Python script failed: ${scriptName}`);
+      throw new Error(`Python script failed: ${scriptName}`);
     }
     if (!fs.existsSync(outputPath)) {
       throw new Error(`Python script did not produce output: ${scriptName}`);
@@ -84,6 +115,183 @@ function runPythonScript(scriptName, payload) {
     try { fs.unlinkSync(inputPath); } catch (_) {}
     try { fs.unlinkSync(outputPath); } catch (_) {}
   }
+}
+
+function expectedDailySignal(features) {
+  const avg7 = Number(features?.avg_exit_7d || 0);
+  const avg30 = Number(features?.avg_exit_30d || 0);
+  const trend = Number(features?.trend_exit_14d || 0);
+  return Math.max(0, avg7 * 0.55 + avg30 * 0.35 + Math.max(0, trend) * 0.10);
+}
+
+function fallbackPredictStockoutOne(features, horizonDays) {
+  const horizon = Math.max(1, Math.min(30, asPositiveInt(horizonDays, 7)));
+  const stockAnchor = Number(features?.stock_anchor || 0);
+  const threshold = Math.max(0, Number(features?.seuil_minimum || 0));
+  const avg30 = Number(features?.avg_exit_30d || 0);
+  const vol30 = Number(features?.volatility_exit_30d || 0);
+  const trend = Number(features?.trend_exit_14d || 0);
+  const lead = Math.max(1, Number(features?.supplier_lead_time_days || 7));
+
+  const daily = expectedDailySignal(features);
+  const expectedNeed = daily * horizon;
+  const projectedStockEnd = stockAnchor - expectedNeed;
+  const daysCover = safeDiv(stockAnchor, Math.max(daily, 0.1), 9999);
+  const cv = safeDiv(vol30, Math.max(avg30, 0.1), 0);
+
+  const stockBelowThreshold = stockAnchor <= threshold ? 1 : 0;
+  const projectedBelowThreshold = projectedStockEnd <= threshold ? 1 : 0;
+  const coverPressure = clamp(safeDiv(Math.max(0, horizon - daysCover), Math.max(1, horizon), 0), 0, 1);
+  const variabilityPressure = clamp(safeDiv(cv, 1.5, 0), 0, 1);
+  const trendPressure = clamp(safeDiv(Math.max(0, trend), Math.max(avg30, 0.1), 0), 0, 1);
+  const leadPressure = lead >= 10 ? 1 : clamp(safeDiv(lead - 4, 10, 0), 0, 1);
+
+  const score = clamp(
+    stockBelowThreshold * 0.30
+      + projectedBelowThreshold * 0.22
+      + coverPressure * 0.20
+      + variabilityPressure * 0.15
+      + trendPressure * 0.08
+      + leadPressure * 0.05,
+    0,
+    1
+  );
+
+  const probability = Number((score * 100).toFixed(3));
+  const level = score >= 0.7 ? 'eleve' : score >= 0.4 ? 'moyen' : 'faible';
+
+  const factors = [];
+  if (stockBelowThreshold >= 1) factors.push('stock inferieur ou egal au seuil');
+  if (projectedBelowThreshold >= 1) factors.push('projection fin horizon sous seuil');
+  if (coverPressure > 0.25) factors.push('couverture de stock insuffisante');
+  if (trendPressure > 0.20) factors.push('tendance de sorties haussiere');
+  if (variabilityPressure > 0.30) factors.push('consommation instable');
+  if (!factors.length) factors.push('profil stable et couverture acceptable');
+
+  const safetyStock = Math.max(threshold, daily * Math.max(7, lead) * (0.35 + cv * 0.25));
+  const recommended = Math.max(0, Math.round(expectedNeed + safetyStock - stockAnchor));
+
+  return {
+    product_id: features?.product_id,
+    code_product: features?.product_code,
+    product_name: features?.product_name,
+    risk_level: level,
+    risk_probability: probability,
+    projected_stock_end: Number(projectedStockEnd.toFixed(3)),
+    expected_need: Number(expectedNeed.toFixed(3)),
+    days_cover_estimate: Number(daysCover.toFixed(3)),
+    recommended_order_qty: recommended,
+    factors,
+    current_stock: Number(features?.current_stock || 0),
+    seuil_minimum: threshold,
+    horizon_days: horizon,
+  };
+}
+
+function fallbackPredictStockout(items, horizonDays) {
+  const predictions = (Array.isArray(items) ? items : []).map((x) => fallbackPredictStockoutOne(x, horizonDays));
+  predictions.sort((a, b) => Number(b.risk_probability || 0) - Number(a.risk_probability || 0));
+  return predictions;
+}
+
+function fallbackPredictConsumptionOne(features, horizonDays) {
+  const horizon = Math.max(1, Math.min(30, asPositiveInt(horizonDays, 14)));
+  const daily = expectedDailySignal(features);
+  const vol30 = Number(features?.volatility_exit_30d || 0);
+  const trend = Number(features?.trend_exit_14d || 0);
+
+  const expected = Math.max(0, daily * horizon);
+  const spread = Math.max(1, (vol30 + Math.abs(trend) * 0.30) * Math.max(1, horizon / 7));
+  const low = Math.max(0, expected - spread);
+  const high = expected + spread;
+  const confidence = clamp(1 - safeDiv(spread, expected + 1, 0), 0.35, 0.97);
+
+  return {
+    product_id: features?.product_id,
+    code_product: features?.product_code,
+    product_name: features?.product_name,
+    horizon_days: horizon,
+    expected_quantity: Number(expected.toFixed(3)),
+    expected_daily: Number(daily.toFixed(6)),
+    prediction_interval_low: Number(low.toFixed(3)),
+    prediction_interval_high: Number(high.toFixed(3)),
+    confidence_score: Number(confidence.toFixed(4)),
+    pred_qty_j7: Number((daily * 7).toFixed(3)),
+    pred_qty_j14: Number((daily * 14).toFixed(3)),
+    current_stock: Number(features?.current_stock || 0),
+  };
+}
+
+function fallbackPredictConsumption(items, horizonDays) {
+  const predictions = (Array.isArray(items) ? items : []).map((x) => fallbackPredictConsumptionOne(x, horizonDays));
+  predictions.sort((a, b) => Number(b.expected_quantity || 0) - Number(a.expected_quantity || 0));
+  return predictions;
+}
+
+function fallbackPredictAnomalyOne(features) {
+  const avg7 = Number(features?.avg_exit_7d || 0);
+  const avg30 = Number(features?.avg_exit_30d || 0);
+  const vol30 = Number(features?.volatility_exit_30d || 0);
+  const trend = Number(features?.trend_exit_14d || 0);
+  const entries14 = Number(features?.entries_14d || 0);
+  const exits14 = Number(features?.exits_14d || 0);
+  const daysCover = Number(features?.days_cover_estimate || 0);
+
+  const spikeRatio = safeDiv(avg7, Math.max(avg30, 0.1), 1);
+  const variabilityRatio = safeDiv(vol30, Math.max(avg30, 0.1), 0);
+  const flowRatio = safeDiv(exits14, Math.max(entries14, 0.1), 0);
+
+  const score = clamp(
+    (spikeRatio - 1) * 0.42
+      + Math.max(0, trend) * 0.10
+      + variabilityRatio * 0.25
+      + Math.max(0, flowRatio - 1) * 0.18
+      + (daysCover < 7 ? 0.05 : 0),
+    0,
+    1
+  );
+
+  const factors = [];
+  if (spikeRatio > 1.35) factors.push('sorties 7j superieures a la tendance 30j');
+  if (variabilityRatio > 0.50) factors.push('variabilite elevee');
+  if (flowRatio > 1.20) factors.push('sorties > entrees sur 14j');
+  if (trend > 0) factors.push('tendance haussiere');
+  if (!factors.length) factors.push('comportement de sortie stable');
+
+  const level = score >= 0.70 ? 'high' : score >= 0.45 ? 'medium' : 'low';
+
+  return {
+    product_id: features?.product_id,
+    code_product: features?.product_code,
+    product_name: features?.product_name,
+    anomaly_score: Number((score * 100).toFixed(3)),
+    risk_level: level,
+    is_anomaly: Boolean(score >= 0.50),
+    reason: factors[0],
+    factors,
+  };
+}
+
+function fallbackPredictAnomaly(items) {
+  const predictions = (Array.isArray(items) ? items : []).map((x) => fallbackPredictAnomalyOne(x));
+  predictions.sort((a, b) => Number(b.anomaly_score || 0) - Number(a.anomaly_score || 0));
+  return predictions;
+}
+
+function urgencyFromSignals(risk, daysCover, anomaly) {
+  const r = Number(risk || 0);
+  const d = Number(daysCover || 9999);
+  const a = Number(anomaly || 0);
+  if (r >= 70 || d <= 3 || a >= 70) return 'critique';
+  if (r >= 45 || d <= 7 || a >= 50) return 'haute';
+  return 'normale';
+}
+
+function riskLevelFromRisk(risk) {
+  const r = Number(risk || 0);
+  if (r >= 70) return 'eleve';
+  if (r >= 40) return 'moyen';
+  return 'faible';
 }
 
 function buildSupplierLeadTimeMap(stockEntries) {
@@ -506,34 +714,46 @@ async function predictStockout(options = {}) {
   const horizonDays = Math.min(30, asPositiveInt(options.horizon_days, 7));
   const ctx = await buildAIContext();
   const items = buildPredictionItems(ctx, options.product_ids);
-  const result = runPythonScript('02_stockout_risk_classifier.py', {
-    mode: 'predict',
-    horizon_days: horizonDays,
-    items,
-  });
-  return Array.isArray(result.predictions) ? result.predictions : [];
+  try {
+    const result = runPythonScript('02_stockout_risk_classifier.py', {
+      mode: 'predict',
+      horizon_days: horizonDays,
+      items,
+    });
+    return Array.isArray(result.predictions) ? result.predictions : [];
+  } catch (_) {
+    return fallbackPredictStockout(items, horizonDays);
+  }
 }
 
 async function predictConsumption(options = {}) {
   const horizonDays = Math.min(30, asPositiveInt(options.horizon_days, 14));
   const ctx = await buildAIContext();
   const items = buildPredictionItems(ctx, options.product_ids);
-  const result = runPythonScript('01_consumption_forecast.py', {
-    mode: 'predict',
-    horizon_days: horizonDays,
-    items,
-  });
-  return Array.isArray(result.predictions) ? result.predictions : [];
+  try {
+    const result = runPythonScript('01_consumption_forecast.py', {
+      mode: 'predict',
+      horizon_days: horizonDays,
+      items,
+    });
+    return Array.isArray(result.predictions) ? result.predictions : [];
+  } catch (_) {
+    return fallbackPredictConsumption(items, horizonDays);
+  }
 }
 
 async function predictAnomaly(options = {}) {
   const ctx = await buildAIContext();
   const items = buildPredictionItems(ctx, options.product_ids);
-  const result = runPythonScript('03_anomaly_detector.py', {
-    mode: 'predict',
-    items,
-  });
-  return Array.isArray(result.predictions) ? result.predictions : [];
+  try {
+    const result = runPythonScript('03_anomaly_detector.py', {
+      mode: 'predict',
+      items,
+    });
+    return Array.isArray(result.predictions) ? result.predictions : [];
+  } catch (_) {
+    return fallbackPredictAnomaly(items);
+  }
 }
 
 async function buildCopilotRecommendations(options = {}) {
@@ -544,37 +764,52 @@ async function buildCopilotRecommendations(options = {}) {
 
   const ctx = await buildAIContext();
   const items = buildPredictionItems(ctx);
-  const stockout = runPythonScript('02_stockout_risk_classifier.py', {
-    mode: 'predict',
-    horizon_days: horizonDays,
-    items,
-  }).predictions || [];
-  const consumption = includeConsumption
-    ? (runPythonScript('01_consumption_forecast.py', {
+
+  let stockout = [];
+  let consumption = [];
+  let anomalies = [];
+  let pythonSignals = null;
+
+  try {
+    stockout = runPythonScript('02_stockout_risk_classifier.py', {
       mode: 'predict',
       horizon_days: horizonDays,
       items,
-    }).predictions || [])
-    : [];
-  const anomalies = runPythonScript('03_anomaly_detector.py', {
-    mode: 'predict',
-    items,
-  }).predictions || [];
-  const adaptiveThreshold = runPythonScript('04_adaptive_threshold_model.py', {
-    mode: 'predict',
-    items,
-  }).predictions || [];
-  const behavior = runPythonScript('05_behavioral_classification.py', {
-    mode: 'predict',
-    items,
-  }).predictions || [];
-  const intelligence = runPythonScript('06_operational_intelligence_score.py', {
-    mode: 'predict',
-    items,
-    stockout_predictions: stockout,
-    anomaly_predictions: anomalies,
-    behavior_predictions: behavior,
-  });
+    }).predictions || [];
+    consumption = includeConsumption
+      ? (runPythonScript('01_consumption_forecast.py', {
+        mode: 'predict',
+        horizon_days: horizonDays,
+        items,
+      }).predictions || [])
+      : [];
+    anomalies = runPythonScript('03_anomaly_detector.py', {
+      mode: 'predict',
+      items,
+    }).predictions || [];
+
+    const adaptiveThreshold = runPythonScript('04_adaptive_threshold_model.py', {
+      mode: 'predict',
+      items,
+    }).predictions || [];
+    const behavior = runPythonScript('05_behavioral_classification.py', {
+      mode: 'predict',
+      items,
+    }).predictions || [];
+    const intelligence = runPythonScript('06_operational_intelligence_score.py', {
+      mode: 'predict',
+      items,
+      stockout_predictions: stockout,
+      anomaly_predictions: anomalies,
+      behavior_predictions: behavior,
+    });
+
+    pythonSignals = { adaptiveThreshold, behavior, intelligence };
+  } catch (_) {
+    stockout = fallbackPredictStockout(items, horizonDays);
+    consumption = includeConsumption ? fallbackPredictConsumption(items, horizonDays) : [];
+    anomalies = fallbackPredictAnomaly(items);
+  }
 
   const curves = [];
   const consumptionByPid = new Map(consumption.map((x) => [String(x.product_id), x]));
@@ -611,22 +846,140 @@ async function buildCopilotRecommendations(options = {}) {
     });
   }
 
-  return runPythonScript('07_copilot_decision_engine.py', {
+  if (pythonSignals) {
+    return runPythonScript('07_copilot_decision_engine.py', {
+      generated_at: new Date().toISOString(),
+      horizon_days: horizonDays,
+      top_n: topN,
+      stockout_predictions: stockout,
+      consumption_predictions: consumption,
+      anomaly_predictions: anomalies,
+      adaptive_threshold_predictions: pythonSignals.adaptiveThreshold,
+      behavior_predictions: pythonSignals.behavior,
+      intelligence_scores: pythonSignals.intelligence,
+      simulations,
+      model_switches: {
+        consumption_enabled: includeConsumption,
+      },
+      dashboard_curves: curves,
+    });
+  }
+
+  const consumptionMap = new Map(consumption.map((x) => [String(x.product_id), x]));
+  const anomalyMap = new Map(anomalies.map((x) => [String(x.product_id), x]));
+
+  const merged = stockout.map((row) => {
+    const pid = String(row?.product_id || '');
+    const c = consumptionMap.get(pid) || {};
+    const a = anomalyMap.get(pid) || {};
+
+    const risk = Number(row?.risk_probability || 0);
+    const anomalyScore = Number(a?.anomaly_score || 0);
+    const daysCover = Number(row?.days_cover_estimate || 9999);
+    const expectedNeed = Number.isFinite(Number(c?.expected_quantity))
+      ? Number(c.expected_quantity)
+      : Number(row?.expected_need || 0);
+    const stockAnchor = Number(row?.current_stock || 0);
+    const threshold = Number(row?.seuil_minimum || 0);
+    const recommendedThreshold = threshold;
+    const baseReco = Math.round(Number(row?.recommended_order_qty || 0));
+    const thresholdReco = Math.round(Math.max(0, recommendedThreshold - stockAnchor));
+    const quantityReco = Math.max(baseReco, thresholdReco);
+
+    const explanationParts = [];
+    const factors = Array.isArray(row?.factors) ? row.factors : [];
+    if (factors.length) explanationParts.push(factors.slice(0, 2).map(String).join(', '));
+    if (a?.reason) explanationParts.push(String(a.reason));
+    if (!explanationParts.length) explanationParts.push('risque calcule (mode local)');
+
+    return {
+      ...row,
+      risk_probability: Number(risk.toFixed(3)),
+      risk_level: riskLevelFromRisk(risk),
+      anomaly_score: Number(anomalyScore.toFixed(3)),
+      behavior_class: 'Stable',
+      recommended_threshold: Number(recommendedThreshold.toFixed(3)),
+      expected_need: Number(expectedNeed.toFixed(3)),
+      recommended_order_qty: quantityReco,
+      urgency: urgencyFromSignals(risk, daysCover, anomalyScore),
+      operational_intelligence_score: 0,
+      explanation: explanationParts.join(' + '),
+    };
+  });
+
+  merged.sort((a, b) => {
+    const r = Number(b.risk_probability || 0) - Number(a.risk_probability || 0);
+    if (r) return r;
+    const an = Number(b.anomaly_score || 0) - Number(a.anomaly_score || 0);
+    if (an) return an;
+    return Number(b.recommended_order_qty || 0) - Number(a.recommended_order_qty || 0);
+  });
+
+  const top = merged.slice(0, topN);
+  const actionPlan = top.map((item, idx) => ({
+    rank: idx + 1,
+    product_id: item.product_id,
+    code_product: item.code_product,
+    product_name: item.product_name,
+    urgency: item.urgency,
+    action: `Commander ${Number(item.recommended_order_qty || 0)} unite(s)`,
+    why: item.explanation,
+    risk_probability: item.risk_probability,
+  }));
+
+  const topMap = new Map(top.map((x) => [String(x.product_id), x]));
+  const simulationResults = [];
+  for (const sim of simulations) {
+    const pid = String(sim?.product_id || '');
+    const orderQty = Number(sim?.order_qty);
+    if (!pid || !Number.isFinite(orderQty) || orderQty < 0) continue;
+
+    const base = topMap.get(pid) || merged.find((x) => String(x.product_id) === pid);
+    if (!base) continue;
+
+    const riskBefore = Number(base.risk_probability || 0);
+    const expectedNeedBase = Math.max(1, Number(base.expected_need || 1));
+    const projectedStockBefore = Number(base.projected_stock_end || 0);
+    const riskDrop = Math.min(90, safeDiv(orderQty, expectedNeedBase, 0) * 55);
+    const riskAfter = clamp(riskBefore - riskDrop, 0, 100);
+
+    simulationResults.push({
+      product_id: pid,
+      code_product: base.code_product,
+      product_name: base.product_name,
+      order_qty: Number(orderQty.toFixed(3)),
+      risk_before_pct: Number(riskBefore.toFixed(3)),
+      risk_after_pct: Number(riskAfter.toFixed(3)),
+      projected_stock_end_before: Number(projectedStockBefore.toFixed(3)),
+      projected_stock_end_after: Number((projectedStockBefore + orderQty).toFixed(3)),
+    });
+  }
+
+  const heatmap = top.map((item) => ({
+    product_id: item.product_id,
+    product_name: item.product_name,
+    risk_probability: item.risk_probability,
+    anomaly_score: item.anomaly_score,
+    behavior_class: item.behavior_class,
+    color: Number(item.risk_probability || 0) >= 70 ? 'red' : Number(item.risk_probability || 0) >= 40 ? 'orange' : 'green',
+  }));
+
+  return {
     generated_at: new Date().toISOString(),
     horizon_days: horizonDays,
-    top_n: topN,
-    stockout_predictions: stockout,
-    consumption_predictions: consumption,
-    anomaly_predictions: anomalies,
-    adaptive_threshold_predictions: adaptiveThreshold,
-    behavior_predictions: behavior,
-    intelligence_scores: intelligence,
-    simulations,
+    top_risk_products: top,
+    action_plan: actionPlan,
+    simulations: simulationResults,
+    heatmap_criticality: heatmap,
+    operational_intelligence: {
+      global_score: 0,
+      global_level: 'A renforcer',
+    },
+    dashboard_curves: curves,
     model_switches: {
       consumption_enabled: includeConsumption,
     },
-    dashboard_curves: curves,
-  });
+  };
 }
 
 async function askResponsableAssistant(options = {}) {
@@ -656,25 +1009,224 @@ async function askResponsableAssistant(options = {}) {
     };
   }
 
-  const result = runPythonScript('chatbot_responsable.py', {
-    question,
-    history,
-    context,
-    use_gemini: useGemini,
-    strict_gemini: strictGemini,
-    mode,
-  });
-  if (result?.error) {
-    const err = new Error(String(result.error || 'Assistant error'));
-    err.code = String(result?.source || 'assistant_error').toUpperCase();
-    if (result?.details) err.details = String(result.details);
-    throw err;
-  }
-  return {
-    answer: String(result?.answer || ''),
-    source: result?.source || 'fallback',
-    mode: result?.mode || mode,
+  const geminiConfigured = isGeminiConfigured();
+  const allowGemini = useGemini && geminiConfigured;
+
+  const topItems = (arr, key, maxItems) => {
+    if (!Array.isArray(arr)) return [];
+    return [...arr]
+      .sort((a, b) => Number(b?.[key] || 0) - Number(a?.[key] || 0))
+      .slice(0, maxItems);
   };
+
+  const pct = (v) => `${Number(v || 0).toFixed(1)}%`;
+  const qty = (v) => String(Math.round(Number(v || 0)));
+
+  const findFocusProduct = (q, stockoutTop) => {
+    const query = String(q || '').toLowerCase().trim();
+    if (!query) return null;
+    for (const item of stockoutTop) {
+      const name = String(item?.product_name || '').toLowerCase().trim();
+      const code = String(item?.code_product || '').toLowerCase().trim();
+      if ((name && query.includes(name)) || (code && query.includes(code))) return item;
+    }
+    return null;
+  };
+
+  const buildContextText = (ctx) => {
+    const stockoutTop = topItems(ctx?.stockout_top, 'risk_probability', 7);
+    const consumptionTop = topItems(ctx?.consumption_top, 'expected_quantity', 7);
+    const anomalyTop = topItems(ctx?.anomaly_top, 'anomaly_score', 7);
+    const actionPlan = Array.isArray(ctx?.action_plan) ? ctx.action_plan : [];
+    const metrics = ctx && typeof ctx === 'object' && ctx.metrics && typeof ctx.metrics === 'object' ? ctx.metrics : {};
+
+    const compact = {
+      stockout_top: stockoutTop.map((x) => ({
+        product_name: x.product_name,
+        code_product: x.code_product,
+        risk_probability: x.risk_probability,
+        recommended_order_qty: x.recommended_order_qty,
+        current_stock: x.current_stock,
+        seuil_minimum: x.seuil_minimum,
+        factors: Array.isArray(x.factors) ? x.factors : [],
+        explanation: x.explanation || '',
+      })),
+      consumption_top: consumptionTop.map((x) => ({
+        product_name: x.product_name,
+        code_product: x.code_product,
+        expected_quantity: x.expected_quantity,
+        expected_daily: x.expected_daily,
+      })),
+      anomaly_top: anomalyTop.map((x) => ({
+        product_name: x.product_name,
+        anomaly_score: x.anomaly_score,
+        risk_level: x.risk_level,
+        reason: x.reason,
+      })),
+      action_plan: actionPlan.slice(0, 7),
+      metrics,
+    };
+
+    return `CONTEXTE OPERATOIRE (donnees reelles + predictions):\n${JSON.stringify(compact, null, 2)}`;
+  };
+
+  const buildPriorityLines = (ctx, maxItems = 3) => {
+    const stockoutTop = topItems(ctx?.stockout_top, 'risk_probability', maxItems);
+    const lines = stockoutTop.map((item) => {
+      const name = item?.product_name || item?.code_product || 'Produit';
+      return `- ${name}: risque ${pct(item?.risk_probability)}, commande conseillee ${qty(item?.recommended_order_qty)} unite(s).`;
+    });
+    return lines.length ? lines : ['- Aucun produit critique detecte pour le moment.'];
+  };
+
+  const fallbackChatAnswer = (q, ctx) => {
+    const query = String(q || '').toLowerCase();
+    const stockoutTop = topItems(ctx?.stockout_top, 'risk_probability', 5);
+    const anomalyTop = topItems(ctx?.anomaly_top, 'anomaly_score', 5);
+    const actionPlan = Array.isArray(ctx?.action_plan) ? ctx.action_plan : [];
+    const metrics = ctx && typeof ctx === 'object' && ctx.metrics && typeof ctx.metrics === 'object' ? ctx.metrics : {};
+
+    const focus = findFocusProduct(q, stockoutTop) || (stockoutTop[0] || null);
+    const lines = ['Je te fais un point clair et actionnable.'];
+
+    if (query.includes('anomal')) {
+      if (anomalyTop.length) {
+        const top = anomalyTop[0];
+        lines.push(`Anomalie principale: ${top.product_name || 'Produit'} (${pct(top.anomaly_score)}).`);
+        if (top.reason) lines.push(`Cause probable: ${top.reason}.`);
+      } else {
+        lines.push('Aucune anomalie forte detectee sur la periode recente.');
+      }
+    } else if (query.includes('metri') || query.includes('modele') || query.includes('qualite')) {
+      const st = metrics?.stockout_j7 || {};
+      const co = metrics?.consumption_j14 || {};
+      lines.push(
+        `Fiabilite actuelle: Rupture F1=${st?.f1 ?? '-'}, AUC=${st?.auc ?? '-'}; Conso MAE=${co?.mae ?? '-'}, MAPE=${co?.mape ?? '-'}%.`
+      );
+    } else if (focus) {
+      lines.push(`Produit prioritaire: ${focus.product_name || 'Produit'} (${pct(focus.risk_probability)}).`);
+      const factors = Array.isArray(focus.factors) ? focus.factors : [];
+      if (factors.length) lines.push(`Pourquoi: ${factors.slice(0, 3).map(String).join(', ')}.`);
+      else if (focus.explanation) lines.push(`Pourquoi: ${focus.explanation}.`);
+    } else {
+      lines.push('Aucun signal critique detecte pour le moment.');
+    }
+
+    lines.push('', 'Actions immediates:');
+    if (actionPlan.length) {
+      for (const step of actionPlan.slice(0, 3)) {
+        lines.push(`- ${step?.product_name || 'Produit'}: ${step?.action || 'Action'} (urgence ${step?.urgency || 'normale'}).`);
+      }
+    } else {
+      for (const fallbackLine of buildPriorityLines(ctx, 3)) lines.push(fallbackLine);
+    }
+
+    lines.push('', 'Si tu veux, je peux aussi te generer un mini-rapport exportable maintenant.');
+    return lines.join('\n');
+  };
+
+  const fallbackReportAnswer = (q, ctx) => {
+    const now = `${new Date().toISOString().slice(0, 16).replace('T', ' ')} UTC`;
+    const stockoutTop = topItems(ctx?.stockout_top, 'risk_probability', 5);
+    const anomalyTop = topItems(ctx?.anomaly_top, 'anomaly_score', 3);
+    const actionPlan = Array.isArray(ctx?.action_plan) ? ctx.action_plan : [];
+    const metrics = ctx && typeof ctx === 'object' && ctx.metrics && typeof ctx.metrics === 'object' ? ctx.metrics : {};
+    const st = metrics?.stockout_j7 || {};
+    const co = metrics?.consumption_j14 || {};
+
+    const lines = [
+      `# Mini-rapport stock (${now})`,
+      '',
+      '## Resume executif',
+    ];
+
+    if (stockoutTop.length) {
+      const top = stockoutTop[0];
+      lines.push(`- Priorite la plus critique: ${top.product_name || 'Produit'} avec un risque de ${pct(top.risk_probability)}.`);
+    } else {
+      lines.push('- Aucun produit critique detecte a cet instant.');
+    }
+
+    lines.push('', '## Top priorites');
+    for (const item of stockoutTop.slice(0, 5)) {
+      const name = item?.product_name || item?.code_product || 'Produit';
+      lines.push(`- ${name}: risque ${pct(item.risk_probability)}, commande recommandee ${qty(item.recommended_order_qty)} unite(s).`);
+    }
+    if (!stockoutTop.length) lines.push('- Aucune priorite a forte criticite.');
+
+    lines.push('', '## Actions recommandees (24h)');
+    if (actionPlan.length) {
+      for (const step of actionPlan.slice(0, 5)) {
+        lines.push(`- ${step?.product_name || 'Produit'}: ${step?.action || 'Action'} (urgence ${step?.urgency || 'normale'}).`);
+      }
+    } else {
+      lines.push(
+        '- Verifier le stock physique des references critiques.',
+        '- Lancer les commandes sur les produits a risque eleve.',
+        '- Relancer la prediction apres toute entree importante.'
+      );
+    }
+
+    lines.push(
+      '',
+      '## Qualite modele',
+      `- Rupture J+7: F1=${st?.f1 ?? '-'}, AUC=${st?.auc ?? '-'}`,
+      `- Consommation J+14: MAE=${co?.mae ?? '-'}, MAPE=${co?.mape ?? '-'}%`
+    );
+
+    if (anomalyTop.length) {
+      lines.push('', '## Anomalies a surveiller');
+      for (const item of anomalyTop) {
+        lines.push(`- ${item?.product_name || 'Produit'}: score ${pct(item?.anomaly_score)} (niveau ${item?.risk_level || '-'}).`);
+      }
+    }
+
+    lines.push('', '## Note', '- Ce rapport est genere automatiquement a partir des predictions et historiques disponibles.');
+    return lines.join('\n');
+  };
+
+  const contextText = buildContextText(context);
+  const modeInstruction = mode === 'report'
+    ? 'MODE=REPORT. Produis un mini-rapport markdown structure, concret, avec sections et puces.'
+    : 'MODE=CHAT. Reponds de maniere naturelle, concise, utile, sans style robotique.';
+
+  const prompt = `${modeInstruction}\n\n${contextText}\n\nQuestion utilisateur:\n${question}`;
+  const systemInstruction = mode === 'report'
+    ? [
+      'Tu es un copilote stock pour un responsable. Tu rediges des mini-rapports executifs en francais.',
+      'Contraintes: format markdown, sections courtes, actions priorisees, chiffres du contexte uniquement, pas de blabla, pas d’invention.',
+    ].join(' ')
+    : [
+      'Tu es un assistant stock conversationnel en francais.',
+      'Tu parles de facon naturelle, claire, professionnelle et humaine.',
+      'Toujours: expliquer simplement le pourquoi, puis proposer des actions immediates.',
+      'Ne jamais inventer des donnees absentes du contexte.',
+    ].join(' ');
+
+  try {
+    if (!allowGemini) throw new Error('Gemini disabled');
+
+    const result = await generateGeminiContent({
+      prompt,
+      history,
+      system_instruction: systemInstruction,
+      temperature: mode === 'report' ? 0.25 : 0.45,
+      max_output_tokens: mode === 'report' ? 1600 : 1100,
+    });
+
+    const text = String(result?.text || '').trim();
+    if (!text) throw new Error('Empty Gemini response');
+    return { answer: text, source: 'gemini', mode };
+  } catch (err) {
+    if (allowGemini && strictGemini) {
+      const e = new Error('Gemini call failed');
+      e.code = 'GEMINI_ERROR';
+      e.details = String(err?.message || err).slice(0, 1200);
+      throw e;
+    }
+    const answer = mode === 'report' ? fallbackReportAnswer(question, context) : fallbackChatAnswer(question, context);
+    return { answer, source: 'fallback', mode };
+  }
 }
 
 module.exports = {

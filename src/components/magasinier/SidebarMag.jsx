@@ -15,7 +15,7 @@ const SidebarMag = ({ collapsed, onToggle, onLogout, userName }) => {
   const labels = {
     fr: { produits: 'Produits', demandes: 'Demandes', historique: 'Historique', chat: 'Chat', parametres: 'Parametres', logout: 'Deconnexion' },
     en: { produits: 'Products', demandes: 'Requests', historique: 'History', chat: 'Chat', parametres: 'Settings', logout: 'Logout' },
-    ar: { produits: 'Ø§Ù„Ù…Ù†ØªØ¬Ø§Øª', demandes: 'Ø§Ù„Ø·Ù„Ø¨Ø§Øª', historique: 'Ø§Ù„Ø³Ø¬Ù„', chat: 'Ø§Ù„Ø¯Ø±Ø¯Ø´Ø©', parametres: 'Ø§Ù„Ø¥Ø¹Ø¯Ø§Ø¯Ø§Øª', logout: 'ØªØ³Ø¬ÙŠÙ„ Ø§Ù„Ø®Ø±ÙˆØ¬' },
+    ar: { produits: 'المنتجات', demandes: 'الطلبات', historique: 'السجل', chat: 'الدردشة', parametres: 'الإعدادات', logout: 'تسجيل الخروج' },
   }[language] || {};
 
   const menuItems = [

@@ -194,7 +194,7 @@ const HeaderPage = ({ userName, title, searchValue, onSearchChange, showSearch =
 
       <div className="header-right">
         {onRefresh && (
-          <button 
+          <button
             className="header-icon-btn"
             onClick={onRefresh}
             title={i18n.refresh}
@@ -203,7 +203,7 @@ const HeaderPage = ({ userName, title, searchValue, onSearchChange, showSearch =
             <RefreshCw size={20} />
           </button>
         )}
-        <button 
+        <button
           className="header-icon-btn"
           onClick={toggleTheme}
           title={isDarkMode ? i18n.light : i18n.dark}
@@ -213,7 +213,7 @@ const HeaderPage = ({ userName, title, searchValue, onSearchChange, showSearch =
           {isDarkMode ? <Sun size={20} /> : <Moon size={20} />}
         </button>
         <div className="header-notif-wrap" ref={notifRef}>
-          <button 
+          <button
             className="header-icon-btn header-notif-btn"
             onClick={toggleNotifications}
             title={i18n.notifications}
@@ -279,3 +279,4 @@ const HeaderPage = ({ userName, title, searchValue, onSearchChange, showSearch =
 };
 
 export default HeaderPage;
+

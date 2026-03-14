@@ -60,7 +60,26 @@ const App = () => {
     applyUiLanguage(getUiLanguage());
   }, []);
 
-  const handleLogout = useCallback((reason = "") => {
+  const handleLogout = useCallback(async (reason = "", options = {}) => {
+    const remote = options?.remote !== false;
+    const token = sessionStorage.getItem("token") || "";
+
+    if (remote && token) {
+      try {
+        await fetch(`${API_BASE}/auth/logout`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
+          },
+          credentials: "include",
+          body: JSON.stringify({}),
+        });
+      } catch {
+        // best-effort remote logout; always clear local state below
+      }
+    }
+
     setUserName("");
     setUserRole("");
     setIsAuthenticated(false);
@@ -86,7 +105,7 @@ const App = () => {
   useEffect(() => {
     const onAuthLogout = (event) => {
       const reason = typeof event?.detail?.reason === "string" ? event.detail.reason : "";
-      handleLogout(reason);
+      handleLogout(reason, { remote: false });
     };
 
     window.addEventListener(AUTH_LOGOUT_EVENT_NAME, onAuthLogout);
@@ -165,7 +184,7 @@ const App = () => {
     const writeLastActivity = () => sessionStorage.setItem(LAST_ACTIVITY_KEY, String(Date.now()));
 
     const logoutForInactivity = () => {
-      handleLogout("Deconnexion automatique apres 15 min d'inactivite.");
+      handleLogout("Deconnexion automatique apres 15 min d'inactivite.", { remote: false });
     };
 
     const scheduleInactivityTimer = () => {
@@ -235,12 +254,12 @@ const App = () => {
       const lastActivity = Number(sessionStorage.getItem(LAST_ACTIVITY_KEY) || 0);
 
       if (!lastActivity) {
-        handleLogout("Session expiree. Veuillez vous reconnecter.");
+        handleLogout("Session expiree. Veuillez vous reconnecter.", { remote: false });
         return;
       }
 
       if (now - lastActivity >= SESSION_TIMEOUT_MS) {
-        handleLogout("Session expiree apres 15 min d'inactivite.");
+        handleLogout("Session expiree apres 15 min d'inactivite.", { remote: false });
       }
     }, 5000);
 

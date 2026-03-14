@@ -1,4 +1,4 @@
-require('dotenv').config();
+require('./loadEnv');
 const express = require('express');
 const cors = require('cors');
 const helmet = require('helmet');
@@ -246,3 +246,4 @@ initMailQueue()
     startAiAutoTrainingJob();
     app.listen(PORT, () => logger.info({ port: Number(PORT) }, 'API ready'));
   });
+

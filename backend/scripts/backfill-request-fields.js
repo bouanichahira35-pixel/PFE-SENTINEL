@@ -1,4 +1,4 @@
-require('dotenv').config();
+require('../loadEnv');
 require('../db');
 
 const Request = require('../models/Request');

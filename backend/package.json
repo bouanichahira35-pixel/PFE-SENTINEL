@@ -11,7 +11,8 @@
     "backfill:requests": "node scripts/backfill-request-fields.js",
     "test:critical-flow": "node scripts/test-critical-flow.js",
     "ai:export-dataset": "node scripts/export-ai-dataset.js",
-    "seed:magasinier-large": "node scripts/seed-magasinier-large-data.js"
+    "seed:magasinier-large": "node scripts/seed-magasinier-large-data.js",
+    "test:auth-recovery": "node scripts/test-auth-recovery-flow.js"
   },
   "keywords": [],
   "author": "",

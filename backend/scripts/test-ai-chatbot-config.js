@@ -1,4 +1,4 @@
-require('dotenv').config();
+require('../loadEnv');
 
 const { spawn, spawnSync } = require('child_process');
 const axios = require('axios');
@@ -216,4 +216,3 @@ run().catch((err) => {
   console.error('AI_CHATBOT_CONFIG_FAILED', err?.response?.data || err?.message || err);
   process.exit(1);
 });
-

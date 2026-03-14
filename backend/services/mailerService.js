@@ -2,6 +2,10 @@ const nodemailer = require('nodemailer');
 
 let cachedTransporter = null;
 
+const MAIL_CONNECTION_TIMEOUT_MS = Math.max(1000, Number(process.env.MAIL_CONNECTION_TIMEOUT_MS || 15000));
+const MAIL_GREETING_TIMEOUT_MS = Math.max(1000, Number(process.env.MAIL_GREETING_TIMEOUT_MS || 10000));
+const MAIL_SOCKET_TIMEOUT_MS = Math.max(1000, Number(process.env.MAIL_SOCKET_TIMEOUT_MS || 20000));
+
 function isMailConfigured() {
   return Boolean(
     process.env.MAIL_HOST &&
@@ -19,6 +23,9 @@ function getMailer() {
     host: process.env.MAIL_HOST,
     port: Number(process.env.MAIL_PORT || 587),
     secure: String(process.env.MAIL_SECURE) === 'true',
+    connectionTimeout: MAIL_CONNECTION_TIMEOUT_MS,
+    greetingTimeout: MAIL_GREETING_TIMEOUT_MS,
+    socketTimeout: MAIL_SOCKET_TIMEOUT_MS,
     auth: {
       user: process.env.MAIL_USER,
       pass: process.env.MAIL_PASS,

@@ -4,6 +4,7 @@ const API_CACHE_TTL_MS = 45 * 1000;
 const API_CACHE_MAX_ITEMS = 60;
 const PERF_STORAGE_KEY = "api_perf_metrics_v1";
 const PERF_EVENT_NAME = "api-perf-updated";
+const AUTH_LOGOUT_EVENT_NAME = "auth-logout";
 
 const responseCache = new Map();
 
@@ -104,6 +105,15 @@ function getRefreshToken() {
   return sessionStorage.getItem("refreshToken") || localStorage.getItem("refreshToken") || "";
 }
 
+function triggerAuthLogout(reason) {
+  if (typeof window === "undefined") return;
+  try {
+    window.dispatchEvent(new CustomEvent(AUTH_LOGOUT_EVENT_NAME, { detail: { reason } }));
+  } catch {
+    // logout signaling should never break API calls
+  }
+}
+
 function buildApiError(data) {
   const reason = typeof data.reason === "string" ? data.reason : "";
   const details = Array.isArray(data.details)
@@ -183,7 +193,17 @@ async function request(path, method, payload, retried = false) {
         sessionStorage.setItem("token", refreshData.token);
         return request(path, normalizedMethod, payload, true);
       }
+
+      if (!refreshRes.ok) {
+        const refreshReason = typeof refreshData?.error === "string" ? refreshData.error : "";
+        triggerAuthLogout(refreshReason || "Session expiree. Veuillez vous reconnecter.");
+      }
     }
+  }
+
+  if ((res.status === 401 || res.status === 403) && token) {
+    const reason = typeof data?.error === "string" ? data.error : "";
+    triggerAuthLogout(reason || "Session expiree. Veuillez vous reconnecter.");
   }
 
   if (!res.ok) {
@@ -233,7 +253,7 @@ export function patch(path, payload) {
   return request(path, "PATCH", payload);
 }
 
-export async function uploadFile(path, file, fieldName = "file") {
+async function uploadFileInternal(path, file, fieldName, retried = false) {
   const token = getAuthToken();
   const formData = new FormData();
   formData.append(fieldName, file);
@@ -245,8 +265,35 @@ export async function uploadFile(path, file, fieldName = "file") {
     body: formData,
   });
 
+  if (res.status === 401 && !retried && path !== "/auth/refresh") {
+    const refreshToken = getRefreshToken();
+    if (refreshToken) {
+      const refreshRes = await fetch(`${API_BASE}/auth/refresh`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ refreshToken }),
+      });
+      const refreshData = await refreshRes.json().catch(() => ({}));
+      if (refreshRes.ok && refreshData.token) {
+        sessionStorage.setItem("token", refreshData.token);
+        return uploadFileInternal(path, file, fieldName, true);
+      }
+
+      if (!refreshRes.ok) {
+        const refreshReason = typeof refreshData?.error === "string" ? refreshData.error : "";
+        triggerAuthLogout(refreshReason || "Session expiree. Veuillez vous reconnecter.");
+      }
+    }
+  }
+
   const latencyMs = Math.max(0, Math.round(nowMs() - startedAt));
   const data = await res.json().catch(() => ({}));
+
+  if ((res.status === 401 || res.status === 403) && token) {
+    const reason = typeof data?.error === "string" ? data.error : "";
+    triggerAuthLogout(reason || "Session expiree. Veuillez vous reconnecter.");
+  }
+
   if (!res.ok) {
     recordNetworkResult({ latencyMs, failed: true });
     throw buildApiError(data);
@@ -254,4 +301,8 @@ export async function uploadFile(path, file, fieldName = "file") {
   clearGetCache();
   recordNetworkResult({ latencyMs, failed: false });
   return data;
+}
+
+export async function uploadFile(path, file, fieldName = "file") {
+  return uploadFileInternal(path, file, fieldName, false);
 }

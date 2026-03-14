@@ -1,5 +1,5 @@
 const jwt = require('jsonwebtoken');
-const { normalizeRole } = require('../constants/roles');
+const { normalizeRole, isTechnicalRole } = require('../constants/roles');
 const UserSession = require('../models/UserSession');
 const User = require('../models/User');
 const { logSecurityEvent } = require('../services/securityAuditService');
@@ -8,6 +8,21 @@ const SESSION_INACTIVITY_MS = Math.max(
   60 * 1000,
   Number(process.env.SESSION_INACTIVITY_MS || 15 * 60 * 1000)
 );
+
+const ACTIVE_STATUS_ALIASES = new Set(['active', 'actif', 'enabled', 'enable', 'true', '1']);
+const BLOCKED_STATUS_ALIASES = new Set(['blocked', 'bloque', 'disabled', 'inactive', 'false', '0']);
+
+function normalizeUserStatus(status) {
+  const key = String(status ?? '').trim().toLowerCase();
+  if (!key) return 'active';
+  if (ACTIVE_STATUS_ALIASES.has(key)) return 'active';
+  if (BLOCKED_STATUS_ALIASES.has(key)) return 'blocked';
+  return key;
+}
+
+function isUserActive(status) {
+  return normalizeUserStatus(status) === 'active';
+}
 
 function getLastActivityDate(session) {
   return session?.last_activity_at || session?.updatedAt || session?.login_time || null;
@@ -94,7 +109,21 @@ async function requireAuth(req, res, next) {
     );
 
     const user = await User.findById(payload.id).select('_id role status username');
-    if (!user || user.status !== 'active') {
+    const normalizedRole = normalizeRole(user?.role);
+    const normalizedStatus = normalizeUserStatus(user?.status);
+
+    const canonicalPatch = {};
+    if (user && isTechnicalRole(normalizedRole) && normalizedRole !== user.role) {
+      canonicalPatch.role = normalizedRole;
+    }
+    if (user && ['active', 'blocked'].includes(normalizedStatus) && normalizedStatus !== user.status) {
+      canonicalPatch.status = normalizedStatus;
+    }
+    if (user && Object.keys(canonicalPatch).length > 0) {
+      await User.updateOne({ _id: user._id }, { $set: canonicalPatch });
+    }
+
+    if (!user || !isTechnicalRole(normalizedRole) || !isUserActive(normalizedStatus)) {
       await UserSession.updateMany(
         { user: payload.id, is_active: true },
         {
@@ -112,14 +141,14 @@ async function requireAuth(req, res, next) {
         ip_address: req.ip,
         user_agent: req.headers['user-agent'] || '',
         success: false,
-        details: 'Compte bloque ou introuvable',
+        details: 'Compte bloque, role invalide ou introuvable',
       });
       return res.status(403).json({ error: 'Compte bloque' });
     }
 
     req.user = {
       id: String(user._id),
-      role: normalizeRole(user.role),
+      role: normalizedRole,
       username: user.username || payload.username,
       sessionId: payload.sid,
     };

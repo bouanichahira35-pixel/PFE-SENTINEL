@@ -1,4 +1,4 @@
-require('dotenv').config();
+require('../loadEnv');
 
 const crypto = require('crypto');
 const bcrypt = require('bcryptjs');

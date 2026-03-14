@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { Mail, ArrowLeft, AlertTriangle, CheckCircle, ShieldCheck, Lock, Eye, EyeOff } from 'lucide-react';
 import logoETAP from '../../assets/logoETAP.png';
@@ -9,16 +9,23 @@ const ForgotPassword = () => {
   const navigate = useNavigate();
   const location = useLocation();
   const roleFromLogin = location.state?.role ? String(location.state.role) : '';
+  const roleFilter = useMemo(() => String(roleFromLogin || '').trim(), [roleFromLogin]);
   const [email, setEmail] = useState('');
   const [code, setCode] = useState('');
   const [resetToken, setResetToken] = useState('');
+  const [devOtp, setDevOtp] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [showNewPassword, setShowNewPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [step, setStep] = useState('request');
   const [error, setError] = useState('');
+  const [info, setInfo] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  const [isResending, setIsResending] = useState(false);
+  const [resendRemainingSec, setResendRemainingSec] = useState(0);
+
+  const RESEND_COOLDOWN_SEC = 30;
 
   const validateEmail = (value) => {
     const regex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -26,15 +33,30 @@ const ForgotPassword = () => {
   };
 
   const validatePassword = (value) => {
-    // Keep initial policy simple and aligned with backend minimum length.
-    if (!value || value.length < 8) return false;
-    const regex = /^(?=.*[A-Za-z])(?=.*\d).{8,}$/;
-    return regex.test(value);
+    if (typeof value !== 'string') return false;
+    if (value.length < 8 || value.length > 64) return false;
+
+    const hasLower = /[a-z]/.test(value);
+    const hasUpper = /[A-Z]/.test(value);
+    const hasDigit = /\d/.test(value);
+
+    return hasLower && hasUpper && hasDigit;
   };
+
+  useEffect(() => {
+    if (step !== 'verify' || resendRemainingSec <= 0) return undefined;
+
+    const interval = setInterval(() => {
+      setResendRemainingSec((prev) => Math.max(0, prev - 1));
+    }, 1000);
+
+    return () => clearInterval(interval);
+  }, [step, resendRemainingSec]);
 
   const handleRequestCode = async (e) => {
     e.preventDefault();
     setError('');
+    setInfo('');
 
     if (!email) {
       setError('Veuillez entrer votre adresse email');
@@ -49,9 +71,12 @@ const ForgotPassword = () => {
     setIsLoading(true);
 
     try {
-      const payload = roleFromLogin ? { email, role: roleFromLogin } : { email };
-      await post('/auth/forgot-password/request', payload);
+      const payload = roleFilter ? { email, role: roleFilter } : { email };
+      const data = await post('/auth/forgot-password/request', payload);
+      const maybeDevOtp = typeof data?.dev_otp === 'string' ? data.dev_otp : '';
+      setDevOtp(maybeDevOtp);
       setStep('verify');
+      setResendRemainingSec(RESEND_COOLDOWN_SEC);
     } catch (err) {
       setError(err.message || "Erreur lors de l'envoi du code");
     } finally {
@@ -62,6 +87,7 @@ const ForgotPassword = () => {
   const handleVerifyCode = async (e) => {
     e.preventDefault();
     setError('');
+    setInfo('');
 
     if (!code.trim()) {
       setError('Veuillez entrer le code recu');
@@ -71,8 +97,8 @@ const ForgotPassword = () => {
     setIsLoading(true);
 
     try {
-      const payload = roleFromLogin
-        ? { email, role: roleFromLogin, code: code.replace(/\s/g, '') }
+      const payload = roleFilter
+        ? { email, role: roleFilter, code: code.replace(/\s/g, '') }
         : { email, code: code.replace(/\s/g, '') };
       const data = await post('/auth/forgot-password/verify', payload);
 
@@ -85,12 +111,41 @@ const ForgotPassword = () => {
     }
   };
 
+  const handleResendCode = async () => {
+    setError('');
+    setInfo('');
+
+    if (isResending || isLoading) return;
+    if (resendRemainingSec > 0) return;
+
+    if (!email || !validateEmail(email)) {
+      setError('Veuillez entrer une adresse email valide');
+      setStep('request');
+      return;
+    }
+
+    setIsResending(true);
+    try {
+      const payload = roleFilter ? { email, role: roleFilter } : { email };
+      const data = await post('/auth/forgot-password/request', payload);
+      const maybeDevOtp = typeof data?.dev_otp === 'string' ? data.dev_otp : '';
+      setDevOtp(maybeDevOtp);
+      setInfo('Code renvoye. Verifiez votre boite mail.');
+      setResendRemainingSec(RESEND_COOLDOWN_SEC);
+    } catch (err) {
+      setError(err.message || "Erreur lors de l'envoi du code");
+    } finally {
+      setIsResending(false);
+    }
+  };
+
   const handleResetPassword = async (e) => {
     e.preventDefault();
     setError('');
+    setInfo('');
 
     if (!validatePassword(newPassword)) {
-      setError('Le mot de passe doit contenir au moins 8 caracteres avec lettres et chiffres');
+      setError('Mot de passe faible (min 8, au moins 1 majuscule, 1 minuscule, 1 chiffre)');
       return;
     }
 
@@ -132,7 +187,7 @@ const ForgotPassword = () => {
             <div className="success-icon-container">
               <CheckCircle size={64} className="success-icon" />
             </div>
-            <h2 className="success-title">Email envoye</h2>
+            <h2 className="success-title">Mot de passe reinitialise</h2>
             <p className="success-message">
               Votre mot de passe a ete reinitialise avec succes pour :
             </p>
@@ -243,6 +298,7 @@ const ForgotPassword = () => {
                     onChange={(e) => {
                       setCode(e.target.value);
                       setError('');
+                      setInfo('');
                     }}
                     placeholder="Ex: 123456"
                     className="forgot-input"
@@ -250,6 +306,37 @@ const ForgotPassword = () => {
                   />
                 </div>
               </div>
+
+              <button
+                type="button"
+                className="forgot-back-link"
+                onClick={handleResendCode}
+                disabled={isResending || isLoading || resendRemainingSec > 0}
+                style={{ marginTop: -6 }}
+              >
+                <span>
+                  {resendRemainingSec > 0
+                    ? `Renvoyer le code (reessayer dans ${resendRemainingSec}s)`
+                    : (isResending ? 'Renvoi en cours...' : 'Renvoyer le code')}
+                </span>
+              </button>
+
+              {devOtp && (
+                <div className="forgot-error" style={{ background: 'rgba(16,185,129,0.12)', borderColor: 'rgba(16,185,129,0.35)' }}>
+                  <CheckCircle size={16} />
+                  <span>Mode dev: votre code est {devOtp}</span>
+                </div>
+              )}
+
+              {info && (
+                <div
+                  className="forgot-error"
+                  style={{ background: 'rgba(21,101,192,0.10)', borderColor: 'rgba(21,101,192,0.25)', color: '#1565c0' }}
+                >
+                  <ShieldCheck size={16} />
+                  <span>{info}</span>
+                </div>
+              )}
 
               {error && (
                 <div className="forgot-error">
@@ -273,7 +360,15 @@ const ForgotPassword = () => {
               <button
                 type="button"
                 className="forgot-back-link"
-                onClick={() => setStep('request')}
+                onClick={() => {
+                  setStep('request');
+                  setInfo('');
+                  setError('');
+                  setCode('');
+                  setDevOtp('');
+                  setIsResending(false);
+                  setResendRemainingSec(0);
+                }}
               >
                 <ArrowLeft size={16} />
                 <span>Revenir a l'etape email</span>

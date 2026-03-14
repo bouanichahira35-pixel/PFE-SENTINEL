@@ -5,9 +5,9 @@ const { randomUUID } = require('crypto');
 const User = require('../models/User');
 const PasswordReset = require('../models/PasswordReset');
 const UserSession = require('../models/UserSession');
-const { normalizeRole, isTechnicalRole } = require('../constants/roles');
+const { normalizeRole, isTechnicalRole, getStoredRoleCandidates } = require('../constants/roles');
 const { logSecurityEvent } = require('../services/securityAuditService');
-const { enqueueMail } = require('../services/mailQueueService');
+const { sendMailOrThrow, isMailConfigured } = require('../services/mailerService');
 const requireAuth = require('../middlewares/requireAuth');
 
 const RESET_CODE_TTL_MINUTES = Number(process.env.RESET_CODE_TTL_MINUTES || 10);
@@ -21,6 +21,18 @@ const SESSION_INACTIVITY_MS = Math.max(
 const BCRYPT_SALT_ROUNDS = Number(process.env.BCRYPT_SALT_ROUNDS || 12);
 const REFRESH_JWT_EXPIRES_IN = process.env.REFRESH_JWT_EXPIRES_IN || '7d';
 const SINGLE_SESSION_MODE = String(process.env.SINGLE_SESSION_MODE || 'true') === 'true';
+const RESET_MAIL_SEND_TIMEOUT_MS = Math.max(
+  1000,
+  Number(process.env.RESET_MAIL_SEND_TIMEOUT_MS || 8000)
+);
+const OTP_MAIL_SEND_RETRIES = Math.max(1, Number(process.env.OTP_MAIL_SEND_RETRIES || 2));
+const OTP_MAIL_RETRY_DELAY_MS = Math.max(0, Number(process.env.OTP_MAIL_RETRY_DELAY_MS || 1200));
+const IS_PROD = String(process.env.NODE_ENV || '').trim().toLowerCase() === 'production';
+const RESET_DEV_OTP_ENABLED =
+  !IS_PROD && String(process.env.RESET_DEV_OTP_ENABLED || 'true').trim().toLowerCase() === 'true';
+
+const ACTIVE_STATUS_ALIASES = new Set(['active', 'actif', 'enabled', 'enable', 'true', '1']);
+const BLOCKED_STATUS_ALIASES = new Set(['blocked', 'bloque', 'disabled', 'inactive', 'false', '0']);
 
 function generateOtpCode() {
   return String(Math.floor(100000 + Math.random() * 900000));
@@ -37,6 +49,114 @@ function isStrongPassword(password) {
   return hasLower && hasUpper && hasDigit;
 }
 
+function normalizeUserStatus(status) {
+  const key = String(status ?? '').trim().toLowerCase();
+  if (!key) return 'active';
+  if (ACTIVE_STATUS_ALIASES.has(key)) return 'active';
+  if (BLOCKED_STATUS_ALIASES.has(key)) return 'blocked';
+  return key;
+}
+
+function isUserActive(status) {
+  return normalizeUserStatus(status) === 'active';
+}
+
+function escapeRegex(value) {
+  return String(value || '').replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+function extractIdentifier(payload) {
+  const raw = payload?.identifier ?? payload?.email ?? payload?.username ?? payload?.telephone;
+  return String(raw || '').trim();
+}
+
+function buildIdentifierQuery(identifier) {
+  const rawIdentifier = String(identifier || '').trim();
+  const normalizedIdentifier = rawIdentifier.toLowerCase();
+
+  return {
+    $or: [
+      { email: normalizedIdentifier },
+      { telephone: rawIdentifier },
+      { telephone: normalizedIdentifier },
+      { username: rawIdentifier },
+      { username: normalizedIdentifier },
+      { username: new RegExp(`^${escapeRegex(rawIdentifier)}$`, 'i') },
+    ],
+  };
+}
+
+function buildRoleFilter(normalizedRole) {
+  const candidates = getStoredRoleCandidates(normalizedRole);
+  if (!candidates.length) return null;
+
+  return {
+    $or: candidates.map((candidate) => ({
+      role: new RegExp(`^${escapeRegex(candidate)}$`, 'i'),
+    })),
+  };
+}
+
+function buildUserLookupQuery(identifier, normalizedRole = null) {
+  const filters = [buildIdentifierQuery(identifier)];
+  if (normalizedRole) {
+    const roleFilter = buildRoleFilter(normalizedRole);
+    if (roleFilter) filters.push(roleFilter);
+  }
+
+  if (filters.length === 1) return filters[0];
+  return { $and: filters };
+}
+
+function withTimeout(promise, timeoutMs, timeoutLabel) {
+  let timer = null;
+
+  const wrappedPromise = new Promise((resolve, reject) => {
+    timer = setTimeout(() => {
+      reject(new Error(timeoutLabel || 'timeout'));
+    }, timeoutMs);
+
+    Promise.resolve(promise)
+      .then(resolve)
+      .catch(reject);
+  });
+
+  return wrappedPromise.finally(() => {
+    if (timer) clearTimeout(timer);
+  });
+}
+
+function delay(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+async function sendPasswordResetOtpOrThrow({ to, role, rawCode, ttlMinutes }) {
+  let lastError = null;
+
+  for (let attempt = 1; attempt <= OTP_MAIL_SEND_RETRIES; attempt += 1) {
+    try {
+      await withTimeout(
+        sendMailOrThrow({
+          to,
+          subject: 'Code de reinitialisation mot de passe',
+          text: `Votre code est: ${rawCode}. Il expire dans ${ttlMinutes} minutes.`,
+          html: `<p>Votre code de reinitialisation est: <b>${rawCode}</b></p><p>Il expire dans ${ttlMinutes} minutes.</p>`,
+        }),
+        RESET_MAIL_SEND_TIMEOUT_MS,
+        'mail_send_timeout'
+      );
+      return;
+    } catch (err) {
+      lastError = err;
+      if (attempt < OTP_MAIL_SEND_RETRIES && OTP_MAIL_RETRY_DELAY_MS > 0) {
+        await delay(OTP_MAIL_RETRY_DELAY_MS);
+      }
+    }
+  }
+
+  throw lastError || new Error('mail_send_failed');
+}
+
 function getLastActivityDate(session) {
   return session?.last_activity_at || session?.updatedAt || session?.login_time || null;
 }
@@ -50,7 +170,9 @@ function isSessionInactive(session, now) {
 // POST /api/auth/login
 router.post('/login', async (req, res) => {
   try {
-    const { identifier, password, role } = req.body;
+    const identifier = extractIdentifier(req.body);
+    const password = req.body?.password;
+    const role = req.body?.role;
 
     if (!identifier || !password) {
       return res.status(400).json({ error: 'identifier et password sont obligatoires' });
@@ -63,25 +185,14 @@ router.post('/login', async (req, res) => {
     }
 
     const normalizedIdentifier = String(identifier).trim().toLowerCase();
-    const rawIdentifier = String(identifier).trim();
     const ip = req.ip;
     const ua = req.headers['user-agent'] || '';
 
-    const loginQuery = {
-      $or: [
-        { email: normalizedIdentifier },
-        { telephone: rawIdentifier },
-        { username: rawIdentifier },
-        { username: normalizedIdentifier },
-      ],
-    };
-    if (normalizedRole) {
-      loginQuery.role = normalizedRole;
-    }
+    const loginQuery = buildUserLookupQuery(identifier, normalizedRole);
 
     const candidates = await User.find(loginQuery)
       .select('+password_hash')
-      .limit(10);
+      .limit(15);
 
     if (!candidates.length) {
       await logSecurityEvent({
@@ -111,7 +222,7 @@ router.post('/login', async (req, res) => {
         event_type: 'login_failed',
         user: matchedIdentityUser._id,
         email: matchedIdentityUser.email,
-        role: matchedIdentityUser.role,
+        role: normalizeRole(matchedIdentityUser.role),
         ip_address: ip,
         user_agent: ua,
         success: false,
@@ -120,12 +231,29 @@ router.post('/login', async (req, res) => {
       return res.status(401).json({ error: 'Mot de passe incorrect' });
     }
 
-    if (user.status !== 'active') {
+    const canonicalRole = normalizeRole(user.role);
+    const canonicalStatus = normalizeUserStatus(user.status);
+
+    if (!isTechnicalRole(canonicalRole)) {
       await logSecurityEvent({
         event_type: 'login_failed',
         user: user._id,
         email: user.email,
-        role: user.role,
+        role: canonicalRole,
+        ip_address: ip,
+        user_agent: ua,
+        success: false,
+        details: 'Role non supporte',
+      });
+      return res.status(403).json({ error: 'Compte bloque' });
+    }
+
+    if (!isUserActive(canonicalStatus)) {
+      await logSecurityEvent({
+        event_type: 'login_failed',
+        user: user._id,
+        email: user.email,
+        role: canonicalRole,
         ip_address: ip,
         user_agent: ua,
         success: false,
@@ -134,8 +262,17 @@ router.post('/login', async (req, res) => {
       return res.status(403).json({ error: 'Compte bloque' });
     }
 
-    user.last_login = new Date();
-    await user.save();
+    const profilePatch = {
+      last_login: new Date(),
+    };
+    if (canonicalRole !== user.role) {
+      profilePatch.role = canonicalRole;
+    }
+    if (['active', 'blocked'].includes(canonicalStatus) && canonicalStatus !== user.status) {
+      profilePatch.status = canonicalStatus;
+    }
+
+    await User.updateOne({ _id: user._id }, { $set: profilePatch });
 
     if (SINGLE_SESSION_MODE) {
       await UserSession.updateMany(
@@ -160,12 +297,12 @@ router.post('/login', async (req, res) => {
     });
 
     const token = jwt.sign(
-      { id: user._id, role: user.role, username: user.username, sid: sessionId },
+      { id: user._id, role: canonicalRole, username: user.username, sid: sessionId },
       process.env.JWT_SECRET,
       { expiresIn: JWT_EXPIRES_IN }
     );
     const refreshToken = jwt.sign(
-      { id: user._id, role: user.role, username: user.username, sid: sessionId, purpose: 'refresh' },
+      { id: user._id, role: canonicalRole, username: user.username, sid: sessionId, purpose: 'refresh' },
       process.env.JWT_SECRET,
       { expiresIn: REFRESH_JWT_EXPIRES_IN }
     );
@@ -174,7 +311,7 @@ router.post('/login', async (req, res) => {
       event_type: 'login_success',
       user: user._id,
       email: user.email,
-      role: user.role,
+      role: canonicalRole,
       ip_address: ip,
       user_agent: ua,
       success: true,
@@ -190,11 +327,11 @@ router.post('/login', async (req, res) => {
       user: {
         id: user._id,
         username: user.username,
-        role: user.role,
+        role: canonicalRole,
         email: user.email,
         telephone: user.telephone,
-        image_profile: user.image_profile || null
-      }
+        image_profile: user.image_profile || null,
+      },
     });
   } catch (err) {
     return res.status(500).json({ error: 'Erreur serveur' });
@@ -204,17 +341,21 @@ router.post('/login', async (req, res) => {
 // POST /api/auth/forgot-password/request
 router.post('/forgot-password/request', async (req, res) => {
   try {
-    const { email, role } = req.body;
-    if (!email) return res.status(400).json({ error: 'email obligatoire' });
+    const identifier = extractIdentifier(req.body);
+    const role = req.body?.role;
+
+    if (!identifier) return res.status(400).json({ error: 'email ou identifier obligatoire' });
+
+    let normalizedRole = null;
     if (role) {
-      const normalizedRole = normalizeRole(role);
+      normalizedRole = normalizeRole(role);
       if (!isTechnicalRole(normalizedRole)) {
         return res.status(400).json({ error: 'Role invalide' });
       }
     }
 
-    const normalizedEmail = String(email).trim().toLowerCase();
-    const query = role ? { email: normalizedEmail, role: normalizeRole(role) } : { email: normalizedEmail };
+    const normalizedIdentifier = String(identifier).trim().toLowerCase();
+    const query = buildUserLookupQuery(identifier, normalizedRole);
     const user = await User.findOne(query);
     const ip = req.ip;
     const ua = req.headers['user-agent'] || '';
@@ -222,8 +363,8 @@ router.post('/forgot-password/request', async (req, res) => {
     if (!user) {
       await logSecurityEvent({
         event_type: 'password_reset_request',
-        email: normalizedEmail,
-        role: role ? normalizeRole(role) : undefined,
+        email: normalizedIdentifier,
+        role: normalizedRole || undefined,
         ip_address: ip,
         user_agent: ua,
         success: false,
@@ -231,7 +372,24 @@ router.post('/forgot-password/request', async (req, res) => {
       });
       return res.json({ message: 'Si ce compte existe, un code a ete envoye.' });
     }
-    if (user.status !== 'active') return res.json({ message: 'Si ce compte existe, un code a ete envoye.' });
+
+    const canonicalRole = normalizeRole(user.role);
+    const canonicalStatus = normalizeUserStatus(user.status);
+
+    if (!isTechnicalRole(canonicalRole) || !isUserActive(canonicalStatus)) {
+      return res.json({ message: 'Si ce compte existe, un code a ete envoye.' });
+    }
+
+    const canonicalPatch = {};
+    if (canonicalRole !== user.role) {
+      canonicalPatch.role = canonicalRole;
+    }
+    if (['active', 'blocked'].includes(canonicalStatus) && canonicalStatus !== user.status) {
+      canonicalPatch.status = canonicalStatus;
+    }
+    if (Object.keys(canonicalPatch).length > 0) {
+      await User.updateOne({ _id: user._id }, { $set: canonicalPatch });
+    }
 
     await PasswordReset.updateMany(
       { user: user._id, status: 'valid' },
@@ -242,27 +400,91 @@ router.post('/forgot-password/request', async (req, res) => {
     const codeHash = await bcrypt.hash(rawCode, BCRYPT_SALT_ROUNDS);
     const expiration = new Date(Date.now() + RESET_CODE_TTL_MINUTES * 60 * 1000);
 
-    await PasswordReset.create({
+    const resetDoc = await PasswordReset.create({
       user: user._id,
       reset_code: codeHash,
       expiration_date: expiration,
-      status: 'valid'
+      status: 'valid',
     });
 
-    await enqueueMail({
-      kind: 'password_reset_otp',
-      role: user.role,
-      to: user.email,
-      subject: 'Code de reinitialisation mot de passe',
-      text: `Votre code est: ${rawCode}. Il expire dans ${RESET_CODE_TTL_MINUTES} minutes.`,
-      html: `<p>Votre code de reinitialisation est: <b>${rawCode}</b></p><p>Il expire dans ${RESET_CODE_TTL_MINUTES} minutes.</p>`,
-      job_id: `otp_${user._id}_${Date.now()}`,
-    });
+    const mailConfigured = isMailConfigured();
+    if (!mailConfigured) {
+      if (IS_PROD || !RESET_DEV_OTP_ENABLED) {
+        await PasswordReset.updateOne(
+          { _id: resetDoc._id },
+          { $set: { status: 'expired' } }
+        );
+        return res.status(503).json({ error: 'Service email indisponible. Contactez l administrateur.' });
+      }
+
+      await logSecurityEvent({
+        event_type: 'email_failed',
+        user: user._id,
+        email: user.email,
+        role: canonicalRole,
+        ip_address: ip,
+        user_agent: ua,
+        success: false,
+        details: 'DEV_OTP returned (MAIL not configured)',
+      });
+
+      await logSecurityEvent({
+        event_type: 'password_reset_request',
+        user: user._id,
+        email: user.email,
+        role: canonicalRole,
+        ip_address: ip,
+        user_agent: ua,
+        success: true,
+        details: 'OTP generated (dev mode)',
+      });
+
+      return res.json({ message: 'Si ce compte existe, un code a ete envoye.', dev_otp: rawCode });
+    }
+
+    try {
+      await sendPasswordResetOtpOrThrow({
+        to: user.email,
+        role: canonicalRole,
+        rawCode,
+        ttlMinutes: RESET_CODE_TTL_MINUTES,
+      });
+
+      await logSecurityEvent({
+        event_type: 'email_sent',
+        user: user._id,
+        email: user.email,
+        role: canonicalRole,
+        ip_address: ip,
+        user_agent: ua,
+        success: true,
+        details: 'OTP email envoye',
+      });
+    } catch (err) {
+      await PasswordReset.updateOne(
+        { _id: resetDoc._id },
+        { $set: { status: 'expired' } }
+      );
+
+      await logSecurityEvent({
+        event_type: 'email_failed',
+        user: user._id,
+        email: user.email,
+        role: canonicalRole,
+        ip_address: ip,
+        user_agent: ua,
+        success: false,
+        details: `OTP email failed: ${err?.message || 'mail_failed'}`,
+      });
+
+      return res.status(503).json({ error: 'Echec envoi email. Reessayez dans quelques instants.' });
+    }
+
     await logSecurityEvent({
       event_type: 'password_reset_request',
       user: user._id,
       email: user.email,
-      role: user.role,
+      role: canonicalRole,
       ip_address: ip,
       user_agent: ua,
       success: true,
@@ -278,17 +500,20 @@ router.post('/forgot-password/request', async (req, res) => {
 // POST /api/auth/forgot-password/verify
 router.post('/forgot-password/verify', async (req, res) => {
   try {
-    const { email, code, role } = req.body;
-    if (!email || !code) return res.status(400).json({ error: 'email et code obligatoires' });
+    const identifier = extractIdentifier(req.body);
+    const { code, role } = req.body || {};
+
+    if (!identifier || !code) return res.status(400).json({ error: 'email/identifier et code obligatoires' });
+
+    let normalizedRole = null;
     if (role) {
-      const normalizedRole = normalizeRole(role);
+      normalizedRole = normalizeRole(role);
       if (!isTechnicalRole(normalizedRole)) {
         return res.status(400).json({ error: 'Role invalide' });
       }
     }
 
-    const normalizedEmail = String(email).trim().toLowerCase();
-    const query = role ? { email: normalizedEmail, role: normalizeRole(role) } : { email: normalizedEmail };
+    const query = buildUserLookupQuery(identifier, normalizedRole);
     const user = await User.findOne(query);
     if (!user) return res.status(400).json({ error: 'Code invalide' });
 
@@ -312,6 +537,8 @@ router.post('/forgot-password/verify', async (req, res) => {
     reset.verified_at = new Date();
     await reset.save();
 
+    const canonicalRole = normalizeRole(user.role);
+
     const resetToken = jwt.sign(
       { userId: user._id.toString(), resetId: reset._id.toString(), purpose: 'reset_password' },
       process.env.JWT_SECRET,
@@ -321,7 +548,7 @@ router.post('/forgot-password/verify', async (req, res) => {
       event_type: 'password_reset_verify',
       user: user._id,
       email: user.email,
-      role: user.role,
+      role: canonicalRole,
       ip_address: req.ip,
       user_agent: req.headers['user-agent'] || '',
       success: true,
@@ -349,7 +576,7 @@ router.post('/forgot-password/reset', async (req, res) => {
 
     if (!isStrongPassword(newPassword)) {
       return res.status(400).json({
-        error: 'Mot de passe faible (min 8, au moins 1 majuscule, 1 minuscule, 1 chiffre)'
+        error: 'Mot de passe faible (min 8, au moins 1 majuscule, 1 minuscule, 1 chiffre)',
       });
     }
 
@@ -450,8 +677,11 @@ router.post('/refresh', async (req, res) => {
       { $set: { last_activity_at: now } }
     );
 
+    const refreshedRole = normalizeRole(payload.role);
+    const safeRole = isTechnicalRole(refreshedRole) ? refreshedRole : payload.role;
+
     const token = jwt.sign(
-      { id: payload.id, role: payload.role, username: payload.username, sid: payload.sid },
+      { id: payload.id, role: safeRole, username: payload.username, sid: payload.sid },
       process.env.JWT_SECRET,
       { expiresIn: JWT_EXPIRES_IN }
     );

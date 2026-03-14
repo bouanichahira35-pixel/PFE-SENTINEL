@@ -1,4 +1,4 @@
-require('dotenv').config();
+require('../loadEnv');
 
 const { spawn, spawnSync } = require('child_process');
 const axios = require('axios');

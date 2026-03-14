@@ -1,4 +1,4 @@
-require('dotenv').config();
+require('../loadEnv');
 const mongoose = require('../db');
 const AppSetting = require('../models/AppSetting');
 const { trainAndBuildDatasets } = require('../services/aiModelService');

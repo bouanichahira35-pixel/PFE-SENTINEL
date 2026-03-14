@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from "react";
 import { ToastProvider } from "./components/shared/Toast";
 
 import SplashScreen from "./components/shared/SplashScreen";
+import RoleSelection from "./pages/RoleSelection";
 import LoginPage from "./components/shared/LoginPage";
 import ForgotPassword from "./components/shared/ForgotPassword";
 
@@ -35,6 +36,7 @@ import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 const SESSION_TIMEOUT_MS = 15 * 60 * 1000;
 const LAST_ACTIVITY_KEY = "lastActivityAt";
 const LOGOUT_REASON_KEY = "logoutReason";
+const AUTH_LOGOUT_EVENT_NAME = "auth-logout";
 
 function decodeJwtPayload(token) {
   try {
@@ -79,6 +81,16 @@ const App = () => {
     localStorage.removeItem("userRole");
     localStorage.removeItem("imageProfile");
   }, []);
+
+  useEffect(() => {
+    const onAuthLogout = (event) => {
+      const reason = typeof event?.detail?.reason === "string" ? event.detail.reason : "";
+      handleLogout(reason);
+    };
+
+    window.addEventListener(AUTH_LOGOUT_EVENT_NAME, onAuthLogout);
+    return () => window.removeEventListener(AUTH_LOGOUT_EVENT_NAME, onAuthLogout);
+  }, [handleLogout]);
 
   useEffect(() => {
     const token = sessionStorage.getItem("token") || localStorage.getItem("token");
@@ -261,15 +273,13 @@ const App = () => {
         <Routes>
           {!isAuthenticated ? (
             <>
-              <Route path="/" element={<LoginPage onLogin={handleLogin} />} />
-              <Route path="/login" element={<LoginPage onLogin={handleLogin} />} />
-              <Route path="/login/magasinier" element={<Navigate to="/login" replace />} />
-              <Route path="/login/responsable" element={<Navigate to="/login" replace />} />
-              <Route path="/login/demandeur" element={<Navigate to="/login" replace />} />
+              <Route path="/" element={<RoleSelection />} />
+              <Route path="/login" element={<RoleSelection />} />
+              <Route path="/login/:role" element={<LoginPage onLogin={handleLogin} />} />
 
               <Route path="/mot-de-passe-oublie" element={<ForgotPassword />} />
 
-              <Route path="*" element={<Navigate to="/login" replace />} />
+              <Route path="*" element={<Navigate to="/" replace />} />
             </>
           ) : (
             <>

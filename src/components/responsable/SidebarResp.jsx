@@ -1,9 +1,11 @@
 import { Link, useLocation } from 'react-router-dom';
 import {
   LayoutDashboard,
-  LineChart,
   ShieldAlert,
+  Activity,
   History,
+  ClipboardCheck,
+  Bot,
   MessageCircle,
   Settings,
   ChevronLeft,
@@ -18,45 +20,57 @@ import './SidebarResp.css';
 const SidebarResp = ({ collapsed, onToggle, onLogout, userName }) => {
   const language = useUiLanguage();
   const location = useLocation();
-  const sessionUserName = sessionStorage.getItem('userName') || localStorage.getItem('userName') || userName || 'Utilisateur';
+  const sessionUserName =
+    sessionStorage.getItem('userName') ||
+    localStorage.getItem('userName') ||
+    userName ||
+    'Utilisateur';
   const profileImage = sessionStorage.getItem('imageProfile') || localStorage.getItem('imageProfile') || '';
   const avatarUrl = useProtectedFileUrl(profileImage);
 
   const labels = {
     fr: {
       dashboard: 'Dashboard',
-      analyse: 'Analyse',
-      surveillance: 'Surveillance',
+      pilotage: 'Pilotage',
+      flux: 'Flux',
+      inventaires: 'Inventaires',
       transactions: 'Transactions',
+      chatbot: 'Assistant IA',
       chat: 'Chat',
-      parametres: 'Parametres',
-      logout: 'Deconnexion',
+      parametres: 'Paramètres',
+      logout: 'Déconnexion',
     },
     en: {
       dashboard: 'Dashboard',
-      analyse: 'Analytics',
-      surveillance: 'Monitoring',
+      pilotage: 'Control Center',
+      flux: 'Feed',
+      inventaires: 'Inventory',
       transactions: 'Transactions',
+      chatbot: 'AI Assistant',
       chat: 'Chat',
       parametres: 'Settings',
       logout: 'Logout',
     },
     ar: {
-      dashboard: 'لوحة القيادة',
-      analyse: 'التحليل',
-      surveillance: 'المراقبة',
-      transactions: 'المعاملات',
-      chat: 'الدردشة',
-      parametres: 'الإعدادات',
-      logout: 'تسجيل الخروج',
+      dashboard: 'Dashboard',
+      pilotage: 'Pilotage',
+      flux: 'Flux',
+      inventaires: 'Inventaires',
+      transactions: 'Transactions',
+      chatbot: 'Assistant IA',
+      chat: 'Chat',
+      parametres: 'Paramètres',
+      logout: 'Déconnexion',
     },
   }[language] || {};
 
   const menuItems = [
     { icon: LayoutDashboard, label: labels.dashboard, path: '/responsable' },
-    { icon: LineChart, label: labels.analyse, path: '/responsable/analyse' },
-    { icon: ShieldAlert, label: labels.surveillance, path: '/responsable/surveillance' },
+    { icon: ShieldAlert, label: labels.pilotage, path: '/responsable/pilotage' },
+    { icon: Activity, label: labels.flux || 'Flux', path: '/responsable/flux' },
+    { icon: ClipboardCheck, label: labels.inventaires || 'Inventaires', path: '/responsable/inventaires' },
     { icon: History, label: labels.transactions, path: '/responsable/transactions' },
+    { icon: Bot, label: labels.chatbot, path: '/responsable/chatbot' },
     { icon: MessageCircle, label: labels.chat, path: '/responsable/chat' },
     { icon: Settings, label: labels.parametres, path: '/responsable/parametres' },
   ];

@@ -1,5 +1,5 @@
 import { Link, useLocation } from 'react-router-dom';
-import { Package, History, FileText, MessageCircle, Settings, ChevronLeft, ChevronRight, LogOut } from 'lucide-react';
+import { Package, History, FileText, MessageCircle, Settings, ChevronLeft, ChevronRight, LogOut, ClipboardList, ClipboardCheck } from 'lucide-react';
 import logoETAP from '../../assets/logoETAP.png';
 import { useUiLanguage } from '../../utils/uiLanguage';
 import useProtectedFileUrl from '../../hooks/useProtectedFileUrl';
@@ -13,14 +13,16 @@ const SidebarMag = ({ collapsed, onToggle, onLogout, userName }) => {
   const avatarUrl = useProtectedFileUrl(profileImage);
 
   const labels = {
-    fr: { produits: 'Produits', demandes: 'Demandes', historique: 'Historique', chat: 'Chat', parametres: 'Parametres', logout: 'Deconnexion' },
-    en: { produits: 'Products', demandes: 'Requests', historique: 'History', chat: 'Chat', parametres: 'Settings', logout: 'Logout' },
-    ar: { produits: 'المنتجات', demandes: 'الطلبات', historique: 'السجل', chat: 'الدردشة', parametres: 'الإعدادات', logout: 'تسجيل الخروج' },
+    fr: { inbox: 'Centre d\u2019actions', produits: 'Produits', demandes: 'Suivi demandes', inventaire: 'Inventaire', historique: 'Historique', chat: 'Chat', parametres: 'Parametres', logout: 'Deconnexion' },
+    en: { inbox: 'Inbox', produits: 'Products', demandes: 'Requests', inventaire: 'Inventory', historique: 'History', chat: 'Chat', parametres: 'Settings', logout: 'Logout' },
+    ar: { inbox: 'Inbox', produits: 'المنتجات', demandes: 'الطلبات', historique: 'السجل', chat: 'الدردشة', parametres: 'الإعدادات', logout: 'تسجيل الخروج' },
   }[language] || {};
 
   const menuItems = [
+    { icon: ClipboardList, label: labels.inbox, path: '/magasinier/inbox' },
     { icon: Package, label: labels.produits, path: '/magasinier' },
     { icon: FileText, label: labels.demandes, path: '/magasinier/demandes' },
+    { icon: ClipboardCheck, label: labels.inventaire || 'Inventaire', path: '/magasinier/inventaire' },
     { icon: History, label: labels.historique, path: '/magasinier/historique' },
     { icon: MessageCircle, label: labels.chat, path: '/magasinier/chat' },
     { icon: Settings, label: labels.parametres, path: '/magasinier/parametres' },

@@ -4,11 +4,15 @@ import {
   Package, 
   Activity,
   CheckCircle2,
+  Clock,
   ArrowUpRight,
   ArrowDownRight,
   LineChart,
   PieChart,
+  RefreshCw,
+  Sparkles,
 } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
 import SidebarResp from '../../components/responsable/SidebarResp';
 import HeaderPage from '../../components/shared/HeaderPage';
 import ProtectedPage from '../../components/shared/ProtectedPage';
@@ -80,22 +84,89 @@ function toAreaPath(coords) {
   ].join(' ');
 }
 
+function formatDateTimeLabel(value) {
+  if (!value) return '-';
+  const d = new Date(value);
+  if (Number.isNaN(d.getTime())) return '-';
+  return d.toLocaleString('fr-FR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
+}
+
+function buildRange(periodDays) {
+  const days = Math.max(1, Number(periodDays || 30));
+  const to = new Date();
+  const from = new Date(to.getTime() - days * 24 * 60 * 60 * 1000);
+  return { from, to, days };
+}
+
+function pctSafe(numerator, denominator) {
+  const den = Number(denominator || 0);
+  if (den <= 0) return 0;
+  return (Number(numerator || 0) / den) * 100;
+}
+
+function AnimatedNumber({ value, decimals = 0, durationMs = 650 }) {
+  const [shown, setShown] = useState(() => Number(value || 0));
+
+  useEffect(() => {
+    const target = Number(value || 0);
+    const start = Number(shown || 0);
+    if (!Number.isFinite(target) || !Number.isFinite(start)) {
+      setShown(target);
+      return undefined;
+    }
+    if (Math.abs(target - start) < 0.0001) {
+      setShown(target);
+      return undefined;
+    }
+
+    const startedAt = performance.now();
+    let raf = 0;
+    const tick = (now) => {
+      const t = Math.min(1, (now - startedAt) / Math.max(120, durationMs));
+      const eased = 1 - (1 - t) * (1 - t);
+      const next = start + (target - start) * eased;
+      setShown(next);
+      if (t < 1) raf = requestAnimationFrame(tick);
+    };
+    raf = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(raf);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [value, decimals, durationMs]);
+
+  const formatted = Number(shown || 0).toFixed(decimals);
+  return <span>{formatted}</span>;
+}
+
 const DashboardResp = ({ userName, onLogout }) => {
   const toast = useToast();
+  const navigate = useNavigate();
 
-  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(() => (typeof window !== 'undefined' ? window.innerWidth <= 768 : false));
+  const [periodDays, setPeriodDays] = useState(30);
   const [allProducts, setAllProducts] = useState([]);
   const [historyTrend, setHistoryTrend] = useState([]);
+  const [topConsumedProducts, setTopConsumedProducts] = useState([]);
+  const [historyAnomalies, setHistoryAnomalies] = useState([]);
+  const [recentActivity, setRecentActivity] = useState([]);
+  const [, setAiModelStatus] = useState(null);
+  const [assistantStatus, setAssistantStatus] = useState(null);
   const [stockoutForecast, setStockoutForecast] = useState([]);
   const [isLoading, setIsLoading] = useState(false);
 
   const loadData = useCallback(async () => {
     setIsLoading(true);
     try {
-      const [all, insights, stockoutRes] = await Promise.all([
-        get('/products'),
-        get('/history/insights').catch(() => ({ daily_trend: [] })),
+      const range = buildRange(periodDays);
+      const fromIso = encodeURIComponent(range.from.toISOString());
+      const toIso = encodeURIComponent(range.to.toISOString());
+
+      const [all, insights, stockoutRes, activityRes, modelStatusRes, assistantStatusRes] = await Promise.all([
+        get('/products?validation_status=approved'),
+        get(`/history/insights?from=${fromIso}&to=${toIso}`).catch(() => ({ daily_trend: [], top_consumed_products: [], anomalies: [] })),
         post('/ai/predict/stockout', { horizon_days: 7 }).catch(() => ({ predictions: [] })),
+        get(`/history?limit=12&from=${fromIso}&to=${toIso}`).catch(() => ({ items: [] })),
+        get('/ai/models/status').catch(() => null),
+        get('/ai/assistant/status').catch(() => null),
       ]);
 
       setAllProducts(Array.isArray(all) ? all : []);
@@ -118,12 +189,18 @@ const DashboardResp = ({ userName, onLogout }) => {
           .sort((a, b) => new Date(a.day) - new Date(b.day))
           .slice(-20)
       );
+
+      setTopConsumedProducts(Array.isArray(insights?.top_consumed_products) ? insights.top_consumed_products : []);
+      setHistoryAnomalies(Array.isArray(insights?.anomalies) ? insights.anomalies : []);
+      setRecentActivity(Array.isArray(activityRes?.items) ? activityRes.items.slice(0, 12) : []);
+      setAiModelStatus(modelStatusRes && typeof modelStatusRes === 'object' ? modelStatusRes : null);
+      setAssistantStatus(assistantStatusRes && typeof assistantStatusRes === 'object' ? assistantStatusRes : null);
     } catch (err) {
       toast.error(err.message || 'Erreur chargement dashboard');
     } finally {
       setIsLoading(false);
     }
-  }, [toast]);
+  }, [periodDays, toast]);
 
   useEffect(() => {
     loadData();
@@ -136,6 +213,13 @@ const DashboardResp = ({ userName, onLogout }) => {
     return () => clearInterval(interval);
   }, [loadData]);
 
+  const rangeLabel = useMemo(() => {
+    const range = buildRange(periodDays);
+    const fr = range.from.toLocaleDateString('fr-FR', { day: '2-digit', month: 'short' });
+    const tr = range.to.toLocaleDateString('fr-FR', { day: '2-digit', month: 'short' });
+    return `${fr} → ${tr} (J-${range.days})`;
+  }, [periodDays]);
+
   const stats = useMemo(() => {
     const totalProduits = allProducts.length;
     const sousSeuilCount = allProducts.filter(
@@ -145,6 +229,19 @@ const DashboardResp = ({ userName, onLogout }) => {
     const disponiblesCount = Math.max(0, totalProduits - sousSeuilCount - ruptureCount);
     return { totalProduits, sousSeuilCount, ruptureCount, disponiblesCount };
   }, [allProducts]);
+
+  const movementStats = useMemo(() => {
+    const entries = historyTrend.reduce((acc, x) => acc + Number(x.entry || 0), 0);
+    const exits = historyTrend.reduce((acc, x) => acc + Number(x.exit || 0), 0);
+    const total = entries + exits;
+    return { entries, exits, total };
+  }, [historyTrend]);
+
+  const availabilityRate = useMemo(() => {
+    const ok = Number(stats.disponiblesCount || 0);
+    const total = Number(stats.totalProduits || 0);
+    return clamp(pctSafe(ok, total), 0, 100);
+  }, [stats.disponiblesCount, stats.totalProduits]);
 
   const fallbackRiskSource = useMemo(() => (
     allProducts.map((row) => {
@@ -203,6 +300,10 @@ const DashboardResp = ({ userName, onLogout }) => {
         }; 
       }) 
   ), [riskSource]); 
+
+  const criticalAlertsCount = useMemo(() => (
+    smartAlerts.filter((a) => String(a.level || '').toLowerCase() === 'critique').length
+  ), [smartAlerts]);
 
   const consumptionSeries = useMemo(() => {
     return historyTrend.slice(-10).map((x) => ({
@@ -278,9 +379,84 @@ const DashboardResp = ({ userName, onLogout }) => {
     };
   }, [topRiskProduct, stockVsSeuil.crossingDay]);
 
+  const topConsumed = useMemo(() => {
+    const rows = Array.isArray(topConsumedProducts) ? topConsumedProducts : [];
+    const maxQty = Math.max(1, ...rows.map((r) => Number(r.total_qty || 0)));
+    return {
+      rows: rows.map((r) => ({
+        id: r.product_id || r.code_product || r.designation,
+        code: r.code_product || '-',
+        name: r.designation || r.code_product || 'Produit',
+        qty: Number(r.total_qty || 0),
+        events: Number(r.events || 0),
+        ratio: clamp(Number(r.total_qty || 0) / maxQty, 0, 1),
+      })),
+      maxQty,
+    };
+  }, [topConsumedProducts]);
+
+  const recentFeed = useMemo(() => {
+    const items = Array.isArray(recentActivity) ? recentActivity : [];
+    const labelByAction = {
+      entry: 'Entrée',
+      exit: 'Sortie',
+      request: 'Demande',
+      validation: 'Validation',
+      product_create: 'Création produit',
+      product_update: 'Mise à jour produit',
+      block: 'Blocage',
+    };
+    return items.map((it) => ({
+      id: String(it?._id || Math.random()),
+      when: it?.date_action || it?.createdAt || null,
+      action: String(it?.action_type || '-'),
+      actionLabel: labelByAction[String(it?.action_type || '').toLowerCase()] || String(it?.action_type || '-'),
+      qty: Number(it?.quantity || 0),
+      description: String(it?.description || '').trim(),
+      product: it?.product?.name || it?.product?.code_product || '-',
+      role: it?.actor_role || it?.user?.role || '-',
+      source: it?.source || '-',
+    }));
+  }, [recentActivity]);
+
+  const anomalyFeed = useMemo(() => {
+    const rows = Array.isArray(historyAnomalies) ? historyAnomalies : [];
+    return rows.slice(0, 6).map((a, idx) => ({
+      id: `${a?.product_id || 'p'}_${idx}`,
+      product_id: a?.product_id || null,
+      qty: Number(a?.quantity || 0),
+      when: a?.date_action || null,
+      threshold: Number(a?.threshold || 0),
+    }));
+  }, [historyAnomalies]);
+
+  const assistantSummary = useMemo(() => {
+    const geminiConfigured = Boolean(assistantStatus?.gemini?.configured);
+    const predictionsEnabled = assistantStatus?.ai_config?.predictionsEnabled !== false;
+    const trained = Boolean(assistantStatus?.models?.trained);
+    const lastTrainedAt = assistantStatus?.models?.trained_at || null;
+
+    const assistantOk = geminiConfigured; 
+    const predictionsOk = predictionsEnabled && trained; 
+    const predictionsLabel = predictionsOk ? 'Actives' : predictionsEnabled ? 'En cours' : 'Desactivees';
+
+    return {
+      assistantLabel: assistantOk ? 'Actif' : 'Non actif', 
+      assistantHint: assistantOk
+        ? 'Vous pouvez demander un resume et des recommandations.'
+        : 'Activez l assistant dans Parametres > Intelligence Artificielle.', 
+      predictionsLabel, 
+      lastUpdateLabel: lastTrainedAt ? formatDateTimeLabel(lastTrainedAt) : '-',
+    };
+  }, [assistantStatus]);
+
   return (
     <ProtectedPage userName={userName}>
       <div className="app-layout">
+        <div
+          className={`sidebar-backdrop ${sidebarCollapsed ? 'hidden' : ''}`}
+          onClick={() => setSidebarCollapsed(true)}
+        />
         <SidebarResp
           collapsed={sidebarCollapsed}
           onToggle={() => setSidebarCollapsed(!sidebarCollapsed)}
@@ -289,16 +465,67 @@ const DashboardResp = ({ userName, onLogout }) => {
         />
 
         <div className="main-container">
-          <HeaderPage userName={userName} title="Dashboard" showSearch={false} />
+          <HeaderPage
+            userName={userName}
+            title="Dashboard"
+            showSearch={false}
+            onMenuClick={() => setSidebarCollapsed((prev) => !prev)}
+          />
           <main className="main-content">
             {isLoading && <LoadingSpinner overlay text="Chargement..." />}
 
             <div className="dashboard-page saas-dashboard">
+              <div className="dash-toolbar">
+                <div className="dash-toolbar-left">
+                  <span className="dash-range-label">{rangeLabel}</span>
+                  <div className="dash-pills" role="tablist" aria-label="Periode dashboard">
+                    {[7, 30, 90].map((days) => (
+                      <button
+                        key={days}
+                        type="button"
+                        className={`dash-pill ${periodDays === days ? 'active' : ''}`}
+                        onClick={() => setPeriodDays(days)}
+                        disabled={isLoading}
+                      >
+                        {days}j
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                <div className="dash-toolbar-right">
+                  <button
+                    type="button"
+                    className="dash-action ai-alerts"
+                    onClick={() => navigate('/responsable/pilotage?tab=alertes')}
+                    disabled={isLoading}
+                    aria-label="Voir alertes IA"
+                    title="Voir alertes IA"
+                  >
+                    <Sparkles size={16} />
+                    <span>Alertes</span>
+                    <span className={`dash-badge ${criticalAlertsCount > 0 ? 'hot' : ''}`}>
+                      {criticalAlertsCount}
+                    </span>
+                  </button>
+                  <button
+                    type="button"
+                    className="dash-action"
+                    onClick={loadData}
+                    disabled={isLoading}
+                    aria-label="Actualiser"
+                    title="Actualiser"
+                  >
+                    <RefreshCw size={16} />
+                    <span>Actualiser</span>
+                  </button>
+                </div>
+              </div>
+
               <div className="kpi-grid">
                 <div className="kpi-card success">
                   <div className="kpi-icon"><Package size={20} /></div>
                   <div className="kpi-content">
-                    <span className="kpi-value">{stats.totalProduits}</span>
+                    <span className="kpi-value"><AnimatedNumber value={stats.totalProduits} /></span>
                     <span className="kpi-label">Total produits</span>
                   </div>
                   <div className="kpi-trend up"><ArrowUpRight size={14} /><span>Actif</span></div>
@@ -307,7 +534,7 @@ const DashboardResp = ({ userName, onLogout }) => {
                 <div className="kpi-card warning">
                   <div className="kpi-icon"><AlertTriangle size={20} /></div>
                   <div className="kpi-content">
-                    <span className="kpi-value">{stats.sousSeuilCount}</span>
+                    <span className="kpi-value"><AnimatedNumber value={stats.sousSeuilCount} /></span>
                     <span className="kpi-label">Sous seuil</span>
                   </div>
                   <div className="kpi-trend down"><ArrowDownRight size={14} /><span>Attention</span></div>
@@ -316,7 +543,7 @@ const DashboardResp = ({ userName, onLogout }) => {
                 <div className="kpi-card danger">
                   <div className="kpi-icon"><Activity size={20} /></div>
                   <div className="kpi-content">
-                    <span className="kpi-value">{stats.ruptureCount}</span>
+                    <span className="kpi-value"><AnimatedNumber value={stats.ruptureCount} /></span>
                     <span className="kpi-label">En rupture</span>
                   </div>
                   <div className="kpi-trend down"><ArrowDownRight size={14} /><span>Critique</span></div>
@@ -325,13 +552,32 @@ const DashboardResp = ({ userName, onLogout }) => {
                 <div className="kpi-card info">
                   <div className="kpi-icon"><CheckCircle2 size={20} /></div>
                   <div className="kpi-content">
-                    <span className="kpi-value">{stats.disponiblesCount}</span>
+                    <span className="kpi-value"><AnimatedNumber value={stats.disponiblesCount} /></span>
                     <span className="kpi-label">Produits disponibles</span>
                   </div>
                   <div className={`kpi-trend ${stats.disponiblesCount >= stats.sousSeuilCount ? 'up' : 'down'}`}>
                     {stats.disponiblesCount >= stats.sousSeuilCount ? <ArrowUpRight size={14} /> : <ArrowDownRight size={14} />}
                     <span>{stats.disponiblesCount >= stats.sousSeuilCount ? 'Maitrise' : 'A surveiller'}</span>
                   </div>
+                </div>
+              </div>
+
+              <div className="perf-strip">
+                <div className="perf-chip">
+                  <span>Mouvements (periode)</span>
+                  <strong><AnimatedNumber value={movementStats.total} /></strong>
+                </div>
+                <div className="perf-chip">
+                  <span>Entrées</span>
+                  <strong><AnimatedNumber value={movementStats.entries} /></strong>
+                </div>
+                <div className="perf-chip">
+                  <span>Sorties</span>
+                  <strong><AnimatedNumber value={movementStats.exits} /></strong>
+                </div>
+                <div className="perf-chip">
+                  <span>Alertes (critiques)</span>
+                  <strong><AnimatedNumber value={criticalAlertsCount} /></strong>
                 </div>
               </div>
 
@@ -416,6 +662,133 @@ const DashboardResp = ({ userName, onLogout }) => {
                       : "Pas de croisement seuil detecte sur l'horizon J+7."}
                   </p>
                 </article>
+
+                <article className="chart-card">
+                  <div className="chart-head">
+                    <h3><Sparkles size={17} /> Top produits consommes</h3>
+                    <span className="chart-subtitle">Sur la periode</span>
+                  </div>
+                  {topConsumed.rows.length ? (
+                    <div className="bar-chart-wrap">
+                      {topConsumed.rows.slice(0, 8).map((row) => (
+                        <div className="bar-row" key={row.id}>
+                          <span className="bar-label" title={row.name}>{row.code}</span>
+                          <div className="bar-track" aria-hidden="true">
+                            <div className="bar-fill" style={{ width: `${Math.round(row.ratio * 100)}%` }} />
+                          </div>
+                          <span className="bar-value">{Math.round(row.qty)}</span>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="chart-empty">Pas de donnees de consommation sur la periode.</div>
+                  )}
+                  <p className="chart-insight">
+                    {topConsumed.rows.length
+                      ? `Top 1: ${topConsumed.rows[0].name} (${Math.round(topConsumed.rows[0].qty)} unite(s)).`
+                      : 'Aucun top produit calcule.'}
+                  </p>
+                </article>
+
+                <article className="chart-card">
+                  <div className="chart-head">
+                    <h3><CheckCircle2 size={17} /> Disponibilite stock</h3>
+                    <span className="chart-subtitle">Produits OK / total</span>
+                  </div>
+                  <div className="gauge-wrap" aria-label="Disponibilite stock">
+                    <div className="gauge-ring" style={{ '--gauge': `${availabilityRate.toFixed(2)}%` }}>
+                      <div className="gauge-center">
+                        <div className="gauge-value">
+                          <AnimatedNumber value={availabilityRate} decimals={1} />%
+                        </div>
+                        <div className="gauge-label">Disponibilite</div>
+                      </div>
+                    </div>
+                    <div className="gauge-meta">
+                      <span>OK: {stats.disponiblesCount}</span>
+                      <span>Total: {stats.totalProduits}</span>
+                    </div>
+                  </div>
+                  <p className="chart-insight">
+                    {availabilityRate >= 85
+                      ? 'Disponibilite bonne. Surveille les sous-seuil pour eviter les ruptures.'
+                      : 'Disponibilite faible. Prioriser les references critiques a risque.'}
+                  </p>
+                </article>
+              </div>
+
+              <div className="lower-grid">
+                <div className="dashboard-card compact-card">
+                  <div className="card-header">
+                    <h3 className="card-title"><Clock size={17} /><span>Activite recente</span></h3>
+                    <span className="card-subtitle">Dernieres operations</span>
+                  </div>
+                  <div className="feed-list">
+                    {recentFeed.map((item) => (
+                      <div className="feed-item" key={item.id}>
+                        <div className={`feed-dot ${item.action}`} aria-hidden="true" />
+                        <div className="feed-main">
+                        <div className="feed-title">
+                          <strong>{item.product}</strong>
+                          <span className="feed-badge">{item.actionLabel}</span>
+                          {item.qty ? <span className="feed-qty">{item.qty}</span> : null}
+                        </div>
+                          <div className="feed-meta">
+                            <span>{formatDateTimeLabel(item.when)}</span>
+                            <span>{item.role}</span>
+                            <span>{item.source}</span>
+                          </div>
+                          {item.description ? <div className="feed-desc">{item.description}</div> : null}
+                        </div>
+                      </div>
+                    ))}
+                    {!recentFeed.length && <div className="feed-empty">Aucune activite recente sur la periode.</div>}
+                  </div>
+                </div>
+
+                <div className="dashboard-card compact-card">
+                  <div className="card-header">
+                    <h3 className="card-title"><AlertTriangle size={17} /><span>Anomalies detectees</span></h3>
+                    <span className="card-subtitle">Signaux issus de l’historique</span>
+                  </div>
+                  <div className="anomaly-list">
+                    {anomalyFeed.map((row) => (
+                      <div className="anomaly-item" key={row.id}>
+                        <div className="anomaly-qty">{Math.round(row.qty)}</div>
+                        <div className="anomaly-main">
+                          <div className="anomaly-when">{formatDateTimeLabel(row.when)}</div>
+                          <div className="anomaly-note">Seuil {Math.round(row.threshold)}</div>
+                        </div>
+                      </div>
+                    ))}
+                    {!anomalyFeed.length && <div className="feed-empty">Aucune anomalie forte recente.</div>}
+                  </div>
+                </div>
+
+                <div className="dashboard-card compact-card">
+                  <div className="card-header">
+                    <h3 className="card-title"><Sparkles size={17} /><span>Aide a la decision</span></h3>
+                    <span className="card-subtitle">Assistant & previsions</span>
+                  </div>
+                  <div className="ai-status">
+                    <div className="ai-status-row">
+                      <span>Assistant</span>
+                      <strong>{assistantSummary.assistantLabel}</strong>
+                    </div>
+                    <div className="ai-status-row">
+                      <span>Previsions</span>
+                      <strong>{assistantSummary.predictionsLabel}</strong>
+                    </div>
+                    <div className="ai-status-row">
+                      <span>Derniere mise a jour</span>
+                      <strong>{assistantSummary.lastUpdateLabel}</strong>
+                    </div>
+                    <div className="ai-status-row">
+                      <span>Action</span>
+                      <strong>{assistantSummary.assistantHint}</strong>
+                    </div>
+                  </div>
+                </div>
               </div>
 
               <div className="dashboard-card alert-table-card compact-alerts">

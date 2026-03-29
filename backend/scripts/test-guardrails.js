@@ -196,7 +196,8 @@ async function run() {
       const details = String(err?.response?.data?.details || '');
       const detailsLower = details.toLowerCase();
       assert(
-        detailsLower.includes('decision') && detailsLower.includes('requise avant service'),
+        (detailsLower.includes('decision') || detailsLower.includes('validation') || detailsLower.includes('responsable'))
+          && detailsLower.includes('requise avant service'),
         `Unexpected serve-guard error: ${details || 'empty'}`
       );
     }

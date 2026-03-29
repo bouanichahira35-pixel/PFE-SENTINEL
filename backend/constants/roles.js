@@ -1,8 +1,10 @@
-const TECHNICAL_ROLES = ['demandeur', 'magasinier', 'responsable'];
+const TECHNICAL_ROLES = ['demandeur', 'magasinier', 'responsable', 'admin'];
 
 const ROLE_ALIASES = {
-  admin_app: 'responsable',
-  administrateur: 'responsable',
+  admin_app: 'admin',
+  administrateur: 'admin',
+  admin: 'admin',
+  informatique: 'admin',
   responsable: 'responsable',
   stock_manager: 'magasinier',
   gestionnaire: 'magasinier',

@@ -1,0 +1,246 @@
+<mxfile host="Electron" agent="drawio" version="29.6.6">
+  <diagram name="UseCase" id="s5-usecase">
+    <mxGraphModel dx="1200" dy="800" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="980" pageHeight="1390" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+
+        <mxCell id="t" value="Sprint 5 - IA (Assistant + Copilote) (diagrammes locaux)" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=top;whiteSpace=wrap;html=1;fontStyle=1;fontSize=14;" vertex="1" parent="1">
+          <mxGeometry x="40" y="20" width="860" height="30" as="geometry" />
+        </mxCell>
+
+        <mxCell id="sys" value="SENTINEL (IA)" style="rounded=1;whiteSpace=wrap;html=1;strokeWidth=3;strokeColor=#0f172a;fillColor=#f8fafc;align=center;verticalAlign=top;fontStyle=1;" vertex="1" parent="1">
+          <mxGeometry x="220" y="70" width="720" height="580" as="geometry" />
+        </mxCell>
+
+        <mxCell id="a_resp" value="Responsable" style="shape=umlActor;verticalLabelPosition=bottom;verticalAlign=top;html=1;outlineConnect=0;strokeWidth=2;strokeColor=#334155;fillColor=#f1f5f9;" vertex="1" parent="1">
+          <mxGeometry x="50" y="170" width="80" height="140" as="geometry" />
+        </mxCell>
+        <mxCell id="a_mag" value="Magasinier" style="shape=umlActor;verticalLabelPosition=bottom;verticalAlign=top;html=1;outlineConnect=0;strokeWidth=2;strokeColor=#64748b;fillColor=#f1f5f9;" vertex="1" parent="1">
+          <mxGeometry x="50" y="390" width="80" height="140" as="geometry" />
+        </mxCell>
+
+        <mxCell id="a_py" value="Python IA" style="shape=umlActor;verticalLabelPosition=bottom;verticalAlign=top;html=1;outlineConnect=0;strokeWidth=2;strokeColor=#64748b;fillColor=#f1f5f9;" vertex="1" parent="1">
+          <mxGeometry x="950" y="170" width="80" height="140" as="geometry" />
+        </mxCell>
+        <mxCell id="a_llm" value="Gemini (opt)" style="shape=umlActor;verticalLabelPosition=bottom;verticalAlign=top;html=1;outlineConnect=0;strokeWidth=2;strokeColor=#64748b;fillColor=#f1f5f9;" vertex="1" parent="1">
+          <mxGeometry x="950" y="350" width="80" height="140" as="geometry" />
+        </mxCell>
+
+        <mxCell id="uc_alerts" value="Consulter alertes IA" style="ellipse;whiteSpace=wrap;html=1;strokeWidth=2;strokeColor=#6c8ebf;fillColor=#dae8fc;" vertex="1" parent="1">
+          <mxGeometry x="290" y="130" width="300" height="70" as="geometry" />
+        </mxCell>
+        <mxCell id="uc_explain" value="Expliquer une alerte" style="ellipse;whiteSpace=wrap;html=1;strokeWidth=2;strokeColor=#6c8ebf;fillColor=#dae8fc;" vertex="1" parent="1">
+          <mxGeometry x="610" y="130" width="280" height="70" as="geometry" />
+        </mxCell>
+        <mxCell id="uc_copilot" value="Copilote: recommandations" style="ellipse;whiteSpace=wrap;html=1;strokeWidth=2;strokeColor=#d6b656;fillColor=#fff2cc;" vertex="1" parent="1">
+          <mxGeometry x="290" y="240" width="300" height="70" as="geometry" />
+        </mxCell>
+        <mxCell id="uc_inbox" value="Inbox magasinier (decisions)" style="ellipse;whiteSpace=wrap;html=1;strokeWidth=2;strokeColor=#d6b656;fillColor=#fff2cc;" vertex="1" parent="1">
+          <mxGeometry x="610" y="240" width="280" height="70" as="geometry" />
+        </mxCell>
+        <mxCell id="uc_assist" value="Assistant Responsable (chat/report/voix)" style="ellipse;whiteSpace=wrap;html=1;strokeWidth=2;strokeColor=#82b366;fillColor=#d5e8d4;" vertex="1" parent="1">
+          <mxGeometry x="290" y="360" width="380" height="70" as="geometry" />
+        </mxCell>
+        <mxCell id="uc_traces" value="Consulter traces assistant" style="ellipse;whiteSpace=wrap;html=1;strokeWidth=2;strokeColor=#82b366;fillColor=#d5e8d4;" vertex="1" parent="1">
+          <mxGeometry x="700" y="360" width="220" height="70" as="geometry" />
+        </mxCell>
+        <mxCell id="uc_guard" value="Guardrails (lecture seule)" style="ellipse;whiteSpace=wrap;html=1;strokeWidth=2;strokeColor=#b85450;fillColor=#f8cecc;" vertex="1" parent="1">
+          <mxGeometry x="470" y="460" width="260" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="uc_tracewrite" value="Enregistrer AIAssistantTrace" style="ellipse;whiteSpace=wrap;html=1;strokeWidth=2;strokeColor=#475569;fillColor=#f5f5f5;" vertex="1" parent="1">
+          <mxGeometry x="470" y="560" width="290" height="60" as="geometry" />
+        </mxCell>
+
+        <mxCell id="e1" style="endArrow=none;startArrow=none;strokeWidth=2;strokeColor=#334155;" edge="1" parent="1" source="a_resp" target="uc_alerts"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e2" style="endArrow=none;startArrow=none;strokeWidth=2;strokeColor=#334155;" edge="1" parent="1" source="a_resp" target="uc_explain"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e3" style="endArrow=none;startArrow=none;strokeWidth=2;strokeColor=#334155;" edge="1" parent="1" source="a_resp" target="uc_assist"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e4" style="endArrow=none;startArrow=none;strokeWidth=2;strokeColor=#334155;" edge="1" parent="1" source="a_resp" target="uc_traces"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e5" style="endArrow=none;startArrow=none;strokeWidth=2;strokeColor=#64748b;" edge="1" parent="1" source="a_resp" target="uc_copilot"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e6" style="endArrow=none;startArrow=none;strokeWidth=2;strokeColor=#64748b;" edge="1" parent="1" source="a_mag" target="uc_inbox"><mxGeometry relative="1" as="geometry" /></mxCell>
+
+        <mxCell id="inc1" value="&amp;lt;&amp;lt;include&amp;gt;&amp;gt;" style="html=1;verticalAlign=bottom;labelBackgroundColor=#ffffff;endArrow=open;endFill=0;dashed=1;strokeWidth=2;strokeColor=#b85450;" edge="1" parent="1" source="uc_assist" target="uc_guard"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="inc2" value="&amp;lt;&amp;lt;include&amp;gt;&amp;gt;" style="html=1;verticalAlign=bottom;labelBackgroundColor=#ffffff;endArrow=open;endFill=0;dashed=1;strokeWidth=2;strokeColor=#475569;" edge="1" parent="1" source="uc_assist" target="uc_tracewrite"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="inc3" value="&amp;lt;&amp;lt;include&amp;gt;&amp;gt;" style="html=1;verticalAlign=bottom;labelBackgroundColor=#ffffff;endArrow=open;endFill=0;dashed=1;strokeWidth=2;strokeColor=#475569;" edge="1" parent="1" source="uc_explain" target="uc_tracewrite"><mxGeometry relative="1" as="geometry" /></mxCell>
+
+        <mxCell id="ext1" style="endArrow=none;startArrow=none;strokeWidth=2;strokeColor=#94a3b8;dashed=1;" edge="1" parent="1" source="a_py" target="uc_copilot"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="ext2" style="endArrow=none;startArrow=none;strokeWidth=2;strokeColor=#94a3b8;dashed=1;" edge="1" parent="1" source="a_py" target="uc_alerts"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="ext3" style="endArrow=none;startArrow=none;strokeWidth=2;strokeColor=#94a3b8;dashed=1;" edge="1" parent="1" source="a_llm" target="uc_assist"><mxGeometry relative="1" as="geometry" /></mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+
+  <diagram name="Activity" id="s5-activity">
+    <mxGraphModel dx="1200" dy="800" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="980" pageHeight="1390" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+
+        <mxCell id="t" value="Sprint 5 - Flux principal: assistant (facts -&gt; IA -&gt; trace -&gt; reponse)" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=top;whiteSpace=wrap;html=1;fontStyle=1;fontSize=14;" vertex="1" parent="1">
+          <mxGeometry x="40" y="20" width="900" height="30" as="geometry" />
+        </mxCell>
+
+        <mxCell id="start" value="" style="ellipse;html=1;fillColor=#111827;strokeColor=#111827;" vertex="1" parent="1">
+          <mxGeometry x="110" y="90" width="22" height="22" as="geometry" />
+        </mxCell>
+
+        <mxCell id="a1" value="Responsable: poser question (mode chat/report)" style="rounded=1;whiteSpace=wrap;html=1;strokeWidth=2;strokeColor=#334155;fillColor=#e2e8f0;align=center;" vertex="1" parent="1">
+          <mxGeometry x="70" y="140" width="300" height="55" as="geometry" />
+        </mxCell>
+        <mxCell id="a2" value="API: construire facts depuis DB" style="rounded=1;whiteSpace=wrap;html=1;strokeWidth=2;strokeColor=#6c8ebf;fillColor=#dae8fc;align=center;" vertex="1" parent="1">
+          <mxGeometry x="420" y="140" width="260" height="55" as="geometry" />
+        </mxCell>
+        <mxCell id="a3" value="IA locale (Python): predictions / recommandations" style="rounded=1;whiteSpace=wrap;html=1;strokeWidth=2;strokeColor=#d6b656;fillColor=#fff2cc;align=center;" vertex="1" parent="1">
+          <mxGeometry x="720" y="140" width="250" height="55" as="geometry" />
+        </mxCell>
+        <mxCell id="d1" value="Gemini configure ?" style="rhombus;whiteSpace=wrap;html=1;strokeWidth=2;strokeColor=#334155;fillColor=#ffffff;align=center;" vertex="1" parent="1">
+          <mxGeometry x="520" y="230" width="120" height="90" as="geometry" />
+        </mxCell>
+        <mxCell id="a4" value="Appel Gemini: generate reponse" style="rounded=1;whiteSpace=wrap;html=1;strokeWidth=2;strokeColor=#82b366;fillColor=#d5e8d4;align=center;" vertex="1" parent="1">
+          <mxGeometry x="720" y="300" width="250" height="55" as="geometry" />
+        </mxCell>
+        <mxCell id="a5" value="Fallback: reponse locale (templates + chiffres)" style="rounded=1;whiteSpace=wrap;html=1;strokeWidth=2;strokeColor=#82b366;fillColor=#d5e8d4;align=center;" vertex="1" parent="1">
+          <mxGeometry x="70" y="300" width="300" height="55" as="geometry" />
+        </mxCell>
+        <mxCell id="a6" value="Guardrails: refuser toute ecriture (stock, users)" style="rounded=1;whiteSpace=wrap;html=1;strokeWidth=2;strokeColor=#b85450;fillColor=#f8cecc;align=center;" vertex="1" parent="1">
+          <mxGeometry x="420" y="380" width="300" height="55" as="geometry" />
+        </mxCell>
+        <mxCell id="a7" value="Tracer: AIAssistantTrace.create (latency, source, warnings)" style="rounded=1;whiteSpace=wrap;html=1;strokeWidth=2;strokeColor=#475569;fillColor=#f5f5f5;align=center;" vertex="1" parent="1">
+          <mxGeometry x="420" y="460" width="320" height="55" as="geometry" />
+        </mxCell>
+        <mxCell id="a8" value="Afficher reponse + lien traces" style="rounded=1;whiteSpace=wrap;html=1;strokeWidth=2;strokeColor=#0f172a;fillColor=#f8fafc;align=center;" vertex="1" parent="1">
+          <mxGeometry x="420" y="540" width="240" height="55" as="geometry" />
+        </mxCell>
+
+        <mxCell id="end" value="" style="ellipse;html=1;fillColor=#111827;strokeColor=#111827;" vertex="1" parent="1">
+          <mxGeometry x="110" y="620" width="22" height="22" as="geometry" />
+        </mxCell>
+
+        <mxCell id="e0" style="endArrow=block;endFill=1;strokeWidth=2;strokeColor=#334155;" edge="1" parent="1" source="start" target="a1"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e1" style="endArrow=block;endFill=1;strokeWidth=2;strokeColor=#6c8ebf;" edge="1" parent="1" source="a1" target="a2"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e2" style="endArrow=block;endFill=1;strokeWidth=2;strokeColor=#d6b656;" edge="1" parent="1" source="a2" target="a3"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e3" style="endArrow=block;endFill=1;strokeWidth=2;strokeColor=#334155;" edge="1" parent="1" source="a3" target="d1"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e4" value="oui" style="endArrow=block;endFill=1;strokeWidth=2;strokeColor=#82b366;html=1;labelBackgroundColor=#ffffff;" edge="1" parent="1" source="d1" target="a4"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e5" value="non" style="endArrow=block;endFill=1;strokeWidth=2;strokeColor=#82b366;html=1;labelBackgroundColor=#ffffff;" edge="1" parent="1" source="d1" target="a5"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e6" style="endArrow=block;endFill=1;strokeWidth=2;strokeColor=#b85450;" edge="1" parent="1" source="a4" target="a6"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e7" style="endArrow=block;endFill=1;strokeWidth=2;strokeColor=#b85450;" edge="1" parent="1" source="a5" target="a6"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e8" style="endArrow=block;endFill=1;strokeWidth=2;strokeColor=#475569;" edge="1" parent="1" source="a6" target="a7"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e9" style="endArrow=block;endFill=1;strokeWidth=2;strokeColor=#0f172a;" edge="1" parent="1" source="a7" target="a8"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e10" style="endArrow=block;endFill=1;strokeWidth=2;strokeColor=#111827;" edge="1" parent="1" source="a8" target="end"><mxGeometry relative="1" as="geometry" /></mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+
+  <diagram name="Sequence" id="s5-seq">
+    <mxGraphModel dx="1200" dy="800" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="980" pageHeight="1390" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+
+        <mxCell id="t" value="Sprint 5 - Sequence (simplifie): /api/ai/assistant/ask" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=top;whiteSpace=wrap;html=1;fontStyle=1;fontSize=14;" vertex="1" parent="1">
+          <mxGeometry x="40" y="20" width="800" height="30" as="geometry" />
+        </mxCell>
+
+        <mxCell id="p1" value="Chatbot UI" style="rounded=1;whiteSpace=wrap;html=1;strokeWidth=2;strokeColor=#1565c0;fillColor=#eff6ff;align=center;fontStyle=1;" vertex="1" parent="1">
+          <mxGeometry x="50" y="90" width="170" height="50" as="geometry" />
+        </mxCell>
+        <mxCell id="p2" value="Backend (/api/ai)" style="rounded=1;whiteSpace=wrap;html=1;strokeWidth=2;strokeColor=#334155;fillColor=#e2e8f0;align=center;fontStyle=1;" vertex="1" parent="1">
+          <mxGeometry x="250" y="90" width="220" height="50" as="geometry" />
+        </mxCell>
+        <mxCell id="p3" value="MongoDB" style="rounded=1;whiteSpace=wrap;html=1;strokeWidth=2;strokeColor=#0f172a;fillColor=#f8fafc;align=center;fontStyle=1;" vertex="1" parent="1">
+          <mxGeometry x="500" y="90" width="170" height="50" as="geometry" />
+        </mxCell>
+        <mxCell id="p4" value="Python IA" style="rounded=1;whiteSpace=wrap;html=1;strokeWidth=2;strokeColor=#d6b656;fillColor=#fff2cc;align=center;fontStyle=1;" vertex="1" parent="1">
+          <mxGeometry x="700" y="90" width="170" height="50" as="geometry" />
+        </mxCell>
+        <mxCell id="p5" value="Gemini (opt)" style="rounded=1;whiteSpace=wrap;html=1;strokeWidth=2;strokeColor=#82b366;fillColor=#d5e8d4;align=center;fontStyle=1;" vertex="1" parent="1">
+          <mxGeometry x="700" y="160" width="170" height="50" as="geometry" />
+        </mxCell>
+
+        <mxCell id="m1" value="POST /assistant/ask" style="rounded=1;whiteSpace=wrap;html=1;strokeWidth=2;strokeColor=#475569;fillColor=#ffffff;align=center;" vertex="1" parent="1">
+          <mxGeometry x="70" y="240" width="150" height="40" as="geometry" />
+        </mxCell>
+        <mxCell id="m2" value="Build facts (stock, requests, alerts)" style="rounded=1;whiteSpace=wrap;html=1;strokeWidth=2;strokeColor=#475569;fillColor=#ffffff;align=center;" vertex="1" parent="1">
+          <mxGeometry x="260" y="300" width="220" height="40" as="geometry" />
+        </mxCell>
+        <mxCell id="m3" value="Predict/Recommend" style="rounded=1;whiteSpace=wrap;html=1;strokeWidth=2;strokeColor=#475569;fillColor=#ffffff;align=center;" vertex="1" parent="1">
+          <mxGeometry x="720" y="360" width="150" height="40" as="geometry" />
+        </mxCell>
+        <mxCell id="m4" value="Generate answer (if configured)" style="rounded=1;whiteSpace=wrap;html=1;strokeWidth=2;strokeColor=#475569;fillColor=#ffffff;align=center;" vertex="1" parent="1">
+          <mxGeometry x="700" y="420" width="190" height="40" as="geometry" />
+        </mxCell>
+        <mxCell id="m5" value="Save AIAssistantTrace" style="rounded=1;whiteSpace=wrap;html=1;strokeWidth=2;strokeColor=#475569;fillColor=#ffffff;align=center;" vertex="1" parent="1">
+          <mxGeometry x="260" y="480" width="220" height="40" as="geometry" />
+        </mxCell>
+        <mxCell id="m6" value="200 OK {answer, warnings}" style="rounded=1;whiteSpace=wrap;html=1;strokeWidth=2;strokeColor=#475569;fillColor=#ffffff;align=center;" vertex="1" parent="1">
+          <mxGeometry x="70" y="540" width="190" height="40" as="geometry" />
+        </mxCell>
+
+        <mxCell id="l12" style="endArrow=block;endFill=1;strokeWidth=2;strokeColor=#1565c0;" edge="1" parent="1" source="m1" target="m2"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="l23" style="endArrow=block;endFill=1;strokeWidth=2;strokeColor=#d6b656;" edge="1" parent="1" source="m2" target="m3"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="l34" style="endArrow=block;endFill=1;strokeWidth=2;strokeColor=#82b366;dashed=1;" edge="1" parent="1" source="m3" target="m4"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="l45" style="endArrow=block;endFill=1;strokeWidth=2;strokeColor=#0f172a;" edge="1" parent="1" source="m4" target="m5"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="l56" style="endArrow=block;endFill=1;strokeWidth=2;strokeColor=#0f172a;" edge="1" parent="1" source="m5" target="m6"><mxGeometry relative="1" as="geometry" /></mxCell>
+
+        <mxCell id="s12" style="endArrow=block;endFill=1;strokeWidth=2;strokeColor=#1565c0;" edge="1" parent="1" source="p1" target="p2"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="s23" style="endArrow=block;endFill=1;strokeWidth=2;strokeColor=#334155;" edge="1" parent="1" source="p2" target="p3"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="s24" style="endArrow=block;endFill=1;strokeWidth=2;strokeColor=#d6b656;" edge="1" parent="1" source="p2" target="p4"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="s25" style="endArrow=block;endFill=1;strokeWidth=2;strokeColor=#82b366;dashed=1;" edge="1" parent="1" source="p2" target="p5"><mxGeometry relative="1" as="geometry" /></mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+
+  <diagram name="Class" id="s5-class">
+    <mxGraphModel dx="1200" dy="800" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="980" pageHeight="1390" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+
+        <mxCell id="t" value="Sprint 5 - Classes (IA + traces)" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=top;whiteSpace=wrap;html=1;fontStyle=1;fontSize=14;" vertex="1" parent="1">
+          <mxGeometry x="40" y="20" width="650" height="30" as="geometry" />
+        </mxCell>
+
+        <mxCell id="c_alert" value="AIAlert" style="swimlane;fontStyle=1;align=center;verticalAlign=top;childLayout=stackLayout;horizontal=1;startSize=26;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;strokeWidth=2;" vertex="1" parent="1">
+          <mxGeometry x="60" y="90" width="260" height="160" as="geometry" />
+        </mxCell>
+        <mxCell id="c_alert_t" value="alert_type, risk_level, status&#10;+ review(by)&#10;+ attachAction(text)" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=top;spacingLeft=6;whiteSpace=wrap;html=1;" vertex="1" parent="c_alert">
+          <mxGeometry x="0" y="26" width="260" height="134" as="geometry" />
+        </mxCell>
+
+        <mxCell id="c_pred" value="AIPrediction" style="swimlane;fontStyle=1;align=center;verticalAlign=top;childLayout=stackLayout;horizontal=1;startSize=26;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;strokeWidth=2;" vertex="1" parent="1">
+          <mxGeometry x="350" y="90" width="260" height="160" as="geometry" />
+        </mxCell>
+        <mxCell id="c_pred_t" value="prediction_type, confidence_score&#10;+ explain()&#10;+ toKpiPoint()" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=top;spacingLeft=6;whiteSpace=wrap;html=1;" vertex="1" parent="c_pred">
+          <mxGeometry x="0" y="26" width="260" height="134" as="geometry" />
+        </mxCell>
+
+        <mxCell id="c_trace" value="AIAssistantTrace" style="swimlane;fontStyle=1;align=center;verticalAlign=top;childLayout=stackLayout;horizontal=1;startSize=26;whiteSpace=wrap;html=1;fillColor=#f5f5f5;strokeColor=#0f172a;strokeWidth=2;" vertex="1" parent="1">
+          <mxGeometry x="650" y="90" width="280" height="180" as="geometry" />
+        </mxCell>
+        <mxCell id="c_trace_t" value="mode, source, latency_ms, warnings[]&#10;+ record(question, answer)&#10;+ redactSecrets()" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=top;spacingLeft=6;whiteSpace=wrap;html=1;" vertex="1" parent="c_trace">
+          <mxGeometry x="0" y="26" width="280" height="154" as="geometry" />
+        </mxCell>
+
+        <mxCell id="c_svc" value="AiModelService" style="swimlane;fontStyle=1;align=center;verticalAlign=top;childLayout=stackLayout;horizontal=1;startSize=26;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;strokeWidth=2;" vertex="1" parent="1">
+          <mxGeometry x="60" y="310" width="300" height="170" as="geometry" />
+        </mxCell>
+        <mxCell id="c_svc_t" value="+ buildFacts(db)&#10;+ predictStockout(facts)&#10;+ recommendations(facts)&#10;+ assistantAnswer(facts, question)" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=top;spacingLeft=6;whiteSpace=wrap;html=1;" vertex="1" parent="c_svc">
+          <mxGeometry x="0" y="26" width="300" height="144" as="geometry" />
+        </mxCell>
+
+        <mxCell id="c_gem" value="GeminiService (opt)" style="swimlane;fontStyle=1;align=center;verticalAlign=top;childLayout=stackLayout;horizontal=1;startSize=26;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;strokeWidth=2;" vertex="1" parent="1">
+          <mxGeometry x="400" y="310" width="280" height="150" as="geometry" />
+        </mxCell>
+        <mxCell id="c_gem_t" value="+ isConfigured()&#10;+ generate(prompt)&#10;+ transcribe(audio)" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=top;spacingLeft=6;whiteSpace=wrap;html=1;" vertex="1" parent="c_gem">
+          <mxGeometry x="0" y="26" width="280" height="124" as="geometry" />
+        </mxCell>
+
+        <mxCell id="r1" value="uses" style="endArrow=none;startArrow=none;strokeWidth=2;strokeColor=#82b366;html=1;labelBackgroundColor=#ffffff;" edge="1" parent="1" source="c_svc" target="c_gem"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="r2" value="writes" style="endArrow=none;startArrow=none;strokeWidth=2;strokeColor=#0f172a;html=1;labelBackgroundColor=#ffffff;" edge="1" parent="1" source="c_svc" target="c_trace"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="r3" value="feeds" style="endArrow=none;startArrow=none;strokeWidth=2;strokeColor=#6c8ebf;dashed=1;html=1;labelBackgroundColor=#ffffff;" edge="1" parent="1" source="c_alert" target="c_svc"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="r4" value="feeds" style="endArrow=none;startArrow=none;strokeWidth=2;strokeColor=#d6b656;dashed=1;html=1;labelBackgroundColor=#ffffff;" edge="1" parent="1" source="c_pred" target="c_svc"><mxGeometry relative="1" as="geometry" /></mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>
+

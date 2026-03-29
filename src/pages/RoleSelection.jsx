@@ -53,7 +53,7 @@ const RoleSelection = () => {
       <div className="role-selection-container">
         <div className="role-header">
           <img src={logoETAP} alt="ETAP Logo" className="role-logo" />
-          <h1 className="role-main-title">Systeme de Gestion de Stock</h1>
+          <h1 className="role-main-title">ETAP</h1>
           <p className="role-subtitle">Selectionnez votre profil pour acceder a l'application</p>
           {logoutMessage && (
             <div className="role-session-alert">

@@ -2,6 +2,7 @@ const User = require('../models/User');
 const Notification = require('../models/Notification');
 const AIAlert = require('../models/AIAlert');
 const StockLot = require('../models/StockLot');
+const Product = require('../models/Product');
 const { enqueueMail } = require('./mailQueueService');
 const { getUserPreferences, canSendNotificationEmail } = require('./userPreferencesService');
 const { logSecurityEvent } = require('./securityAuditService');
@@ -109,6 +110,89 @@ async function evaluateProductAlerts(product, session = null) {
   }
 }
 
+async function createAiAlertIfMissing({ productId, alert_type, risk_level, message }, session = null) {
+  const since = new Date(Date.now() - 24 * 60 * 60 * 1000);
+  const existing = await AIAlert.findOne({
+    product: productId,
+    alert_type,
+    status: { $in: ['new', 'open'] },
+    createdAt: { $gte: since },
+  }).session(session);
+  if (existing) return { created: false, alert: existing };
+
+  const doc = {
+    product: productId,
+    alert_type,
+    risk_level,
+    message,
+    status: 'new',
+  };
+  const created = session
+    ? (await AIAlert.create([doc], { session }))[0]
+    : await AIAlert.create(doc);
+  return { created: true, alert: created };
+}
+
+async function rebuildAiAlerts({ max_products = 300 } = {}) {
+  const max = Math.min(2000, Math.max(1, Number(max_products || 300)));
+  const products = await Product.find({})
+    .select('_id name quantity_current seuil_minimum')
+    .sort({ updatedAt: -1 })
+    .limit(max)
+    .lean();
+
+  const in30Days = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
+  const expiringLots = await StockLot.find({
+    quantity_available: { $gt: 0 },
+    expiry_date: { $exists: true, $ne: null, $lte: in30Days },
+  })
+    .select('product')
+    .lean();
+
+  const expiringByProduct = new Map();
+  for (const lot of expiringLots) {
+    const key = String(lot?.product || '');
+    if (!key) continue;
+    expiringByProduct.set(key, (expiringByProduct.get(key) || 0) + 1);
+  }
+
+  let createdCount = 0;
+  let scanned = 0;
+  for (const p of products) {
+    scanned += 1;
+    const qty = Number(p.quantity_current || 0);
+    const seuil = Number(p.seuil_minimum || 0);
+    const name = p.name || 'Produit';
+
+    if (qty <= seuil) {
+      const statusLabel = qty <= 0 ? 'rupture' : 'sous seuil';
+      const message = `${name} est ${statusLabel}. Quantite restante: ${qty}, seuil: ${seuil}.`;
+      const result = await createAiAlertIfMissing({
+        productId: p._id,
+        alert_type: qty <= 0 ? 'rupture' : 'surconsommation',
+        risk_level: qty <= 0 ? 'high' : 'medium',
+        message,
+      });
+      if (result.created) createdCount += 1;
+    }
+
+    const expCount = expiringByProduct.get(String(p._id)) || 0;
+    if (expCount > 0) {
+      const message = `${name}: ${expCount} lot(s) proches de la peremption (<=30 jours).`;
+      const result = await createAiAlertIfMissing({
+        productId: p._id,
+        alert_type: 'anomaly',
+        risk_level: 'medium',
+        message,
+      });
+      if (result.created) createdCount += 1;
+    }
+  }
+
+  return { ok: true, scanned_products: scanned, created_alerts: createdCount };
+}
+
 module.exports = {
   evaluateProductAlerts,
+  rebuildAiAlerts,
 };

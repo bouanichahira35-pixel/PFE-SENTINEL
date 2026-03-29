@@ -22,6 +22,7 @@ const securityAuditSchema = new mongoose.Schema(
     },
     user: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
     email: String,
+    email_hash: String,
     role: String,
     ip_address: String,
     user_agent: String,

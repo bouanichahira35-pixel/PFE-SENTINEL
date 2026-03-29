@@ -1,3 +1,9 @@
+.app-table-container {
+  width: 100%;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
 .app-table { 
   width: 100%; 
   border-collapse: collapse; 

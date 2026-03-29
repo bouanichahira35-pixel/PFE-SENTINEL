@@ -219,6 +219,56 @@
   color: #94a3b8;
 }
 
+.dm-open-inbox {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.38rem 0.6rem;
+  border-radius: 999px;
+  border: 1px solid rgba(37, 99, 235, 0.25);
+  background: rgba(37, 99, 235, 0.08);
+  color: #1d4ed8;
+  font-weight: 900;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.dm-open-inbox:hover {
+  filter: brightness(0.98);
+}
+
+.mobile-card-list {
+  display: grid;
+  gap: 0.75rem;
+}
+
+.mobile-card {
+  border: 1px solid #e2e8f0;
+  border-radius: 0.95rem;
+  padding: 0.9rem;
+  background: #fff;
+  box-shadow: 0 10px 22px rgba(15, 23, 42, 0.05);
+}
+
+.mobile-card-actions {
+  margin-top: 0.7rem;
+  display: flex;
+  justify-content: flex-end;
+}
+
+.mobile-action-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  padding: 0.55rem 0.75rem;
+  border-radius: 0.75rem;
+  border: 1px solid rgba(37, 99, 235, 0.25);
+  background: rgba(37, 99, 235, 0.08);
+  color: #1d4ed8;
+  font-weight: 900;
+  cursor: pointer;
+}
+
 .dm-empty {
   text-align: center;
   color: #64748b;

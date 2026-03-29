@@ -16,6 +16,7 @@ import LoadingSpinner from '../../components/shared/LoadingSpinner';
 import { useToast } from '../../components/shared/Toast';
 import { get } from '../../services/api';
 import { useUiLanguage } from '../../utils/uiLanguage';
+import useIsMobile from '../../hooks/useIsMobile';
 import './HistoriqueMag.css';
 
 function formatDate(value) {
@@ -28,8 +29,9 @@ function formatDate(value) {
 const HistoriqueMag = ({ userName, onLogout }) => {
   const lang = useUiLanguage();
   const toast = useToast();
+  const isMobile = useIsMobile(640);
 
-  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(() => (typeof window !== 'undefined' ? window.innerWidth <= 768 : false));
   const [searchQuery, setSearchQuery] = useState('');
   const [filterType, setFilterType] = useState('tous');
   const [isLoading, setIsLoading] = useState(false);
@@ -221,6 +223,10 @@ const HistoriqueMag = ({ userName, onLogout }) => {
 
   return (
     <div className="app-layout">
+      <div
+        className={`sidebar-backdrop ${sidebarCollapsed ? 'hidden' : ''}`}
+        onClick={() => setSidebarCollapsed(true)}
+      />
       <SidebarMag
         collapsed={sidebarCollapsed}
         onToggle={() => setSidebarCollapsed(!sidebarCollapsed)}
@@ -229,7 +235,13 @@ const HistoriqueMag = ({ userName, onLogout }) => {
       />
 
       <div className="main-container">
-        <HeaderPage userName={userName} title={i18n.title} searchValue={searchQuery} onSearchChange={setSearchQuery} />
+        <HeaderPage
+          userName={userName}
+          title={i18n.title}
+          searchValue={searchQuery}
+          onSearchChange={setSearchQuery}
+          onMenuClick={() => setSidebarCollapsed((prev) => !prev)}
+        />
 
         <main className="main-content">
           {isLoading && <LoadingSpinner overlay text="Chargement..." />}
@@ -257,68 +269,127 @@ const HistoriqueMag = ({ userName, onLogout }) => {
                 <span>{filteredHistorique.length} {i18n.lines}</span>
               </div>
 
-              <div className="hm-table-wrap">
-                <table className="hm-table">
-                  <thead>
-                    <tr>
-                      <th>Type</th>
-                      <th>Produit</th>
-                      <th>Quantite</th>
-                      <th>Date</th>
-                      <th>Magasinier</th>
-                      <th>Source / Destination</th>
-                      <th>Pieces</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {filteredHistorique.map((item) => (
-                      <tr key={item.id}>
-                        <td>
-                          <span className={`hm-type-pill ${getTypeClass(item.type)}`}>
-                            {getTypeIcon(item.type)}
-                            {item.typeLabel}
-                          </span>
-                        </td>
-                        <td>
-                          <div className="hm-product-cell">
-                            <Package size={14} />
+              {isMobile ? (
+                <>
+                  {!filteredHistorique.length ? (
+                    <div className="hm-empty" style={{ padding: '1rem' }}>{i18n.noRows}</div>
+                  ) : (
+                    <div className="mobile-card-list">
+                      {filteredHistorique.map((item) => (
+                        <div key={item.id} className="mobile-card">
+                          <div className="mobile-card-header">
                             <div>
-                              <strong>{item.produit}</strong>
-                              <small>{item.code}</small>
+                              <h3 className="mobile-card-title">{item.produit}</h3>
+                              <div className="mobile-card-subtitle">{item.code}</div>
+                            </div>
+                            <span className={`hm-type-pill ${getTypeClass(item.type)}`}>
+                              {getTypeIcon(item.type)} {item.typeLabel}
+                            </span>
+                          </div>
+
+                          <div className="mobile-card-grid">
+                            <div className="mobile-kv">
+                              <div className="mobile-kv-label">Quantite</div>
+                              <div className="mobile-kv-value">{item.quantite}</div>
+                            </div>
+                            <div className="mobile-kv">
+                              <div className="mobile-kv-label">Date</div>
+                              <div className="mobile-kv-value">{formatDate(item.date)}</div>
+                            </div>
+                            <div className="mobile-kv">
+                              <div className="mobile-kv-label">Magasinier</div>
+                              <div className="mobile-kv-value">{item.magasinier || userName || '-'}</div>
+                            </div>
+                            <div className="mobile-kv">
+                              <div className="mobile-kv-label">Source</div>
+                              <div className="mobile-kv-value">{item.source}</div>
                             </div>
                           </div>
-                        </td>
-                        <td>{item.quantite}</td>
-                        <td>
-                          <span className="hm-meta-inline"><Calendar size={13} /> {formatDate(item.date)}</span>
-                        </td>
-                        <td>
-                          <span className="hm-meta-inline"><User size={13} /> {item.magasinier || userName || '-'}</span>
-                        </td>
-                        <td>{item.source}</td>
-                        <td>
-                          {item.attachments.length === 0 ? (
-                            <span className="hm-no-piece">-</span>
-                          ) : (
-                            <div className="hm-piece-list">
-                              {item.attachments.map((a, idx) => (
-                                <a key={`${item.id}-att-${idx}`} href={a.file_url} target="_blank" rel="noreferrer">
-                                  <Paperclip size={12} /> {a.label || a.file_name || `Piece ${idx + 1}`}
-                                </a>
-                              ))}
+
+                          {item.attachments.length > 0 && (
+                            <div style={{ marginTop: 10 }}>
+                              <div className="mobile-kv-label">Pieces</div>
+                              <div style={{ marginTop: 6 }} className="hm-piece-list">
+                                {item.attachments.slice(0, 3).map((a, idx) => (
+                                  <a key={`${item.id}-att-m-${idx}`} href={a.file_url} target="_blank" rel="noreferrer">
+                                    <Paperclip size={12} /> {a.label || a.file_name || `Piece ${idx + 1}`}
+                                  </a>
+                                ))}
+                                {item.attachments.length > 3 && (
+                                  <span className="hm-no-piece">+{item.attachments.length - 3} piece(s)</span>
+                                )}
+                              </div>
                             </div>
                           )}
-                        </td>
-                      </tr>
-                    ))}
-                    {!filteredHistorique.length && (
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </>
+              ) : (
+                <div className="hm-table-wrap">
+                  <table className="hm-table">
+                    <thead>
                       <tr>
-                        <td colSpan={7} className="hm-empty">{i18n.noRows}</td>
+                        <th>Type</th>
+                        <th>Produit</th>
+                        <th>Quantite</th>
+                        <th>Date</th>
+                        <th>Magasinier</th>
+                        <th>Source / Destination</th>
+                        <th>Pieces</th>
                       </tr>
-                    )}
-                  </tbody>
-                </table>
-              </div>
+                    </thead>
+                    <tbody>
+                      {filteredHistorique.map((item) => (
+                        <tr key={item.id}>
+                          <td>
+                            <span className={`hm-type-pill ${getTypeClass(item.type)}`}>
+                              {getTypeIcon(item.type)}
+                              {item.typeLabel}
+                            </span>
+                          </td>
+                          <td>
+                            <div className="hm-product-cell">
+                              <Package size={14} />
+                              <div>
+                                <strong>{item.produit}</strong>
+                                <small>{item.code}</small>
+                              </div>
+                            </div>
+                          </td>
+                          <td>{item.quantite}</td>
+                          <td>
+                            <span className="hm-meta-inline"><Calendar size={13} /> {formatDate(item.date)}</span>
+                          </td>
+                          <td>
+                            <span className="hm-meta-inline"><User size={13} /> {item.magasinier || userName || '-'}</span>
+                          </td>
+                          <td>{item.source}</td>
+                          <td>
+                            {item.attachments.length === 0 ? (
+                              <span className="hm-no-piece">-</span>
+                            ) : (
+                              <div className="hm-piece-list">
+                                {item.attachments.map((a, idx) => (
+                                  <a key={`${item.id}-att-${idx}`} href={a.file_url} target="_blank" rel="noreferrer">
+                                    <Paperclip size={12} /> {a.label || a.file_name || `Piece ${idx + 1}`}
+                                  </a>
+                                ))}
+                              </div>
+                            )}
+                          </td>
+                        </tr>
+                      ))}
+                      {!filteredHistorique.length && (
+                        <tr>
+                          <td colSpan={7} className="hm-empty">{i18n.noRows}</td>
+                        </tr>
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              )}
             </div>
           </div>
         </main>

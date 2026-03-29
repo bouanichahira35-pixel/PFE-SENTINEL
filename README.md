@@ -1,70 +1,74 @@
-# Getting Started with Create React App
+# PFE-SENTINEL
 
-This project was bootstrapped with [Create React App](https://github.com/facebook/create-react-app).
+Application web de gestion de stock (produits, FIFO lots, demandes, audit, reporting) avec un backend Node/Express et un frontend React.
 
-## Available Scripts
+## Structure
 
-In the project directory, you can run:
+- `src/` : frontend (React / Create React App)
+- `backend/` : API (Node.js / Express / MongoDB / Redis optionnel)
+- `docs/` : documents projet
+- `diagrams/` : diagrammes
 
-### `npm start`
+## Prérequis
 
-Runs the app in the development mode.\
-Open [http://localhost:3000](http://localhost:3000) to view it in your browser.
+- Node.js 20+
+- MongoDB 7+
+- (Optionnel) Redis
 
-The page will reload when you make changes.\
-You may also see any lint errors in the console.
+## Démarrage (local)
 
-### `npm test`
+### 1) Backend
 
-Launches the test runner in the interactive watch mode.\
-See the section about [running tests](https://facebook.github.io/create-react-app/docs/running-tests) for more information.
+Dans `backend/`:
 
-### `npm run build`
+```bash
+npm ci
+cp .env.example .env
+npm start
+```
 
-Builds the app for production to the `build` folder.\
-It correctly bundles React in production mode and optimizes the build for the best performance.
+API: `http://localhost:5000/api`  
+Healthcheck: `GET http://localhost:5000/api/health`
 
-The build is minified and the filenames include the hashes.\
-Your app is ready to be deployed!
+### 2) Frontend
 
-See the section about [deployment](https://facebook.github.io/create-react-app/docs/deployment) for more information.
+À la racine:
 
-### `npm run eject`
+```bash
+npm ci
+cp .env.example .env
+npm start
+```
 
-**Note: this is a one-way operation. Once you `eject`, you can't go back!**
+UI: `http://localhost:3000`
 
-If you aren't satisfied with the build tool and configuration choices, you can `eject` at any time. This command will remove the single build dependency from your project.
+## Variables d'environnement (frontend)
 
-Instead, it will copy all the configuration files and the transitive dependencies (webpack, Babel, ESLint, etc) right into your project so you have full control over them. All of the commands except `eject` will still work, but they will point to the copied scripts so you can tweak them. At this point you're on your own.
+- `REACT_APP_API_URL` (voir `.env.example`) : URL du backend (inclure `/api`)
 
-You don't have to ever use `eject`. The curated feature set is suitable for small and middle deployments, and you shouldn't feel obligated to use this feature. However we understand that this tool wouldn't be useful if you couldn't customize it when you are ready for it.
+## Tests
 
-## Learn More
+Frontend:
 
-You can learn more in the [Create React App documentation](https://facebook.github.io/create-react-app/docs/getting-started).
+```bash
+npm test
+```
 
-To learn React, check out the [React documentation](https://reactjs.org/).
+Backend (dans `backend/`):
 
-### Code Splitting
+```bash
+npm test
+```
 
-This section has moved here: [https://facebook.github.io/create-react-app/docs/code-splitting](https://facebook.github.io/create-react-app/docs/code-splitting)
+## Docker (backend + mongo + redis)
 
-### Analyzing the Bundle Size
+Dans `backend/`:
 
-This section has moved here: [https://facebook.github.io/create-react-app/docs/analyzing-the-bundle-size](https://facebook.github.io/create-react-app/docs/analyzing-the-bundle-size)
+```bash
+docker compose up --build
+```
 
-### Making a Progressive Web App
+## Notes
 
-This section has moved here: [https://facebook.github.io/create-react-app/docs/making-a-progressive-web-app](https://facebook.github.io/create-react-app/docs/making-a-progressive-web-app)
-
-### Advanced Configuration
-
-This section has moved here: [https://facebook.github.io/create-react-app/docs/advanced-configuration](https://facebook.github.io/create-react-app/docs/advanced-configuration)
-
-### Deployment
-
-This section has moved here: [https://facebook.github.io/create-react-app/docs/deployment](https://facebook.github.io/create-react-app/docs/deployment)
-
-### `npm run build` fails to minify
-
-This section has moved here: [https://facebook.github.io/create-react-app/docs/troubleshooting#npm-run-build-fails-to-minify](https://facebook.github.io/create-react-app/docs/troubleshooting#npm-run-build-fails-to-minify)
+- Le script `npm run start:legacy` existe si vous avez une contrainte OpenSSL legacy sur un environnement spécifique.
+- Voir aussi `backend/README.md` pour la configuration détaillée du backend.

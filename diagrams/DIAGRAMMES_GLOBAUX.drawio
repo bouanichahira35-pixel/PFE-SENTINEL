@@ -1,0 +1,342 @@
+<mxfile host="Electron" agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) draw.io/29.6.6 Chrome/144.0.7559.236 Electron/40.8.4 Safari/537.36" version="29.6.6" pages="3">
+  <diagram name="Diagramme de cas d&#39;utilisation (global)" id="usecase-global">
+    <mxGraphModel dx="1603" dy="963" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="980" pageHeight="1390" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+        <mxCell id="uc_sys" parent="1" style="rounded=1;whiteSpace=wrap;html=1;strokeWidth=3;strokeColor=#475569;fillColor=#f8fafc;align=center;verticalAlign=top;fontStyle=1;" value="SENTINEL (Systeme)" vertex="1">
+          <mxGeometry height="880" width="690" x="240" y="70" as="geometry" />
+        </mxCell>
+        <mxCell id="actor_dem" parent="1" style="shape=umlActor;verticalLabelPosition=bottom;verticalAlign=top;html=1;outlineConnect=0;strokeColor=#059669;fillColor=#ecfdf5;" value="Demandeur" vertex="1">
+          <mxGeometry height="120" width="70" x="60" y="190" as="geometry" />
+        </mxCell>
+        <mxCell id="actor_mag" parent="1" style="shape=umlActor;verticalLabelPosition=bottom;verticalAlign=top;html=1;outlineConnect=0;strokeColor=#1565c0;fillColor=#eff6ff;" value="Magasinier" vertex="1">
+          <mxGeometry height="120" width="70" x="60" y="400" as="geometry" />
+        </mxCell>
+        <mxCell id="actor_resp" parent="1" style="shape=umlActor;verticalLabelPosition=bottom;verticalAlign=top;html=1;outlineConnect=0;strokeColor=#7c3aed;fillColor=#f5f3ff;" value="Responsable" vertex="1">
+          <mxGeometry height="120" width="70" x="60" y="620" as="geometry" />
+        </mxCell>
+        <mxCell id="actor_ext" parent="1" style="shape=umlActor;verticalLabelPosition=bottom;verticalAlign=top;html=1;outlineConnect=0;strokeColor=#64748b;fillColor=#f1f5f9;" value="Services externes&#xa;(SMTP/Twilio/Gemini)" vertex="1">
+          <mxGeometry height="150" width="70" x="920" y="210" as="geometry" />
+        </mxCell>
+        <mxCell id="grp_auth" parent="1" style="rounded=1;whiteSpace=wrap;html=1;strokeWidth=2;strokeColor=#334155;fillColor=#ffffff;align=left;verticalAlign=top;fontStyle=1;" value="Authentification &amp; securite" vertex="1">
+          <mxGeometry height="140" width="630" x="270" y="110" as="geometry" />
+        </mxCell>
+        <mxCell id="grp_ops" parent="1" style="rounded=1;whiteSpace=wrap;html=1;strokeWidth=2;strokeColor=#334155;fillColor=#ffffff;align=left;verticalAlign=top;fontStyle=1;" value="Operations stock &amp; demandes" vertex="1">
+          <mxGeometry height="250" width="630" x="270" y="280" as="geometry" />
+        </mxCell>
+        <mxCell id="grp_pilot" parent="1" style="rounded=1;whiteSpace=wrap;html=1;strokeWidth=2;strokeColor=#334155;fillColor=#ffffff;align=left;verticalAlign=top;fontStyle=1;" value="Pilotage &amp; gouvernance" vertex="1">
+          <mxGeometry height="220" width="630" x="270" y="560" as="geometry" />
+        </mxCell>
+        <mxCell id="grp_collab" parent="1" style="rounded=1;whiteSpace=wrap;html=1;strokeWidth=2;strokeColor=#334155;fillColor=#ffffff;align=left;verticalAlign=top;fontStyle=1;" value="Collaboration" vertex="1">
+          <mxGeometry height="120" width="300" x="270" y="800" as="geometry" />
+        </mxCell>
+        <mxCell id="grp_ai" parent="1" style="rounded=1;whiteSpace=wrap;html=1;strokeWidth=2;strokeColor=#334155;fillColor=#ffffff;align=left;verticalAlign=top;fontStyle=1;" value="IA / Decision" vertex="1">
+          <mxGeometry height="120" width="300" x="600" y="800" as="geometry" />
+        </mxCell>
+        <mxCell id="uc_login" parent="1" style="ellipse;whiteSpace=wrap;html=1;strokeWidth=2;strokeColor=#6c8ebf;fillColor=#dae8fc;" value="Se connecter&#xa;(login/refresh/logout)" vertex="1">
+          <mxGeometry height="60" width="250" x="310" y="150" as="geometry" />
+        </mxCell>
+        <mxCell id="uc_pwd" parent="1" style="ellipse;whiteSpace=wrap;html=1;strokeWidth=2;strokeColor=#d6b656;fillColor=#fff2cc;" value="Recuperer mot de passe&#xa;(OTP email/SMS/WA)" vertex="1">
+          <mxGeometry height="60" width="250" x="610" y="150" as="geometry" />
+        </mxCell>
+        <mxCell id="uc_catalog" parent="1" style="ellipse;whiteSpace=wrap;html=1;strokeWidth=2;strokeColor=#82b366;fillColor=#d5e8d4;" value="Consulter catalogue&#xa;(produits approuves)" vertex="1">
+          <mxGeometry height="60" width="250" x="310" y="320" as="geometry" />
+        </mxCell>
+        <mxCell id="uc_req" parent="1" style="ellipse;whiteSpace=wrap;html=1;strokeWidth=2;strokeColor=#9673a6;fillColor=#e1d5e7;" value="Gerer demandes&#xa;(creer/traiter/recevoir)" vertex="1">
+          <mxGeometry height="60" width="250" x="610" y="320" as="geometry" />
+        </mxCell>
+        <mxCell id="uc_stock" parent="1" style="ellipse;whiteSpace=wrap;html=1;strokeWidth=2;strokeColor=#d79b00;fillColor=#ffe6cc;" value="Mouvements stock FIFO&#xa;(entree/sortie/lots/QR)" vertex="1">
+          <mxGeometry height="60" width="250" x="310" y="410" as="geometry" />
+        </mxCell>
+        <mxCell id="uc_inventory" parent="1" style="ellipse;whiteSpace=wrap;html=1;strokeWidth=2;strokeColor=#2563eb;fillColor=#dbeafe;" value="Inventaire&#xa;(compter/appliquer)" vertex="1">
+          <mxGeometry height="60" width="250" x="610" y="410" as="geometry" />
+        </mxCell>
+        <mxCell id="uc_products" parent="1" style="ellipse;whiteSpace=wrap;html=1;strokeWidth=2;strokeColor=#7c3aed;fillColor=#f5f3ff;" value="Gouverner produits&#xa;(valider/archiver)" vertex="1">
+          <mxGeometry height="60" width="250" x="310" y="610" as="geometry" />
+        </mxCell>
+        <mxCell id="uc_suppliers" parent="1" style="ellipse;whiteSpace=wrap;html=1;strokeWidth=2;strokeColor=#b45309;fillColor=#fde68a;" value="Fournisseurs &amp; commandes&#xa;(PO/reception)" vertex="1">
+          <mxGeometry height="60" width="250" x="610" y="610" as="geometry" />
+        </mxCell>
+        <mxCell id="uc_rules" parent="1" style="ellipse;whiteSpace=wrap;html=1;strokeWidth=2;strokeColor=#334155;fillColor=#e2e8f0;" value="Parametrer&#xa;(seuils, prefs, IA)" vertex="1">
+          <mxGeometry height="60" width="250" x="310" y="690" as="geometry" />
+        </mxCell>
+        <mxCell id="uc_audit" parent="1" style="ellipse;whiteSpace=wrap;html=1;strokeWidth=2;strokeColor=#334155;fillColor=#e2e8f0;" value="Consulter audit &amp; reporting" vertex="1">
+          <mxGeometry height="60" width="250" x="610" y="690" as="geometry" />
+        </mxCell>
+        <mxCell id="uc_chat" parent="1" style="ellipse;whiteSpace=wrap;html=1;strokeWidth=2;strokeColor=#1565c0;fillColor=#eff6ff;" value="Chat (direct + threads)" vertex="1">
+          <mxGeometry height="60" width="250" x="310" y="835" as="geometry" />
+        </mxCell>
+        <mxCell id="uc_ai" parent="1" style="ellipse;whiteSpace=wrap;html=1;strokeWidth=2;strokeColor=#7c3aed;fillColor=#f5f3ff;" value="Assistant IA &amp; Copilote&#xa;(alertes/reco/mini-rapports)" vertex="1">
+          <mxGeometry height="60" width="250" x="610" y="835" as="geometry" />
+        </mxCell>
+        <mxCell id="e_dem_login" edge="1" parent="1" source="actor_dem" style="endArrow=none;startArrow=none;strokeWidth=2;strokeColor=#059669;" target="uc_login">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e_mag_login" edge="1" parent="1" source="actor_mag" style="endArrow=none;startArrow=none;strokeWidth=2;strokeColor=#1565c0;" target="uc_login">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e_resp_login" edge="1" parent="1" source="actor_resp" style="endArrow=none;startArrow=none;strokeWidth=2;strokeColor=#7c3aed;" target="uc_login">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e_dem_pwd" edge="1" parent="1" source="actor_dem" style="endArrow=none;startArrow=none;strokeWidth=2;strokeColor=#059669;" target="uc_pwd">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e_mag_pwd" edge="1" parent="1" source="actor_mag" style="endArrow=none;startArrow=none;strokeWidth=2;strokeColor=#1565c0;" target="uc_pwd">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e_resp_pwd" edge="1" parent="1" source="actor_resp" style="endArrow=none;startArrow=none;strokeWidth=2;strokeColor=#7c3aed;" target="uc_pwd">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e_ext_pwd" edge="1" parent="1" source="actor_ext" style="endArrow=none;startArrow=none;strokeWidth=2;strokeColor=#94a3b8;dashed=1;" target="uc_pwd">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e_dem_catalog" edge="1" parent="1" source="actor_dem" style="endArrow=none;startArrow=none;strokeWidth=2;strokeColor=#059669;" target="uc_catalog">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e_dem_req" edge="1" parent="1" source="actor_dem" style="endArrow=none;startArrow=none;strokeWidth=2;strokeColor=#059669;" target="uc_req">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e_mag_req" edge="1" parent="1" source="actor_mag" style="endArrow=none;startArrow=none;strokeWidth=2;strokeColor=#1565c0;" target="uc_req">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e_mag_stock" edge="1" parent="1" source="actor_mag" style="endArrow=none;startArrow=none;strokeWidth=2;strokeColor=#1565c0;" target="uc_stock">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e_mag_inv" edge="1" parent="1" source="actor_mag" style="endArrow=none;startArrow=none;strokeWidth=2;strokeColor=#1565c0;" target="uc_inventory">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e_mag_chat" edge="1" parent="1" source="actor_mag" style="endArrow=none;startArrow=none;strokeWidth=2;strokeColor=#1565c0;" target="uc_chat">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e_resp_products" edge="1" parent="1" source="actor_resp" style="endArrow=none;startArrow=none;strokeWidth=2;strokeColor=#7c3aed;" target="uc_products">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e_resp_suppliers" edge="1" parent="1" source="actor_resp" style="endArrow=none;startArrow=none;strokeWidth=2;strokeColor=#7c3aed;" target="uc_suppliers">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e_resp_inv" edge="1" parent="1" source="actor_resp" style="endArrow=none;startArrow=none;strokeWidth=2;strokeColor=#7c3aed;" target="uc_inventory">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e_resp_rules" edge="1" parent="1" source="actor_resp" style="endArrow=none;startArrow=none;strokeWidth=2;strokeColor=#7c3aed;" target="uc_rules">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e_resp_audit" edge="1" parent="1" source="actor_resp" style="endArrow=none;startArrow=none;strokeWidth=2;strokeColor=#7c3aed;" target="uc_audit">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e_resp_chat" edge="1" parent="1" source="actor_resp" style="endArrow=none;startArrow=none;strokeWidth=2;strokeColor=#7c3aed;" target="uc_chat">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e_resp_ai" edge="1" parent="1" source="actor_resp" style="endArrow=none;startArrow=none;strokeWidth=2;strokeColor=#7c3aed;" target="uc_ai">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e_ext_ai" edge="1" parent="1" source="actor_ext" style="endArrow=none;startArrow=none;strokeWidth=2;strokeColor=#94a3b8;dashed=1;" target="uc_ai">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+  <diagram name="Class-Global" id="class-global">
+    <mxGraphModel dx="1200" dy="800" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="980" pageHeight="1390" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+        <mxCell id="cl_meta" value="Diagramme de classes (global)&#xa;Auteur: Codex (GPT-5.2)" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=top;whiteSpace=wrap;html=1;fontStyle=1;fontSize=14;" vertex="1" parent="1">
+          <mxGeometry x="40" y="20" width="420" height="40" as="geometry" />
+        </mxCell>
+        <mxCell id="cl_user" value="User" style="swimlane;fontStyle=1;align=center;verticalAlign=top;childLayout=stackLayout;horizontal=1;startSize=26;resizeParent=1;resizeLast=0;collapsible=1;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;strokeWidth=3;" vertex="1" parent="1">
+          <mxGeometry x="40" y="80" width="220" height="190" as="geometry" />
+        </mxCell>
+        <mxCell id="cl_user_txt" value="Attributs: username, email, role, status, telephone&#xa;Actions: login(), refreshSession(), logout()" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=top;spacingLeft=6;spacingRight=6;overflow=hidden;whiteSpace=wrap;html=1;strokeWidth=3;" vertex="1" parent="cl_user">
+          <mxGeometry x="0" y="26" width="220" height="164" as="geometry" />
+        </mxCell>
+        <mxCell id="cl_category" value="Category" style="swimlane;fontStyle=1;align=center;verticalAlign=top;childLayout=stackLayout;horizontal=1;startSize=26;resizeParent=1;resizeLast=0;collapsible=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;strokeWidth=2;" vertex="1" parent="1">
+          <mxGeometry x="300" y="80" width="220" height="160" as="geometry" />
+        </mxCell>
+        <mxCell id="cl_category_txt" value="Attributs: name, audiences[]&#xa;Actions: create(), updateAudiences(), list()" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=top;spacingLeft=6;spacingRight=6;overflow=hidden;whiteSpace=wrap;html=1;" vertex="1" parent="cl_category">
+          <mxGeometry x="0" y="26" width="220" height="134" as="geometry" />
+        </mxCell>
+        <mxCell id="cl_product" value="Product" style="swimlane;fontStyle=1;align=center;verticalAlign=top;childLayout=stackLayout;horizontal=1;startSize=26;resizeParent=1;resizeLast=0;collapsible=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;strokeWidth=2;" vertex="1" parent="1">
+          <mxGeometry x="560" y="80" width="260" height="210" as="geometry" />
+        </mxCell>
+        <mxCell id="cl_product_txt" value="Attributs: code_product, name, family, quantity_current, seuil_minimum, status&#xa;Gouvernance: validation_status, lifecycle_status, category&#xa;Actions: approve(), reject(), archive(reason), computeStatus()" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=top;spacingLeft=6;spacingRight=6;overflow=hidden;whiteSpace=wrap;html=1;" vertex="1" parent="cl_product">
+          <mxGeometry x="0" y="26" width="260" height="184" as="geometry" />
+        </mxCell>
+        <mxCell id="cl_request" value="Request" style="swimlane;fontStyle=1;align=center;verticalAlign=top;childLayout=stackLayout;horizontal=1;startSize=26;resizeParent=1;resizeLast=0;collapsible=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;strokeWidth=2;" vertex="1" parent="1">
+          <mxGeometry x="40" y="340" width="260" height="200" as="geometry" />
+        </mxCell>
+        <mxCell id="cl_request_txt" value="Attributs: quantity_requested, priority, status, direction_laboratory&#xa;Liens: demandeur(User), product(Product), stock_exit(StockExit?)&#xa;Actions: validate(), prepare(), serve(stockExit), confirmReceipt(token), cancel()" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=top;spacingLeft=6;spacingRight=6;overflow=hidden;whiteSpace=wrap;html=1;" vertex="1" parent="cl_request">
+          <mxGeometry x="0" y="26" width="260" height="174" as="geometry" />
+        </mxCell>
+        <mxCell id="cl_entry" value="StockEntry" style="swimlane;fontStyle=1;align=center;verticalAlign=top;childLayout=stackLayout;horizontal=1;startSize=26;resizeParent=1;resizeLast=0;collapsible=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;strokeWidth=2;" vertex="1" parent="1">
+          <mxGeometry x="340" y="340" width="240" height="170" as="geometry" />
+        </mxCell>
+        <mxCell id="cl_entry_txt" value="Attributs: entry_number, quantity, date_entry, canceled&#xa;Actions: create(), cancel(), attach(file)" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=top;spacingLeft=6;spacingRight=6;overflow=hidden;whiteSpace=wrap;html=1;" vertex="1" parent="cl_entry">
+          <mxGeometry x="0" y="26" width="240" height="144" as="geometry" />
+        </mxCell>
+        <mxCell id="cl_lot" value="StockLot" style="swimlane;fontStyle=1;align=center;verticalAlign=top;childLayout=stackLayout;horizontal=1;startSize=26;resizeParent=1;resizeLast=0;collapsible=1;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;strokeWidth=2;" vertex="1" parent="1">
+          <mxGeometry x="620" y="340" width="200" height="170" as="geometry" />
+        </mxCell>
+        <mxCell id="cl_lot_txt" value="Attributs: lot_number, expiry_date, quantity_available, status&#xa;Actions: consume(qty), markExpired(), reopenIfRestocked()" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=top;spacingLeft=6;spacingRight=6;overflow=hidden;whiteSpace=wrap;html=1;" vertex="1" parent="cl_lot">
+          <mxGeometry x="0" y="26" width="200" height="144" as="geometry" />
+        </mxCell>
+        <mxCell id="cl_exit" value="StockExit" style="swimlane;fontStyle=1;align=center;verticalAlign=top;childLayout=stackLayout;horizontal=1;startSize=26;resizeParent=1;resizeLast=0;collapsible=1;whiteSpace=wrap;html=1;fillColor=#ffe6cc;strokeColor=#d79b00;strokeWidth=2;" vertex="1" parent="1">
+          <mxGeometry x="340" y="560" width="240" height="190" as="geometry" />
+        </mxCell>
+        <mxCell id="cl_exit_txt" value="Attributs: exit_number, quantity, date_exit, exit_mode, canceled&#xa;FIFO: consumed_lots[]&#xa;Actions: createFIFO(), cancel(), verifyFifoQr(), resolveInternalBond()" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=top;spacingLeft=6;spacingRight=6;overflow=hidden;whiteSpace=wrap;html=1;" vertex="1" parent="cl_exit">
+          <mxGeometry x="0" y="26" width="240" height="164" as="geometry" />
+        </mxCell>
+        <mxCell id="cl_history" value="History (append-only)" style="swimlane;fontStyle=1;align=center;verticalAlign=top;childLayout=stackLayout;horizontal=1;startSize=26;resizeParent=1;resizeLast=0;collapsible=1;whiteSpace=wrap;html=1;fillColor=#f5f5f5;strokeColor=#0f172a;strokeWidth=2;" vertex="1" parent="1">
+          <mxGeometry x="40" y="590" width="260" height="160" as="geometry" />
+        </mxCell>
+        <mxCell id="cl_history_txt" value="Attributs: action_type, source, date_action, tags[], context&#xa;Actions: append(event), list(filters)" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=top;spacingLeft=6;spacingRight=6;overflow=hidden;whiteSpace=wrap;html=1;" vertex="1" parent="cl_history">
+          <mxGeometry x="0" y="26" width="260" height="134" as="geometry" />
+        </mxCell>
+        <mxCell id="cl_inventory" value="InventorySession" style="swimlane;fontStyle=1;align=center;verticalAlign=top;childLayout=stackLayout;horizontal=1;startSize=26;resizeParent=1;resizeLast=0;collapsible=1;whiteSpace=wrap;html=1;fillColor=#dbeafe;strokeColor=#2563eb;strokeWidth=2;" vertex="1" parent="1">
+          <mxGeometry x="560" y="560" width="260" height="190" as="geometry" />
+        </mxCell>
+        <mxCell id="cl_inventory_txt" value="Attributs: reference, status, created_by, closed_at, applied_at&#xa;Actions: create(), addCount(product,qty), close(), applyAdjustments()" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=top;spacingLeft=6;spacingRight=6;overflow=hidden;whiteSpace=wrap;html=1;" vertex="1" parent="cl_inventory">
+          <mxGeometry x="0" y="26" width="260" height="164" as="geometry" />
+        </mxCell>
+        <!-- Relations (general) -->
+        <mxCell id="rel_prod_cat" value="category (0..1)" style="endArrow=none;startArrow=none;strokeWidth=2;strokeColor=#475569;html=1;labelBackgroundColor=#ffffff;" edge="1" parent="1" source="cl_product" target="cl_category">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="rel_user_req" value="demandeur (1..*)" style="endArrow=none;startArrow=none;strokeWidth=2;strokeColor=#475569;html=1;labelBackgroundColor=#ffffff;" edge="1" parent="1" source="cl_user" target="cl_request">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="rel_req_prod" value="product (*-&gt;1)" style="endArrow=none;startArrow=none;strokeWidth=2;strokeColor=#475569;html=1;labelBackgroundColor=#ffffff;" edge="1" parent="1" source="cl_request" target="cl_product">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="rel_entry_prod" value="product (*-&gt;1)" style="endArrow=none;startArrow=none;strokeWidth=2;strokeColor=#475569;html=1;labelBackgroundColor=#ffffff;" edge="1" parent="1" source="cl_entry" target="cl_product">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="rel_lot_prod" value="product (*-&gt;1)" style="endArrow=none;startArrow=none;strokeWidth=2;strokeColor=#475569;html=1;labelBackgroundColor=#ffffff;" edge="1" parent="1" source="cl_lot" target="cl_product">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="rel_exit_prod" value="product (*-&gt;1)" style="endArrow=none;startArrow=none;strokeWidth=2;strokeColor=#475569;html=1;labelBackgroundColor=#ffffff;" edge="1" parent="1" source="cl_exit" target="cl_product">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="rel_req_exit" value="stock_exit (0..1)" style="endArrow=none;startArrow=none;strokeWidth=2;strokeColor=#94a3b8;dashed=1;html=1;labelBackgroundColor=#ffffff;" edge="1" parent="1" source="cl_request" target="cl_exit">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="rel_hist_user" value="user (*-&gt;1)" style="endArrow=none;startArrow=none;strokeWidth=2;strokeColor=#0f172a;html=1;labelBackgroundColor=#ffffff;" edge="1" parent="1" source="cl_history" target="cl_user">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="rel_hist_prod" value="product (0..1)" style="endArrow=none;startArrow=none;strokeWidth=2;strokeColor=#0f172a;dashed=1;html=1;labelBackgroundColor=#ffffff;" edge="1" parent="1" source="cl_history" target="cl_product">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="rel_inventory_prod" value="counts (*-&gt;product)" style="endArrow=none;startArrow=none;strokeWidth=2;strokeColor=#2563eb;html=1;labelBackgroundColor=#ffffff;" edge="1" parent="1" source="cl_inventory" target="cl_product">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+  <diagram name="Activity-Global" id="activity-global">
+    <mxGraphModel dx="1603" dy="963" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="980" pageHeight="1390" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+        <mxCell id="act_start" parent="1" style="ellipse;html=1;fillColor=#111827;strokeColor=#111827;" value="" vertex="1">
+          <mxGeometry height="22" width="22" x="120" y="90" as="geometry" />
+        </mxCell>
+        <mxCell id="act_auth" parent="1" style="rounded=1;whiteSpace=wrap;html=1;strokeWidth=2;strokeColor=#334155;fillColor=#e2e8f0;align=center;fontStyle=1;" value="Authentification + session" vertex="1">
+          <mxGeometry height="55" width="210" x="80" y="140" as="geometry" />
+        </mxCell>
+        <mxCell id="act_role" parent="1" style="rhombus;whiteSpace=wrap;html=1;strokeWidth=2;strokeColor=#334155;fillColor=#fff2cc;align=center;fontStyle=1;" value="Role ?" vertex="1">
+          <mxGeometry height="100" width="160" x="105" y="230" as="geometry" />
+        </mxCell>
+        <mxCell id="act_dem_1" parent="1" style="rounded=1;whiteSpace=wrap;html=1;strokeWidth=2;strokeColor=#059669;fillColor=#ecfdf5;align=center;" value="Consulter catalogue" vertex="1">
+          <mxGeometry height="55" width="240" x="360" y="170" as="geometry" />
+        </mxCell>
+        <mxCell id="act_dem_2" parent="1" style="rounded=1;whiteSpace=wrap;html=1;strokeWidth=2;strokeColor=#059669;fillColor=#ecfdf5;align=center;" value="Creer demande" vertex="1">
+          <mxGeometry height="55" width="240" x="640" y="170" as="geometry" />
+        </mxCell>
+        <mxCell id="act_mag_1" parent="1" style="rounded=1;whiteSpace=wrap;html=1;strokeWidth=2;strokeColor=#1565c0;fillColor=#eff6ff;align=center;" value="Traiter demandes&#xa;(prepare/servir)" vertex="1">
+          <mxGeometry height="60" width="240" x="360" y="300" as="geometry" />
+        </mxCell>
+        <mxCell id="act_mag_2" parent="1" style="rounded=1;whiteSpace=wrap;html=1;strokeWidth=2;strokeColor=#1565c0;fillColor=#eff6ff;align=center;" value="Mouvements stock FIFO&#xa;(entree/sortie/lots)" vertex="1">
+          <mxGeometry height="60" width="240" x="640" y="300" as="geometry" />
+        </mxCell>
+        <mxCell id="act_mag_3" parent="1" style="rounded=1;whiteSpace=wrap;html=1;strokeWidth=2;strokeColor=#1565c0;fillColor=#eff6ff;align=center;" value="Compter inventaire&#xa;(session + lignes)" vertex="1">
+          <mxGeometry height="60" width="240" x="360" y="390" as="geometry" />
+        </mxCell>
+        <mxCell id="act_resp_1" parent="1" style="rounded=1;whiteSpace=wrap;html=1;strokeWidth=2;strokeColor=#7c3aed;fillColor=#f5f3ff;align=center;" value="Valider produits + categories" vertex="1">
+          <mxGeometry height="55" width="240" x="360" y="520" as="geometry" />
+        </mxCell>
+        <mxCell id="act_resp_2" parent="1" style="rounded=1;whiteSpace=wrap;html=1;strokeWidth=2;strokeColor=#7c3aed;fillColor=#f5f3ff;align=center;" value="Pilotage&#xa;(alertes/decisions)" vertex="1">
+          <mxGeometry height="55" width="240" x="640" y="520" as="geometry" />
+        </mxCell>
+        <mxCell id="act_resp_3" parent="1" style="rounded=1;whiteSpace=wrap;html=1;strokeWidth=2;strokeColor=#7c3aed;fillColor=#f5f3ff;align=center;" value="Appliquer inventaire&#xa;(ajustements)" vertex="1">
+          <mxGeometry height="55" width="240" x="360" y="590" as="geometry" />
+        </mxCell>
+        <mxCell id="act_resp_4" parent="1" style="rounded=1;whiteSpace=wrap;html=1;strokeWidth=2;strokeColor=#7c3aed;fillColor=#f5f3ff;align=center;" value="Assistant IA (optionnel)&#xa;(mini-rapports)" vertex="1">
+          <mxGeometry height="55" width="240" x="640" y="590" as="geometry" />
+        </mxCell>
+        <mxCell id="act_sys" parent="1" style="rounded=1;whiteSpace=wrap;html=1;strokeWidth=2;strokeColor=#0f172a;fillColor=#f8fafc;align=center;fontStyle=1;" value="Systeme: History (append-only)&#xa;Notifications + SecurityAudit" vertex="1">
+          <mxGeometry height="70" width="520" x="360" y="700" as="geometry" />
+        </mxCell>
+        <mxCell id="act_logout" parent="1" style="rounded=1;whiteSpace=wrap;html=1;strokeWidth=2;strokeColor=#334155;fillColor=#e2e8f0;align=center;fontStyle=1;" value="Deconnexion" vertex="1">
+          <mxGeometry height="55" width="210" x="80" y="820" as="geometry" />
+        </mxCell>
+        <mxCell id="act_end" parent="1" style="ellipse;html=1;fillColor=#ffffff;strokeColor=#111827;strokeWidth=2;" value="" vertex="1">
+          <mxGeometry height="22" width="22" x="120" y="920" as="geometry" />
+        </mxCell>
+        <mxCell id="act_end2" parent="1" style="ellipse;html=1;fillColor=#111827;strokeColor=#111827;" value="" vertex="1">
+          <mxGeometry height="14" width="14" x="124" y="924" as="geometry" />
+        </mxCell>
+        <mxCell id="ae1" edge="1" parent="1" source="act_start" style="endArrow=block;endFill=1;strokeWidth=2;strokeColor=#475569;" target="act_auth">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="ae2" edge="1" parent="1" source="act_auth" style="endArrow=block;endFill=1;strokeWidth=2;strokeColor=#475569;" target="act_role">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="ae_dem" edge="1" parent="1" source="act_role" style="endArrow=block;endFill=1;strokeWidth=2;strokeColor=#059669;html=1;labelBackgroundColor=#ffffff;" target="act_dem_1" value="demandeur">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="ae_mag" edge="1" parent="1" source="act_role" style="endArrow=block;endFill=1;strokeWidth=2;strokeColor=#1565c0;html=1;labelBackgroundColor=#ffffff;" target="act_mag_1" value="magasinier">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="ae_resp" edge="1" parent="1" source="act_role" style="endArrow=block;endFill=1;strokeWidth=2;strokeColor=#7c3aed;html=1;labelBackgroundColor=#ffffff;" target="act_resp_1" value="responsable">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="ae_dem2" edge="1" parent="1" source="act_dem_1" style="endArrow=block;endFill=1;strokeWidth=2;strokeColor=#059669;" target="act_dem_2">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="ae_mag2" edge="1" parent="1" source="act_mag_1" style="endArrow=block;endFill=1;strokeWidth=2;strokeColor=#1565c0;" target="act_mag_2">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="ae_mag3" edge="1" parent="1" source="act_mag_2" style="endArrow=block;endFill=1;strokeWidth=2;strokeColor=#1565c0;" target="act_mag_3">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="ae_resp2" edge="1" parent="1" source="act_resp_1" style="endArrow=block;endFill=1;strokeWidth=2;strokeColor=#7c3aed;" target="act_resp_2">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="ae_resp3" edge="1" parent="1" source="act_resp_2" style="endArrow=block;endFill=1;strokeWidth=2;strokeColor=#7c3aed;" target="act_resp_3">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="ae_resp4" edge="1" parent="1" source="act_resp_2" style="endArrow=block;endFill=1;strokeWidth=2;strokeColor=#7c3aed;dashed=1;" target="act_resp_4">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="ae_join_dem" edge="1" parent="1" source="act_dem_2" style="endArrow=block;endFill=1;strokeWidth=2;strokeColor=#94a3b8;" target="act_sys">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="ae_join_mag" edge="1" parent="1" source="act_mag_3" style="endArrow=block;endFill=1;strokeWidth=2;strokeColor=#94a3b8;" target="act_sys">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="ae_join_resp" edge="1" parent="1" source="act_resp_3" style="endArrow=block;endFill=1;strokeWidth=2;strokeColor=#94a3b8;" target="act_sys">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="ae_join_resp_ai" edge="1" parent="1" source="act_resp_4" style="endArrow=block;endFill=1;strokeWidth=2;strokeColor=#94a3b8;dashed=1;" target="act_sys">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="ae_logout" edge="1" parent="1" source="act_sys" style="endArrow=block;endFill=1;strokeWidth=2;strokeColor=#475569;" target="act_logout">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="ae_end" edge="1" parent="1" source="act_logout" style="endArrow=block;endFill=1;strokeWidth=2;strokeColor=#475569;" target="act_end">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>

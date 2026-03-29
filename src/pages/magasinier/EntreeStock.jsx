@@ -71,7 +71,7 @@ const EntreeStock = ({ userName, onLogout }) => {
   const location = useLocation();
   const navigate = useNavigate();
   const toast = useToast();
-  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(() => (typeof window !== 'undefined' ? window.innerWidth <= 768 : false));
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isLoadingProducts, setIsLoadingProducts] = useState(false);
   const initialProduct = location.state?.product || null;
@@ -234,7 +234,11 @@ const EntreeStock = ({ userName, onLogout }) => {
         purchase_voucher_number: formData.numeroBonAchat,
         delivery_note_number: formData.numeroBonLivraison,
         supplier_doc_qr_value: formData.modeLivraison === 'scan' ? formData.fournisseurQrRaw || formData.numeroBonLivraison : undefined,
-        entry_mode: formData.modeLivraison === 'scan' ? 'supplier_qr' : 'supplier_number',
+        entry_mode: formData.modeLivraison === 'scan'
+          ? 'supplier_qr'
+          : formData.modeLivraison === 'manual'
+            ? 'manual'
+            : 'supplier_number',
         delivery_date: formData.dateLivraison || undefined,
         service_requester: formData.serviceDemandeur,
         reference_code: formData.codeBarres,
@@ -261,6 +265,10 @@ const EntreeStock = ({ userName, onLogout }) => {
 
   return (
     <div className="app-layout">
+      <div
+        className={`sidebar-backdrop ${sidebarCollapsed ? 'hidden' : ''}`}
+        onClick={() => setSidebarCollapsed(true)}
+      />
       <SidebarMag
         collapsed={sidebarCollapsed}
         onToggle={() => setSidebarCollapsed(!sidebarCollapsed)}
@@ -273,6 +281,7 @@ const EntreeStock = ({ userName, onLogout }) => {
           userName={userName}
           title="Entree de Stock"
           showSearch={false}
+          onMenuClick={() => setSidebarCollapsed((prev) => !prev)}
         />
 
         <main className="main-content">

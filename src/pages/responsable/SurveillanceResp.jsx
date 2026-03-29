@@ -25,7 +25,7 @@ function levelFromRisk(probability, underThreshold) {
 
 const SurveillanceResp = ({ userName, onLogout }) => {
   const toast = useToast();
-  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(() => (typeof window !== 'undefined' ? window.innerWidth <= 768 : false));
   const [isLoading, setIsLoading] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [pendingProducts, setPendingProducts] = useState([]);
@@ -187,6 +187,10 @@ const SurveillanceResp = ({ userName, onLogout }) => {
   return (
     <ProtectedPage userName={userName}>
       <div className="app-layout">
+        <div
+          className={`sidebar-backdrop ${sidebarCollapsed ? 'hidden' : ''}`}
+          onClick={() => setSidebarCollapsed(true)}
+        />
         <SidebarResp
           collapsed={sidebarCollapsed}
           onToggle={() => setSidebarCollapsed(!sidebarCollapsed)}
@@ -194,7 +198,12 @@ const SurveillanceResp = ({ userName, onLogout }) => {
           userName={userName}
         />
         <div className="main-container">
-          <HeaderPage userName={userName} title="Surveillance" showSearch={false} />
+          <HeaderPage
+            userName={userName}
+            title="Surveillance"
+            showSearch={false}
+            onMenuClick={() => setSidebarCollapsed((prev) => !prev)}
+          />
           <main className="main-content">
             {(isLoading || isSubmitting) && <LoadingSpinner overlay text="Chargement..." />}
 

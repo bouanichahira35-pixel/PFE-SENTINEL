@@ -4,15 +4,16 @@ import SidebarDem from '../../components/demandeur/SidebarDem';
 import HeaderPage from '../../components/shared/HeaderPage';
 import LoadingSpinner from '../../components/shared/LoadingSpinner';
 import { useToast } from '../../components/shared/Toast';
-import { get } from '../../services/api';
+import { get, patch } from '../../services/api';
 import './MesDemandes.css';
 
 const MesDemandes = ({ userName, onLogout }) => {
   const toast = useToast();
-  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(() => (typeof window !== 'undefined' ? window.innerWidth <= 768 : false));
   const [searchQuery, setSearchQuery] = useState('');
   const [demandes, setDemandes] = useState([]);
   const [isLoading, setIsLoading] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   const loadDemandes = useCallback(async (showLoader = true, silent = false) => {
     if (showLoader) setIsLoading(true);
@@ -26,6 +27,7 @@ const MesDemandes = ({ userName, onLogout }) => {
         quantite: Number(r.quantity_requested || 0),
         date: r.date_request ? new Date(r.date_request).toLocaleString('fr-FR') : '-',
         statut: r.status || 'pending',
+        receiptToken: r.receipt_token || '',
       }));
 
       mapped.sort((a, b) => String(b.id).localeCompare(String(a.id)));
@@ -52,16 +54,40 @@ const MesDemandes = ({ userName, onLogout }) => {
     switch (statut) {
       case 'pending':
         return { label: 'En attente', className: 'statut-attente', icon: Clock };
+      case 'validated':
       case 'accepted':
-        return { label: 'Acceptee', className: 'statut-validee', icon: CheckCircle };
+        return { label: 'Validée', className: 'statut-validee', icon: CheckCircle };
+      case 'preparing':
+        return { label: 'En préparation', className: 'statut-validee', icon: Package };
       case 'served':
         return { label: 'Servie', className: 'statut-servie', icon: Truck };
+      case 'received':
+        return { label: 'Cloturee', className: 'statut-validee', icon: CheckCircle };
+      case 'rejected':
       case 'refused':
-        return { label: 'Refusee', className: 'statut-rejetee', icon: XCircle };
+        return { label: 'Rejetée', className: 'statut-rejetee', icon: XCircle };
+      case 'cancelled':
+        return { label: 'Annulée', className: 'statut-rejetee', icon: XCircle };
       default:
         return { label: statut, className: '', icon: Clock };
     }
   };
+
+  const confirmReceipt = useCallback(async (demande) => {
+    if (!demande?.id) return;
+    setIsSubmitting(true);
+    try {
+      await patch(`/requests/${encodeURIComponent(demande.id)}/confirm-receipt`, {
+        receipt_token: demande.receiptToken || undefined,
+      });
+      toast.success('Reception confirmee');
+      await loadDemandes(false, true);
+    } catch (err) {
+      toast.error(err.message || 'Impossible de confirmer la reception');
+    } finally {
+      setIsSubmitting(false);
+    }
+  }, [loadDemandes, toast]);
 
   const filteredDemandes = useMemo(() => (
     demandes.filter((demande) =>
@@ -72,6 +98,10 @@ const MesDemandes = ({ userName, onLogout }) => {
 
   return (
     <div className="app-layout">
+      <div
+        className={`sidebar-backdrop ${sidebarCollapsed ? 'hidden' : ''}`}
+        onClick={() => setSidebarCollapsed(true)}
+      />
       <SidebarDem 
         collapsed={sidebarCollapsed} 
         onToggle={() => setSidebarCollapsed(!sidebarCollapsed)}
@@ -86,6 +116,7 @@ const MesDemandes = ({ userName, onLogout }) => {
           searchValue={searchQuery}
           onSearchChange={setSearchQuery}
           onRefresh={loadDemandes}
+          onMenuClick={() => setSidebarCollapsed((prev) => !prev)}
         />
         
         <main className="main-content">
@@ -126,6 +157,23 @@ const MesDemandes = ({ userName, onLogout }) => {
                             <StatutIcon size={14} />
                             {statutInfo.label}
                           </span>
+                          {demande.statut === 'served' && (
+                            <div className="receipt-row">
+                              <button
+                                type="button"
+                                className="btn-confirm-receipt"
+                                onClick={() => confirmReceipt(demande)}
+                                disabled={isSubmitting}
+                              >
+                                Confirmer reception
+                              </button>
+                              {demande.receiptToken ? (
+                                <small className="receipt-code">
+                                  Code: <strong>{demande.receiptToken}</strong>
+                                </small>
+                              ) : null}
+                            </div>
+                          )}
                         </td>
                       </tr>
                     );

@@ -35,8 +35,9 @@ function parsePeriod(fromRaw, toRaw) {
 }
 
 function ensureResponsableRole(req, res) {
-  if (req.user?.role !== 'responsable') {
-    res.status(403).json({ error: 'Acces reserve au responsable' });
+  const role = String(req.user?.role || '').toLowerCase();
+  if (role !== 'responsable' && role !== 'admin') {
+    res.status(403).json({ error: 'Acces reserve au responsable/admin' });
     return false;
   }
   return true;
@@ -329,8 +330,11 @@ router.post(
         return res.status(400).json({ error: 'quantity doit etre > 0' });
       }
 
-      const product = await Product.findById(req.body.product).select('_id name code_product quantity_current validation_status').lean();
+      const product = await Product.findById(req.body.product).select('_id name code_product quantity_current validation_status lifecycle_status').lean();
       if (!product) return res.status(404).json({ error: 'Produit introuvable' });
+      if (String(product.lifecycle_status || 'active') !== 'active') {
+        return res.status(409).json({ error: 'Produit archive / indisponible' });
+      }
       if (product.validation_status !== 'approved') {
         return res.status(400).json({ error: 'Produit non valide. Validation responsable requise.' });
       }
@@ -691,6 +695,9 @@ router.post(
     const product = await Product.findById(req.body.product);
     if (!product) {
       return res.status(404).json({ error: 'Product not found' });
+    }
+    if (String(product.lifecycle_status || 'active') !== 'active') {
+      return res.status(409).json({ error: 'Produit archive / indisponible' });
     }
     if (product.validation_status !== 'approved') {
       return res.status(400).json({ error: 'Produit non valide. Validation responsable requise.' });
@@ -1156,6 +1163,13 @@ router.post(
         error: 'Product not found',
         code: ERROR_CODES.PRODUCT_NOT_FOUND,
         reason: 'Produit introuvable pour cette sortie.',
+      });
+    }
+    if (String(product.lifecycle_status || 'active') !== 'active') {
+      return res.status(409).json({
+        error: 'Produit archive / indisponible',
+        code: ERROR_CODES.VALIDATION_FAILED,
+        reason: 'La sortie est interdite sur un produit archive.',
       });
     }
     if (product.validation_status !== 'approved') {

@@ -10,7 +10,7 @@ import './ChatMag.css';
 const ChatMag = ({ userName, onLogout }) => {
   const lang = useUiLanguage();
   const toast = useToast();
-  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(() => (typeof window !== 'undefined' ? window.innerWidth <= 768 : false));
   const [contacts, setContacts] = useState([]);
   const [selectedContact, setSelectedContact] = useState(null);
   const [conversationId, setConversationId] = useState('');
@@ -124,6 +124,10 @@ const ChatMag = ({ userName, onLogout }) => {
 
   return (
     <div className="app-layout">
+      <div
+        className={`sidebar-backdrop ${sidebarCollapsed ? 'hidden' : ''}`}
+        onClick={() => setSidebarCollapsed(true)}
+      />
       <SidebarMag
         collapsed={sidebarCollapsed}
         onToggle={() => setSidebarCollapsed(!sidebarCollapsed)}
@@ -132,7 +136,12 @@ const ChatMag = ({ userName, onLogout }) => {
       />
 
       <div className="main-container">
-        <HeaderPage userName={userName} title={i18n.title} showSearch={false} />
+        <HeaderPage
+          userName={userName}
+          title={i18n.title}
+          showSearch={false}
+          onMenuClick={() => setSidebarCollapsed((prev) => !prev)}
+        />
 
         <main className="main-content chat-main">
           <div className="chat-container">

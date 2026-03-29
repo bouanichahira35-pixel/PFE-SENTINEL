@@ -21,6 +21,34 @@ function normalizeHistory(history) {
     }));
 }
 
+function normalizeContents(contents) {
+  if (!Array.isArray(contents)) return null;
+  const normalized = [];
+  for (const item of contents) {
+    if (!item || typeof item !== 'object') continue;
+    const role = item.role === 'model' ? 'model' : 'user';
+    const parts = Array.isArray(item.parts) ? item.parts : [];
+    if (parts.length === 0) continue;
+    normalized.push({ role, parts });
+  }
+  return normalized.length ? normalized : null;
+}
+
+function extractFunctionCalls(candidateContent) {
+  const parts = Array.isArray(candidateContent?.parts) ? candidateContent.parts : [];
+  const calls = [];
+  for (const part of parts) {
+    const call = part?.functionCall;
+    if (!call || !call.name) continue;
+    calls.push({
+      id: call.id || null,
+      name: String(call.name),
+      args: call.args && typeof call.args === 'object' ? call.args : {},
+    });
+  }
+  return calls;
+}
+
 async function generateGeminiContent(options = {}) {
   const apiKey = process.env.GEMINI_API_KEY;
   if (!apiKey) {
@@ -28,8 +56,9 @@ async function generateGeminiContent(options = {}) {
   }
 
   const model = String(options.model || process.env.GEMINI_MODEL || 'gemini-2.0-flash').trim();
+  const providedContents = normalizeContents(options.contents);
   const prompt = String(options.prompt || '').trim();
-  if (!prompt) throw new Error('prompt obligatoire');
+  if (!providedContents && !prompt) throw new Error('prompt obligatoire');
 
   const temperature = Number.isFinite(Number(options.temperature)) ? Number(options.temperature) : 0.4;
   const maxOutputTokens = Number.isFinite(Number(options.max_output_tokens))
@@ -41,7 +70,7 @@ async function generateGeminiContent(options = {}) {
 
   const url = `${GEMINI_BASE_URL}/models/${encodeURIComponent(model)}:generateContent?key=${encodeURIComponent(apiKey)}`;
   const payload = {
-    contents: [
+    contents: providedContents || [
       ...history,
       { role: 'user', parts: [{ text: prompt.slice(0, 8000) }] },
     ],
@@ -54,19 +83,27 @@ async function generateGeminiContent(options = {}) {
     payload.systemInstruction = { parts: [{ text: systemInstruction.slice(0, 4000) }] };
   }
 
+  if (Array.isArray(options.tools) && options.tools.length) {
+    payload.tools = options.tools;
+  }
+  if (options.tool_config && typeof options.tool_config === 'object') {
+    payload.toolConfig = options.tool_config;
+  }
+
   const response = await axios.post(url, payload, {
     timeout: Number(process.env.GEMINI_TIMEOUT_MS || 30000),
     headers: { 'Content-Type': 'application/json' },
   });
 
   const data = response.data || {};
-  const text =
-    data?.candidates?.[0]?.content?.parts?.map((p) => p?.text || '').join('\n').trim()
-    || '';
+  const candidateContent = data?.candidates?.[0]?.content || null;
+  const text = candidateContent?.parts?.map((p) => p?.text || '').join('\n').trim() || '';
 
   return {
     model,
     text,
+    candidate_content: candidateContent,
+    function_calls: extractFunctionCalls(candidateContent),
     usage: data?.usageMetadata || null,
     finish_reason: data?.candidates?.[0]?.finishReason || null,
     raw: data,

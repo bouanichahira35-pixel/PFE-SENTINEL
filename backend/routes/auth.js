@@ -8,16 +8,20 @@ const UserSession = require('../models/UserSession');
 const { normalizeRole, isTechnicalRole, getStoredRoleCandidates } = require('../constants/roles');
 const { logSecurityEvent } = require('../services/securityAuditService');
 const { sendMailOrThrow, isMailConfigured } = require('../services/mailerService');
+const {
+  isTwilioSmsConfigured,
+  isTwilioWhatsappConfigured,
+  sendSmsOrThrow,
+  sendWhatsappOrThrow,
+} = require('../services/twilioService');
 const requireAuth = require('../middlewares/requireAuth');
+const { getSessionInactivityMs, formatInactivityMessage } = require('../utils/sessionPolicy');
 
 const RESET_CODE_TTL_MINUTES = Number(process.env.RESET_CODE_TTL_MINUTES || 10);
 const RESET_JWT_EXPIRES_IN = process.env.RESET_JWT_EXPIRES_IN || '15m';
 // Security policy: application sessions are limited to 15 minutes max.
 const JWT_EXPIRES_IN = '15m';
-const SESSION_INACTIVITY_MS = Math.max(
-  60 * 1000,
-  Number(process.env.SESSION_INACTIVITY_MS || 15 * 60 * 1000)
-);
+const SESSION_INACTIVITY_MS = getSessionInactivityMs();
 const BCRYPT_SALT_ROUNDS = Number(process.env.BCRYPT_SALT_ROUNDS || 12);
 const REFRESH_JWT_EXPIRES_IN = process.env.REFRESH_JWT_EXPIRES_IN || '7d';
 const SINGLE_SESSION_MODE = String(process.env.SINGLE_SESSION_MODE || 'true') === 'true';
@@ -71,7 +75,8 @@ function getRefreshCookieOptions() {
     sameSite: 'lax',
     secure: IS_PROD,
     maxAge,
-    path: '/api/auth/refresh',
+    // Allow refresh + logout-refresh endpoints to receive the cookie.
+    path: '/api/auth',
   };
 }
 
@@ -109,6 +114,23 @@ function escapeRegex(value) {
 function extractIdentifier(payload) {
   const raw = payload?.identifier ?? payload?.email ?? payload?.username ?? payload?.telephone;
   return String(raw || '').trim();
+}
+
+function normalizePhone(raw) {
+  const cleaned = String(raw || '').replace(/[^\d+]/g, '');
+  if (!cleaned) return '';
+  if (!cleaned.startsWith('+')) return '';
+  if (!/^\+\d{8,15}$/.test(cleaned)) return '';
+  return cleaned;
+}
+
+function normalizeOtpChannel(raw) {
+  const key = String(raw || '').trim().toLowerCase();
+  if (!key) return 'email';
+  if (['email', 'mail'].includes(key)) return 'email';
+  if (['sms', 'phone', 'tel', 'telephone'].includes(key)) return 'sms';
+  if (['whatsapp', 'wa'].includes(key)) return 'whatsapp';
+  return key;
 }
 
 function buildIdentifierQuery(identifier) {
@@ -367,27 +389,32 @@ router.post('/login', async (req, res) => {
       session_expires_in: JWT_EXPIRES_IN,
       session_id: sessionId,
       access_expires_at: accessExpiresAt,
-      user: {
-        id: user._id,
-        username: user.username,
-        role: canonicalRole,
-        email: user.email,
-        telephone: user.telephone,
-        image_profile: user.image_profile || null,
-      },
-    });
-  } catch (err) {
-    return res.status(500).json({ error: 'Erreur serveur' });
-  }
-});
+      user: { 
+        id: user._id, 
+        username: user.username, 
+        role: canonicalRole, 
+        email: user.email, 
+        telephone: user.telephone, 
+        image_profile: user.image_profile || null, 
+        demandeur_profile: user.demandeur_profile || 'bureautique',
+      }, 
+    }); 
+  } catch (err) { 
+    return res.status(500).json({ error: 'Erreur serveur' }); 
+  } 
+}); 
 
 // POST /api/auth/forgot-password/request
 router.post('/forgot-password/request', async (req, res) => {
   try {
     const identifier = extractIdentifier(req.body);
     const role = req.body?.role;
+    const channel = normalizeOtpChannel(req.body?.channel);
 
     if (!identifier) return res.status(400).json({ error: 'email ou identifier obligatoire' });
+    if (!['email', 'sms', 'whatsapp'].includes(channel)) {
+      return res.status(400).json({ error: 'Canal invalide (email, sms, whatsapp)' });
+    }
 
     let normalizedRole = null;
     if (role) {
@@ -450,27 +477,13 @@ router.post('/forgot-password/request', async (req, res) => {
       status: 'valid',
     });
 
-    const mailConfigured = isMailConfigured();
-    if (!mailConfigured) {
-      if (IS_PROD || !RESET_DEV_OTP_ENABLED) {
-        await PasswordReset.updateOne(
-          { _id: resetDoc._id },
-          { $set: { status: 'expired' } }
-        );
-        return res.status(503).json({ error: 'Service email indisponible. Contactez l administrateur.' });
-      }
+    const cooldownSeconds = 60;
 
-      await logSecurityEvent({
-        event_type: 'email_failed',
-        user: user._id,
-        email: user.email,
-        role: canonicalRole,
-        ip_address: ip,
-        user_agent: ua,
-        success: false,
-        details: 'DEV_OTP returned (MAIL not configured)',
-      });
+    async function expireReset() {
+      await PasswordReset.updateOne({ _id: resetDoc._id }, { $set: { status: 'expired' } });
+    }
 
+    async function sendDevOtp(details) {
       await logSecurityEvent({
         event_type: 'password_reset_request',
         user: user._id,
@@ -479,48 +492,114 @@ router.post('/forgot-password/request', async (req, res) => {
         ip_address: ip,
         user_agent: ua,
         success: true,
-        details: 'OTP generated (dev mode)',
+        details,
       });
-
-      return res.json({ message: 'Si ce compte existe, un code a ete envoye.', dev_otp: rawCode });
+      return res.json({
+        message: 'Si ce compte existe, un code a ete envoye.',
+        dev_otp: rawCode,
+        cooldown_seconds: cooldownSeconds,
+      });
     }
 
-    try {
-      await sendPasswordResetOtpOrThrow({
-        to: user.email,
-        role: canonicalRole,
-        rawCode,
-        ttlMinutes: RESET_CODE_TTL_MINUTES,
-      });
+    if (channel === 'email') {
+      const mailConfigured = isMailConfigured();
+      if (!mailConfigured) {
+        if (IS_PROD || !RESET_DEV_OTP_ENABLED) {
+          await expireReset();
+          return res.status(503).json({ error: 'Service email indisponible. Contactez l administrateur.' });
+        }
+
+        return await sendDevOtp('DEV_OTP returned (MAIL not configured)');
+      }
+
+      try {
+        await sendPasswordResetOtpOrThrow({
+          to: user.email,
+          role: canonicalRole,
+          rawCode,
+          ttlMinutes: RESET_CODE_TTL_MINUTES,
+        });
+
+        await logSecurityEvent({
+          event_type: 'email_sent',
+          user: user._id,
+          email: user.email,
+          role: canonicalRole,
+          ip_address: ip,
+          user_agent: ua,
+          success: true,
+          details: 'OTP email envoye',
+        });
+      } catch (err) {
+        await expireReset();
+
+        await logSecurityEvent({
+          event_type: 'email_failed',
+          user: user._id,
+          email: user.email,
+          role: canonicalRole,
+          ip_address: ip,
+          user_agent: ua,
+          success: false,
+          details: `OTP email failed: ${err?.message || 'mail_failed'}`,
+        });
+
+        return res.status(503).json({ error: 'Echec envoi email. Reessayez dans quelques instants.' });
+      }
+    } else {
+      const destination = normalizePhone(identifier) || normalizePhone(user.telephone);
+      if (!destination) {
+        await expireReset();
+        return res.status(400).json({ error: 'Numero de telephone invalide' });
+      }
+
+      const configured = channel === 'sms' ? isTwilioSmsConfigured() : isTwilioWhatsappConfigured();
+      if (!configured) {
+        if (!IS_PROD && RESET_DEV_OTP_ENABLED) {
+          return await sendDevOtp(`DEV_OTP returned (${channel} not configured)`);
+        }
+        await expireReset();
+        return res.status(503).json({
+          error:
+            channel === 'sms'
+              ? 'Service SMS indisponible. Contactez l administrateur.'
+              : 'Service WhatsApp indisponible. Contactez l administrateur.',
+        });
+      }
+
+      const body = `Votre code est: ${rawCode}. Il expire dans ${RESET_CODE_TTL_MINUTES} minutes.`;
+
+      try {
+        if (channel === 'sms') {
+          await sendSmsOrThrow({ to: destination, body });
+        } else {
+          await sendWhatsappOrThrow({ to: destination, body });
+        }
+      } catch (err) {
+        await expireReset();
+        await logSecurityEvent({
+          event_type: `${channel}_failed`,
+          user: user._id,
+          email: user.email,
+          role: canonicalRole,
+          ip_address: ip,
+          user_agent: ua,
+          success: false,
+          details: `OTP ${channel} failed: ${err?.message || 'send_failed'}`,
+        });
+        return res.status(503).json({ error: 'Echec envoi code. Reessayez dans quelques instants.' });
+      }
 
       await logSecurityEvent({
-        event_type: 'email_sent',
+        event_type: `${channel}_sent`,
         user: user._id,
         email: user.email,
         role: canonicalRole,
         ip_address: ip,
         user_agent: ua,
         success: true,
-        details: 'OTP email envoye',
+        details: `OTP ${channel} envoye`,
       });
-    } catch (err) {
-      await PasswordReset.updateOne(
-        { _id: resetDoc._id },
-        { $set: { status: 'expired' } }
-      );
-
-      await logSecurityEvent({
-        event_type: 'email_failed',
-        user: user._id,
-        email: user.email,
-        role: canonicalRole,
-        ip_address: ip,
-        user_agent: ua,
-        success: false,
-        details: `OTP email failed: ${err?.message || 'mail_failed'}`,
-      });
-
-      return res.status(503).json({ error: 'Echec envoi email. Reessayez dans quelques instants.' });
     }
 
     await logSecurityEvent({
@@ -534,7 +613,7 @@ router.post('/forgot-password/request', async (req, res) => {
       details: 'OTP envoye',
     });
 
-    return res.json({ message: 'Si ce compte existe, un code a ete envoye.' });
+    return res.json({ message: 'Si ce compte existe, un code a ete envoye.', cooldown_seconds: cooldownSeconds });
   } catch (err) {
     return res.status(500).json({ error: 'Erreur serveur' });
   }
@@ -712,7 +791,7 @@ router.post('/refresh', async (req, res) => {
           },
         }
       );
-      return res.status(401).json({ error: 'Session expiree apres 15 min d inactivite' });
+      return res.status(401).json({ error: formatInactivityMessage(SESSION_INACTIVITY_MS) });
     }
 
     await UserSession.updateOne(
@@ -753,6 +832,43 @@ router.post('/logout', requireAuth, async (req, res) => {
       user_agent: req.headers['user-agent'] || '',
       success: true,
     });
+
+    res.clearCookie(REFRESH_COOKIE_NAME, getRefreshCookieOptions());
+    return res.json({ message: 'Logout OK' });
+  } catch (err) {
+    return res.status(500).json({ error: 'Erreur serveur' });
+  }
+});
+
+// POST /api/auth/logout-refresh
+// Allows revoking a session when the access token is expired but a refresh token is still present.
+router.post('/logout-refresh', async (req, res) => {
+  try {
+    const refreshToken = String(req.body?.refreshToken || readCookie(req, REFRESH_COOKIE_NAME) || '');
+
+    if (refreshToken) {
+      try {
+        const payload = jwt.verify(refreshToken, process.env.JWT_SECRET);
+        if (payload?.purpose === 'refresh' && payload?.sid && payload?.id) {
+          await UserSession.updateOne(
+            { session_id: payload.sid, user: payload.id, is_active: true },
+            { $set: { is_active: false, logout_time: new Date(), revoked_reason: 'logout_refresh' } }
+          );
+
+          await logSecurityEvent({
+            event_type: 'logout',
+            user: payload.id,
+            role: payload.role,
+            ip_address: req.ip,
+            user_agent: req.headers['user-agent'] || '',
+            success: true,
+            details: 'logout_refresh',
+          });
+        }
+      } catch {
+        // ignore invalid refresh token, always clear cookie below
+      }
+    }
 
     res.clearCookie(REFRESH_COOKIE_NAME, getRefreshCookieOptions());
     return res.json({ message: 'Logout OK' });

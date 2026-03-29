@@ -1,12 +1,20 @@
 import { useEffect, useRef, useState } from 'react';
-import { Search, Bell, Moon, Sun, User, RefreshCw } from 'lucide-react';
+import { Search, Bell, Moon, Sun, User, RefreshCw, Menu } from 'lucide-react';
 import useTheme from '../../hooks/useTheme';
 import { get, patch } from '../../services/api';
 import { useUiLanguage } from '../../utils/uiLanguage';
 import useProtectedFileUrl from '../../hooks/useProtectedFileUrl';
 import './HeaderPage.css';
 
-const HeaderPage = ({ userName, title, searchValue, onSearchChange, showSearch = true, onRefresh }) => {
+const HeaderPage = ({
+  userName,
+  title,
+  searchValue,
+  onSearchChange,
+  showSearch = true,
+  onRefresh,
+  onMenuClick,
+}) => {
   const language = useUiLanguage();
   const { isDarkMode, toggleTheme } = useTheme();
   const [notificationsOpen, setNotificationsOpen] = useState(false);
@@ -173,6 +181,17 @@ const HeaderPage = ({ userName, title, searchValue, onSearchChange, showSearch =
   return (
     <header className="header-page" role="banner">
       <div className="header-left">
+        {onMenuClick && (
+          <button
+            type="button"
+            className="header-icon-btn header-menu-btn"
+            onClick={onMenuClick}
+            aria-label="Ouvrir le menu"
+            title="Menu"
+          >
+            <Menu size={20} />
+          </button>
+        )}
         <h1 className="header-title">{title}</h1>
       </div>
 
@@ -279,4 +298,3 @@ const HeaderPage = ({ userName, title, searchValue, onSearchChange, showSearch =
 };
 
 export default HeaderPage;
-

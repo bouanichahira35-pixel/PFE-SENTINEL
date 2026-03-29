@@ -2,7 +2,27 @@ const mongoose = require('../db');
 
 const historySchema = new mongoose.Schema(
   {
-    action_type: { type: String, enum: ['entry', 'exit', 'request', 'validation', 'block', 'product_create', 'product_update'], required: true, immutable: true },
+    action_type: {
+      type: String,
+      enum: [
+        'entry',
+        'exit',
+        'request',
+        'validation',
+        'block',
+        'user_update',
+        'product_create',
+        'product_update',
+        'product_delete',
+        'decision',
+        'purchase_order',
+        'supplier',
+        'stock_rules_apply',
+        'inventory',
+      ],
+      required: true,
+      immutable: true,
+    },
     user: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true, immutable: true },
     product: { type: mongoose.Schema.Types.ObjectId, ref: 'Product', immutable: true },
     request: { type: mongoose.Schema.Types.ObjectId, ref: 'Request', immutable: true },

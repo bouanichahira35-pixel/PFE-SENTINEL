@@ -50,7 +50,7 @@ const AjouterProduit = ({ userName, onLogout }) => {
   const qrInputRef = useRef(null);
   const keyboardBufferRef = useRef('');
   const keyboardTimeoutRef = useRef(null);
-  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(() => (typeof window !== 'undefined' ? window.innerWidth <= 768 : false));
   const [showDoublonWarning, setShowDoublonWarning] = useState(false);
   const [duplicateProduct, setDuplicateProduct] = useState(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -238,23 +238,23 @@ const AjouterProduit = ({ userName, onLogout }) => {
         };
       }
 
-      const payload = {
-        name: formData.nom.trim(),
-        category_name: formData.categorie,
-        family: formData.famille,
-        description: formData.description,
-        seuil_minimum: Number(formData.seuilMinimum),
-        stock_initial_year: Number(formData.stockInitial || 0),
-        quantity_current: Number(formData.stockInitial || 0),
+      const payload = { 
+        name: formData.nom.trim(), 
+        category_proposal: formData.categorie, 
+        family: formData.famille, 
+        description: formData.description, 
+        seuil_minimum: Number(formData.seuilMinimum), 
+        stock_initial_year: Number(formData.stockInitial || 0), 
+        quantity_current: Number(formData.stockInitial || 0), 
         qr_code_value: formData.qrCode,
         emplacement: formData.emplacement,
         chemical_class: formData.chemicalClass,
         physical_state: formData.physicalState,
         gas_pressure: formData.gasPressure,
         gas_purity: formData.gasPurity,
-        fds_attachment: fdsAttachment,
-        validation_status: 'pending',
-      };
+        fds_attachment: fdsAttachment, 
+        validation_status: 'pending', 
+      }; 
 
       await post('/products', payload);
 
@@ -287,8 +287,12 @@ const AjouterProduit = ({ userName, onLogout }) => {
 
   return (
     <div className="app-layout">
-      <SidebarMag 
-        collapsed={sidebarCollapsed} 
+      <div
+        className={`sidebar-backdrop ${sidebarCollapsed ? 'hidden' : ''}`}
+        onClick={() => setSidebarCollapsed(true)}
+      />
+      <SidebarMag
+        collapsed={sidebarCollapsed}
         onToggle={() => setSidebarCollapsed(!sidebarCollapsed)}
         onLogout={onLogout}
         userName={userName}
@@ -299,6 +303,7 @@ const AjouterProduit = ({ userName, onLogout }) => {
           userName={userName}
           title="Ajouter un Produit"
           showSearch={false}
+          onMenuClick={() => setSidebarCollapsed((prev) => !prev)}
         />
         
         <main className="main-content">
@@ -454,11 +459,11 @@ const AjouterProduit = ({ userName, onLogout }) => {
                 <div className="form-section">
                   <h3>Classification</h3>
                   <div className="form-row">
-                    <div className="form-group">
-                      <label htmlFor="categorie">
-                        <Layers size={16} />
-                        Categorie
-                      </label>
+                    <div className="form-group"> 
+                      <label htmlFor="categorie"> 
+                        <Layers size={16} /> 
+                        Categorie proposee 
+                      </label> 
                       <select
                         id="categorie"
                         value={formData.categorie}

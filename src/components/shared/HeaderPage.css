@@ -17,6 +17,10 @@
   gap: 0.25rem;
 }
 
+.header-menu-btn {
+  display: none;
+}
+
 .header-title {
   font-size: 1.25rem;
   font-weight: 600;
@@ -325,6 +329,11 @@
 @media (max-width: 768px) {
   .header-page {
     padding: 0 1rem;
+  }
+
+  .header-menu-btn {
+    display: inline-flex;
+    margin-right: 0.25rem;
   }
 
   .header-center {

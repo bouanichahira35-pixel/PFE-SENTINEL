@@ -289,6 +289,27 @@
   gap: 0.38rem;
 }
 
+.meta-action-btn {
+  border: 1px solid rgba(148, 163, 184, 0.9);
+  background: rgba(255, 255, 255, 0.65);
+  color: #334155;
+  border-radius: 8px;
+  padding: 0.18rem 0.28rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+}
+
+.meta-action-btn:hover {
+  background: rgba(255, 255, 255, 0.9);
+}
+
+.meta-action-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
 .message-time {
   font-size: 0.73rem;
   opacity: 0.78;

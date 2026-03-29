@@ -4,15 +4,123 @@ const { spawnSync } = require('child_process');
 const Product = require('../models/Product');
 const History = require('../models/History');
 const StockEntry = require('../models/StockEntry');
+const StockLot = require('../models/StockLot');
+const AIAlert = require('../models/AIAlert');
 const { isGeminiConfigured, generateGeminiContent } = require('./geminiService');
 
 const AI_DATA_DIR = path.join(process.cwd(), 'data', 'ai');
 const AI_PY_DIR = path.join(process.cwd(), 'ai_py');
 const AI_TMP_DIR = path.join(AI_DATA_DIR, '_tmp');
-const PYTHON_BIN = process.env.AI_PYTHON_BIN || 'python';
 const DAY_MS = 24 * 60 * 60 * 1000;
 
 let pythonDisabled = null;
+let pythonCommand = null;
+
+const AI_CACHE_TTL_MS = Math.max(10 * 1000, Number(process.env.AI_CACHE_TTL_MS || 60 * 1000));
+const AI_CACHE_MAX = Math.max(50, Number(process.env.AI_CACHE_MAX_ITEMS || 250));
+const aiCache = new Map();
+
+function makeCacheKey(prefix, payload) {
+  try {
+    return `${prefix}:${JSON.stringify(payload || {})}`;
+  } catch {
+    return `${prefix}:__unserializable__`;
+  }
+}
+
+function getCache(key) {
+  const item = aiCache.get(key);
+  if (!item) return null;
+  if (item.expires_at <= Date.now()) {
+    aiCache.delete(key);
+    return null;
+  }
+  return item.value;
+}
+
+function setCache(key, value, ttlMs = AI_CACHE_TTL_MS) {
+  aiCache.set(key, { value, expires_at: Date.now() + Math.max(1000, Number(ttlMs || AI_CACHE_TTL_MS)) });
+  while (aiCache.size > AI_CACHE_MAX) {
+    const oldestKey = aiCache.keys().next().value;
+    if (!oldestKey) break;
+    aiCache.delete(oldestKey);
+  }
+}
+
+async function cachedAsync(key, task) {
+  const cached = getCache(key);
+  if (cached !== null) return cached;
+  const value = await task();
+  setCache(key, value);
+  return value;
+}
+
+function resolvePythonCommand() {
+  if (pythonDisabled) return null;
+  if (pythonCommand) return pythonCommand;
+
+  const envBin = String(process.env.AI_PYTHON_BIN || '').trim();
+  const candidates = [];
+
+  if (envBin) {
+    candidates.push({ bin: envBin, baseArgs: [] });
+  } else {
+    // Common local defaults (Windows/macOS/Linux) + Python launcher on Windows.
+    candidates.push({ bin: 'python', baseArgs: [] });
+    candidates.push({ bin: 'python3', baseArgs: [] });
+    candidates.push({ bin: 'py', baseArgs: ['-3'] });
+  }
+
+  for (const cand of candidates) {
+    try {
+      const proc = spawnSync(cand.bin, [...cand.baseArgs, '--version'], {
+        stdio: ['ignore', 'ignore', 'ignore'],
+        cwd: process.cwd(),
+        windowsHide: true,
+      });
+      if (proc?.error) continue;
+      if (proc?.status !== 0) continue;
+      pythonCommand = cand;
+      return pythonCommand;
+    } catch (_) {
+      // try next candidate
+    }
+  }
+
+  pythonDisabled = {
+    code: 'PYTHON_UNAVAILABLE',
+    message: 'Python introuvable pour executer les scripts IA',
+    details: 'Installez Python 3, ou configurez `AI_PYTHON_BIN`. En Docker: utilisez `backend/docker-compose.yml` (python3 inclus).',
+  };
+  return null;
+}
+
+function getPythonRuntimeStatus() {
+  const cmd = resolvePythonCommand();
+  if (cmd) {
+    return {
+      ok: true,
+      state: 'ready',
+      user_message: 'Moteur IA local prêt.',
+      configured: Boolean(String(process.env.AI_PYTHON_BIN || '').trim()),
+      command: cmd.bin,
+      base_args: cmd.baseArgs || [],
+      code: null,
+      details: null,
+    };
+  }
+  return {
+    ok: false,
+    state: 'unavailable',
+    user_message:
+      'Moteur IA local indisponible sur ce serveur. Les prédictions restent disponibles en mode automatique.',
+    configured: Boolean(String(process.env.AI_PYTHON_BIN || '').trim()),
+    command: null,
+    base_args: [],
+    code: pythonDisabled?.code || 'PYTHON_UNAVAILABLE',
+    details: pythonDisabled?.details || pythonDisabled?.message || 'Python indisponible',
+  };
+}
 
 function asPositiveInt(value, fallback) {
   const n = Number(value);
@@ -56,6 +164,304 @@ function clamp(value, low, high) {
   return Math.max(low, Math.min(high, n));
 }
 
+function asEnum(value, allowed, fallback) {
+  const v = String(value || '').trim();
+  if (!v) return fallback;
+  return allowed.includes(v) ? v : fallback;
+}
+
+function buildAssistantContextText(ctx) {
+  if (!ctx || typeof ctx !== 'object') return 'CONTEXTE: {}';
+  const safe = {
+    stockout_top: Array.isArray(ctx.stockout_top) ? ctx.stockout_top.slice(0, 5) : [],
+    consumption_top: Array.isArray(ctx.consumption_top) ? ctx.consumption_top.slice(0, 5) : [],
+    anomaly_top: Array.isArray(ctx.anomaly_top) ? ctx.anomaly_top.slice(0, 5) : [],
+    action_plan: Array.isArray(ctx.action_plan) ? ctx.action_plan.slice(0, 5) : [],
+    metrics: ctx.metrics && typeof ctx.metrics === 'object' ? ctx.metrics : {},
+  };
+  return `CONTEXTE OPERATOIRE (extrait):\n${JSON.stringify(safe, null, 2)}`;
+}
+
+function buildAssistantToolDeclarations() {
+  return [
+    {
+      name: 'get_stock_snapshot',
+      description: 'Snapshot du stock (produits approuves), filtre possible sur les produits a risque. Lecture seule.',
+      parameters: {
+        type: 'object',
+        properties: {
+          status_filter: { type: 'string', description: 'any|at_risk (defaut at_risk)' },
+          limit: { type: 'integer', description: 'Nombre max (1..50), defaut 10' },
+        },
+      },
+    },
+    {
+      name: 'list_ai_alerts',
+      description: 'Liste des alertes IA (anomaly/rupture/surconsommation). Lecture seule.',
+      parameters: {
+        type: 'object',
+        properties: {
+          status: { type: 'string', description: 'any|new|reviewed (defaut any)' },
+          alert_type: { type: 'string', description: 'any|anomaly|rupture|surconsommation (defaut any)' },
+          limit: { type: 'integer', description: 'Nombre max (1..50), defaut 10' },
+        },
+      },
+    },
+    {
+      name: 'get_product_timeline',
+      description: 'Historique des mouvements (History) + lots ouverts pour un produit (par code). Lecture seule.',
+      parameters: {
+        type: 'object',
+        properties: {
+          product_code: { type: 'string', description: 'Code produit (ex: ABC123)' },
+          days: { type: 'integer', description: 'Fenetre en jours (1..90), defaut 14' },
+          limit: { type: 'integer', description: 'Nb evenements max (1..200), defaut 30' },
+        },
+        required: ['product_code'],
+      },
+    },
+    {
+      name: 'get_top_stockout_predictions',
+      description: 'Predictions de risque de rupture (top N). Lecture seule.',
+      parameters: {
+        type: 'object',
+        properties: {
+          horizon_days: { type: 'integer', description: 'Horizon (1..30), defaut 7' },
+          limit: { type: 'integer', description: 'Nombre max (1..50), defaut 10' },
+        },
+      },
+    },
+    {
+      name: 'get_top_anomaly_predictions',
+      description: 'Predictions d’anomalie (top N). Lecture seule.',
+      parameters: {
+        type: 'object',
+        properties: {
+          limit: { type: 'integer', description: 'Nombre max (1..50), defaut 10' },
+        },
+      },
+    },
+    {
+      name: 'get_copilot_recommendations',
+      description: 'Construit un plan d’actions IA (copilot decision engine) a partir des predictions. Lecture seule.',
+      parameters: {
+        type: 'object',
+        properties: {
+          horizon_days: { type: 'integer', description: 'Horizon (1..30), defaut 14' },
+          top_n: { type: 'integer', description: 'Nombre max produits (1..20), defaut 5' },
+          include_consumption: { type: 'boolean', description: 'Inclure analyse de consommation (defaut true)' },
+        },
+      },
+    },
+    {
+      name: 'explain_ai_alert',
+      description: 'Explique une alerte IA (produit + details + timeline + lots). Lecture seule.',
+      parameters: {
+        type: 'object',
+        properties: {
+          alert_id: { type: 'string', description: 'ID MongoDB de l’alerte' },
+          days: { type: 'integer', description: 'Fenetre timeline (1..90), defaut 14' },
+          limit: { type: 'integer', description: 'Nb evenements timeline max (1..200), defaut 40' },
+        },
+        required: ['alert_id'],
+      },
+    },
+  ];
+}
+
+async function executeAssistantTool(name, args = {}) {
+  const toolName = String(name || '').trim();
+  const safeArgs = args && typeof args === 'object' ? args : {};
+
+  if (toolName === 'get_stock_snapshot') {
+    const statusFilter = asEnum(safeArgs.status_filter, ['any', 'at_risk'], 'at_risk');
+    const limit = Math.min(50, asPositiveInt(safeArgs.limit, 10));
+    const query = statusFilter === 'at_risk'
+      ? { validation_status: 'approved', status: { $in: ['sous_seuil', 'rupture', 'bloque'] } }
+      : { validation_status: 'approved' };
+
+    const products = await Product.find(query)
+      .select('code_product name quantity_current seuil_minimum status family emplacement updatedAt')
+      .sort({ status: -1, quantity_current: 1, updatedAt: -1 })
+      .limit(limit)
+      .lean();
+
+    return { products };
+  }
+
+  if (toolName === 'list_ai_alerts') {
+    const status = asEnum(safeArgs.status, ['any', 'new', 'reviewed'], 'any');
+    const alertType = asEnum(safeArgs.alert_type, ['any', 'anomaly', 'rupture', 'surconsommation'], 'any');
+    const limit = Math.min(50, asPositiveInt(safeArgs.limit, 10));
+    const query = {};
+    if (status !== 'any') query.status = status;
+    if (alertType !== 'any') query.alert_type = alertType;
+
+    const alerts = await AIAlert.find(query)
+      .populate('product', 'name code_product status quantity_current seuil_minimum')
+      .sort({ detected_at: -1, createdAt: -1 })
+      .limit(limit)
+      .lean();
+
+    return { alerts };
+  }
+
+  if (toolName === 'get_product_timeline') {
+    const productCode = String(safeArgs.product_code || '').trim().toUpperCase();
+    if (!productCode) throw new Error('product_code obligatoire');
+    const days = Math.min(90, asPositiveInt(safeArgs.days, 14));
+    const limit = Math.min(200, asPositiveInt(safeArgs.limit, 30));
+
+    const product = await Product.findOne({ code_product: productCode })
+      .select('code_product name quantity_current seuil_minimum status family emplacement updatedAt')
+      .lean();
+    if (!product) throw new Error('Produit introuvable');
+
+    const since = new Date(Date.now() - days * DAY_MS);
+    const events = await History.find({ product: product._id, date_action: { $gte: since } })
+      .select('action_type quantity date_action source description actor_role correlation_id')
+      .sort({ date_action: -1 })
+      .limit(limit)
+      .lean();
+
+    const lots = await StockLot.find({ product: product._id, status: { $in: ['open', 'expired'] } })
+      .select('lot_number quantity_available quantity_initial expiry_date date_entry status')
+      .sort({ date_entry: 1 })
+      .limit(50)
+      .lean();
+
+    return { product, events, lots, window_days: days };
+  }
+
+  if (toolName === 'get_top_stockout_predictions') {
+    const horizonDays = Math.min(30, asPositiveInt(safeArgs.horizon_days, 7));
+    const limit = Math.min(50, asPositiveInt(safeArgs.limit, 10));
+    const predictions = await predictStockout({ horizon_days: horizonDays });
+    const top = [...predictions]
+      .sort((a, b) => Number(b.risk_probability || 0) - Number(a.risk_probability || 0))
+      .slice(0, limit);
+    return { horizon_days: horizonDays, predictions: top };
+  }
+
+  if (toolName === 'get_top_anomaly_predictions') {
+    const limit = Math.min(50, asPositiveInt(safeArgs.limit, 10));
+    const predictions = await predictAnomaly({});
+    const top = [...predictions]
+      .sort((a, b) => Number(b.anomaly_score || 0) - Number(a.anomaly_score || 0))
+      .slice(0, limit);
+    return { predictions: top };
+  }
+
+  if (toolName === 'get_copilot_recommendations') {
+    const horizonDays = Math.min(30, asPositiveInt(safeArgs.horizon_days, 14));
+    const topN = Math.min(20, asPositiveInt(safeArgs.top_n, 5));
+    const includeConsumption = safeArgs.include_consumption !== false;
+    const copilot = await buildCopilotRecommendations({
+      horizon_days: horizonDays,
+      top_n: topN,
+      simulations: [],
+      include_consumption: includeConsumption,
+    });
+    return { copilot };
+  }
+
+  if (toolName === 'explain_ai_alert') {
+    const alertId = String(safeArgs.alert_id || '').trim();
+    if (!alertId) throw new Error('alert_id obligatoire');
+    const days = Math.min(90, asPositiveInt(safeArgs.days, 14));
+    const limit = Math.min(200, asPositiveInt(safeArgs.limit, 40));
+
+    const alert = await AIAlert.findById(alertId)
+      .populate('product', 'name code_product status quantity_current seuil_minimum family emplacement')
+      .lean();
+    if (!alert) throw new Error('Alerte introuvable');
+    const productCode = String(alert?.product?.code_product || '').trim();
+    if (!productCode) return { alert, note: 'Alerte sans code produit exploitable' };
+
+    const timeline = await executeAssistantTool('get_product_timeline', { product_code: productCode, days, limit });
+    return { alert, timeline };
+  }
+
+  throw new Error(`Tool inconnu: ${toolName}`);
+}
+
+async function runGeminiAgent({ question, history, system_instruction, mode, context }) {
+  const toolDeclarations = buildAssistantToolDeclarations();
+  const tools = [{ functionDeclarations: toolDeclarations }];
+  const toolConfig = { includeServerSideToolInvocations: true };
+
+  const modeInstruction = mode === 'report'
+    ? 'MODE=REPORT. Produis un mini-rapport markdown structure, concret, avec sections et puces.'
+    : 'MODE=CHAT. Reponds de maniere naturelle, concise, utile, sans style robotique.';
+
+  const prompt = `${modeInstruction}\n\n${buildAssistantContextText(context)}\n\nQuestion utilisateur:\n${question}`;
+
+  const contents = [
+    ...(Array.isArray(history)
+      ? history
+        .filter((x) => x && typeof x.text === 'string' && x.text.trim())
+        .slice(-20)
+        .map((x) => ({
+          role: x.role === 'model' ? 'model' : 'user',
+          parts: [{ text: String(x.text).slice(0, 4000) }],
+        }))
+      : []),
+    { role: 'user', parts: [{ text: prompt.slice(0, 8000) }] },
+  ];
+
+  for (let step = 0; step < 4; step += 1) {
+    const result = await generateGeminiContent({
+      prompt: '',
+      contents,
+      tools,
+      tool_config: toolConfig,
+      system_instruction,
+      temperature: mode === 'report' ? 0.25 : 0.4,
+      max_output_tokens: mode === 'report' ? 1600 : 1100,
+    });
+
+    const candidateContent = result?.candidate_content;
+    if (candidateContent) contents.push(candidateContent);
+
+    const calls = Array.isArray(result?.function_calls) ? result.function_calls : [];
+    if (!calls.length) {
+      const text = String(result?.text || '').trim();
+      if (!text) throw new Error('Empty Gemini response');
+      return { answer: text, source: 'gemini', mode };
+    }
+
+    const call = calls[0];
+    let toolResponse;
+    try {
+      toolResponse = await executeAssistantTool(call.name, call.args);
+    } catch (err) {
+      toolResponse = { error: err?.message || 'tool_failed' };
+    }
+
+    contents.push({
+      role: 'user',
+      parts: [
+        {
+          functionResponse: {
+            name: call.name,
+            response: { result: toolResponse },
+            id: call.id || undefined,
+          },
+        },
+      ],
+    });
+  }
+
+  const lastText = contents
+    .slice()
+    .reverse()
+    .find((c) => c?.role === 'model')
+    ?.parts?.map((p) => p?.text || '')
+    .join('\n')
+    .trim();
+  return { answer: lastText || 'Aucune reponse produite.', source: 'gemini', mode };
+}
+
 function rangeSum(arr, start, end) {
   let s = 0;
   for (let i = Math.max(0, start); i <= Math.min(arr.length - 1, end); i += 1) s += Number(arr[i] || 0);
@@ -75,6 +481,14 @@ function runPythonScript(scriptName, payload) {
     throw err;
   }
 
+  const cmd = resolvePythonCommand();
+  if (!cmd) {
+    const err = new Error(pythonDisabled?.message || 'Python introuvable');
+    err.code = pythonDisabled?.code || 'PYTHON_UNAVAILABLE';
+    err.details = pythonDisabled?.details || null;
+    throw err;
+  }
+
   fs.mkdirSync(AI_TMP_DIR, { recursive: true });
   const stamp = `${Date.now()}_${Math.floor(Math.random() * 100000)}`;
   const inputPath = path.join(AI_TMP_DIR, `${scriptName.replace('.py', '')}_${stamp}_in.json`);
@@ -82,7 +496,7 @@ function runPythonScript(scriptName, payload) {
   const scriptPath = path.join(AI_PY_DIR, scriptName);
 
   fs.writeFileSync(inputPath, JSON.stringify(payload), 'utf8');
-  const proc = spawnSync(PYTHON_BIN, [scriptPath, '--input', inputPath, '--output', outputPath], {
+  const proc = spawnSync(cmd.bin, [...(cmd.baseArgs || []), scriptPath, '--input', inputPath, '--output', outputPath], {
     // In some locked-down Windows environments, piping stdio can fail with EPERM.
     // We rely on the JSON output file for results.
     stdio: ['ignore', 'ignore', 'ignore'],
@@ -712,48 +1126,57 @@ async function trainAndBuildDatasets(options = {}) {
 
 async function predictStockout(options = {}) {
   const horizonDays = Math.min(30, asPositiveInt(options.horizon_days, 7));
-  const ctx = await buildAIContext();
-  const items = buildPredictionItems(ctx, options.product_ids);
-  try {
-    const result = runPythonScript('02_stockout_risk_classifier.py', {
-      mode: 'predict',
-      horizon_days: horizonDays,
-      items,
-    });
-    return Array.isArray(result.predictions) ? result.predictions : [];
-  } catch (_) {
-    return fallbackPredictStockout(items, horizonDays);
-  }
+  const key = makeCacheKey('predict_stockout', { horizon_days: horizonDays, product_ids: options.product_ids || null });
+  return cachedAsync(key, async () => {
+    const ctx = await buildAIContext();
+    const items = buildPredictionItems(ctx, options.product_ids);
+    try {
+      const result = runPythonScript('02_stockout_risk_classifier.py', {
+        mode: 'predict',
+        horizon_days: horizonDays,
+        items,
+      });
+      return Array.isArray(result.predictions) ? result.predictions : [];
+    } catch (_) {
+      return fallbackPredictStockout(items, horizonDays);
+    }
+  });
 }
 
 async function predictConsumption(options = {}) {
   const horizonDays = Math.min(30, asPositiveInt(options.horizon_days, 14));
-  const ctx = await buildAIContext();
-  const items = buildPredictionItems(ctx, options.product_ids);
-  try {
-    const result = runPythonScript('01_consumption_forecast.py', {
-      mode: 'predict',
-      horizon_days: horizonDays,
-      items,
-    });
-    return Array.isArray(result.predictions) ? result.predictions : [];
-  } catch (_) {
-    return fallbackPredictConsumption(items, horizonDays);
-  }
+  const key = makeCacheKey('predict_consumption', { horizon_days: horizonDays, product_ids: options.product_ids || null });
+  return cachedAsync(key, async () => {
+    const ctx = await buildAIContext();
+    const items = buildPredictionItems(ctx, options.product_ids);
+    try {
+      const result = runPythonScript('01_consumption_forecast.py', {
+        mode: 'predict',
+        horizon_days: horizonDays,
+        items,
+      });
+      return Array.isArray(result.predictions) ? result.predictions : [];
+    } catch (_) {
+      return fallbackPredictConsumption(items, horizonDays);
+    }
+  });
 }
 
 async function predictAnomaly(options = {}) {
-  const ctx = await buildAIContext();
-  const items = buildPredictionItems(ctx, options.product_ids);
-  try {
-    const result = runPythonScript('03_anomaly_detector.py', {
-      mode: 'predict',
-      items,
-    });
-    return Array.isArray(result.predictions) ? result.predictions : [];
-  } catch (_) {
-    return fallbackPredictAnomaly(items);
-  }
+  const key = makeCacheKey('predict_anomaly', { product_ids: options.product_ids || null });
+  return cachedAsync(key, async () => {
+    const ctx = await buildAIContext();
+    const items = buildPredictionItems(ctx, options.product_ids);
+    try {
+      const result = runPythonScript('03_anomaly_detector.py', {
+        mode: 'predict',
+        items,
+      });
+      return Array.isArray(result.predictions) ? result.predictions : [];
+    } catch (_) {
+      return fallbackPredictAnomaly(items);
+    }
+  });
 }
 
 async function buildCopilotRecommendations(options = {}) {
@@ -761,6 +1184,15 @@ async function buildCopilotRecommendations(options = {}) {
   const topN = Math.min(20, asPositiveInt(options.top_n, 10));
   const simulations = Array.isArray(options.simulations) ? options.simulations : [];
   const includeConsumption = options.include_consumption !== false;
+
+  const cacheKey = makeCacheKey('copilot_reco', {
+    horizon_days: horizonDays,
+    top_n: topN,
+    include_consumption: includeConsumption,
+    simulations,
+  });
+  const cached = getCache(cacheKey);
+  if (cached !== null) return cached;
 
   const ctx = await buildAIContext();
   const items = buildPredictionItems(ctx);
@@ -847,7 +1279,7 @@ async function buildCopilotRecommendations(options = {}) {
   }
 
   if (pythonSignals) {
-    return runPythonScript('07_copilot_decision_engine.py', {
+    const response = runPythonScript('07_copilot_decision_engine.py', {
       generated_at: new Date().toISOString(),
       horizon_days: horizonDays,
       top_n: topN,
@@ -863,6 +1295,8 @@ async function buildCopilotRecommendations(options = {}) {
       },
       dashboard_curves: curves,
     });
+    setCache(cacheKey, response);
+    return response;
   }
 
   const consumptionMap = new Map(consumption.map((x) => [String(x.product_id), x]));
@@ -964,7 +1398,7 @@ async function buildCopilotRecommendations(options = {}) {
     color: Number(item.risk_probability || 0) >= 70 ? 'red' : Number(item.risk_probability || 0) >= 40 ? 'orange' : 'green',
   }));
 
-  return {
+  const response = {
     generated_at: new Date().toISOString(),
     horizon_days: horizonDays,
     top_risk_products: top,
@@ -980,6 +1414,8 @@ async function buildCopilotRecommendations(options = {}) {
       consumption_enabled: includeConsumption,
     },
   };
+  setCache(cacheKey, response);
+  return response;
 }
 
 async function askResponsableAssistant(options = {}) {
@@ -1085,6 +1521,121 @@ async function askResponsableAssistant(options = {}) {
     const anomalyTop = topItems(ctx?.anomaly_top, 'anomaly_score', 5);
     const actionPlan = Array.isArray(ctx?.action_plan) ? ctx.action_plan : [];
     const metrics = ctx && typeof ctx === 'object' && ctx.metrics && typeof ctx.metrics === 'object' ? ctx.metrics : {};
+
+    const normalize = (s) => String(s || '')
+      .toLowerCase()
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .replace(/\s+/g, ' ')
+      .trim();
+
+    const queryNorm = normalize(query);
+    const isMostlyDots = queryNorm.replace(/[.\s]/g, '').length === 0;
+    if (isMostlyDots) {
+      return [
+        'Je peux aider sur:',
+        '- produits critiques (cette semaine)',
+        '- pourquoi un produit est en alerte',
+        '- plan de commande priorise',
+        '- mini-rapport executif',
+      ].join('\n');
+    }
+
+    const findInActionPlan = (rawQ) => {
+      const qn = normalize(rawQ);
+      if (!qn) return null;
+      for (const step of actionPlan) {
+        const name = normalize(step?.product_name);
+        if (name && qn.includes(name)) return step;
+      }
+      return null;
+    };
+
+    const findInStockout = (rawQ) => {
+      const qn = normalize(rawQ);
+      if (!qn) return null;
+      for (const item of stockoutTop) {
+        const name = normalize(item?.product_name);
+        const code = normalize(item?.code_product);
+        if ((name && qn.includes(name)) || (code && qn.includes(code))) return item;
+      }
+      return null;
+    };
+
+    // If user explicitly asks for a 5-line summary, keep it short even in fallback mode.
+    const wantsSummary = queryNorm.includes('resum') || queryNorm.includes('resume') || queryNorm.includes('synth');
+    const wantsFiveLines = /\b5\b/.test(queryNorm) || queryNorm.includes('cinq') || queryNorm.includes('5 lignes');
+    if (wantsSummary && wantsFiveLines) {
+      const top = stockoutTop[0] || null;
+      const topName = top?.product_name || top?.code_product || 'Aucun produit critique';
+      const topRisk = top ? pct(top?.risk_probability) : '-';
+      const topQty = top ? qty(top?.recommended_order_qty) : '0';
+      const actions = actionPlan.slice(0, 2).map((step) => (
+        `${step?.product_name || 'Produit'}: ${step?.action || 'Action'} (urgence ${step?.urgency || 'normale'})`
+      ));
+      while (actions.length < 2) actions.push('Aucune action urgente detectee.');
+
+      return [
+        `Critiques: ${stockoutTop.length}, Anomalies: ${anomalyTop.length}.`,
+        `Priorite: ${topName} (risque ${topRisk}, commande ${topQty} u).`,
+        `Action 1: ${actions[0]}.`,
+        `Action 2: ${actions[1]}.`,
+        `Prochaine etape: verifier stock physique + lancer commande si besoin.`,
+      ].join('\n');
+    }
+
+    const wantsTopCritiques = queryNorm.includes('plus critique')
+      || queryNorm.includes('plus critiques')
+      || queryNorm.includes('top')
+      || queryNorm.includes('priorite')
+      || queryNorm.includes('critiques cette semaine')
+      || queryNorm.includes('cette semaine');
+    if (wantsTopCritiques) {
+      const topList = stockoutTop.slice(0, 5);
+      if (!topList.length && !actionPlan.length) {
+        return 'Aucun produit critique detecte sur la periode recente.';
+      }
+      const lines = ['Top produits critiques (fallback):'];
+      for (const item of topList) {
+        const name = item?.product_name || item?.code_product || 'Produit';
+        lines.push(`- ${name}: risque ${pct(item?.risk_probability)}, commande ${qty(item?.recommended_order_qty)} u.`);
+      }
+      if (actionPlan.length) {
+        lines.push('', 'Actions immediates:');
+        for (const step of actionPlan.slice(0, 3)) {
+          lines.push(`- ${step?.product_name || 'Produit'}: ${step?.action || 'Action'} (urgence ${step?.urgency || 'normale'}).`);
+        }
+      }
+      return lines.join('\n');
+    }
+
+    const askedPlanItem = findInActionPlan(q);
+    const askedStockoutItem = findInStockout(q);
+    const askedName = askedPlanItem?.product_name || askedStockoutItem?.product_name || null;
+
+    const wantsWhy = queryNorm.includes('pourquoi') || queryNorm.includes('alerte') || queryNorm.includes('risque');
+    if (wantsWhy && askedName) {
+      const stockItem = askedStockoutItem || findFocusProduct(q, stockoutTop);
+      if (stockItem) {
+        const name = stockItem?.product_name || stockItem?.code_product || 'Produit';
+        const factors = Array.isArray(stockItem?.factors) ? stockItem.factors : [];
+        const why = factors.length
+          ? factors.slice(0, 4).map(String).join(', ')
+          : (stockItem?.explanation ? String(stockItem.explanation) : 'Signal combine (stock + tendance).');
+        return [
+          `Pourquoi "${name}" est en alerte:`,
+          `- Risque estime: ${pct(stockItem?.risk_probability)}.`,
+          `- Stock/seuil: ${qty(stockItem?.current_stock)} / ${qty(stockItem?.seuil_minimum)}.`,
+          `- Facteurs: ${why}.`,
+          `- Action: commander ${qty(stockItem?.recommended_order_qty)} unite(s) si besoin.`,
+        ].join('\n');
+      }
+      return [
+        `Le produit "${askedName}" apparait dans le plan d'action, mais je n'ai pas assez de details chiffres dans le contexte pour expliquer precisement.`,
+        `Action proposee: ${askedPlanItem?.action || 'Verifier et lancer une commande si necessaire'}.`,
+        `Conseil: ouvrir la fiche produit (stock actuel, seuil, sorties) puis relancer la question.`,
+      ].join('\n');
+    }
 
     const focus = findFocusProduct(q, stockoutTop) || (stockoutTop[0] || null);
     const lines = ['Je te fais un point clair et actionnable.'];
@@ -1201,22 +1752,33 @@ async function askResponsableAssistant(options = {}) {
       'Tu parles de facon naturelle, claire, professionnelle et humaine.',
       'Toujours: expliquer simplement le pourquoi, puis proposer des actions immediates.',
       'Ne jamais inventer des donnees absentes du contexte.',
+      'Tu as acces a des outils (lecture seule) pour interroger le stock et les alertes. Utilise-les si ca aide a repondre avec des chiffres reels.',
     ].join(' ');
 
   try {
     if (!allowGemini) throw new Error('Gemini disabled');
 
-    const result = await generateGeminiContent({
-      prompt,
-      history,
-      system_instruction: systemInstruction,
-      temperature: mode === 'report' ? 0.25 : 0.45,
-      max_output_tokens: mode === 'report' ? 1600 : 1100,
-    });
+    try {
+      return await runGeminiAgent({
+        question,
+        history,
+        system_instruction: systemInstruction,
+        mode,
+        context,
+      });
+    } catch (agentErr) {
+      const result = await generateGeminiContent({
+        prompt,
+        history,
+        system_instruction: systemInstruction,
+        temperature: mode === 'report' ? 0.25 : 0.45,
+        max_output_tokens: mode === 'report' ? 1600 : 1100,
+      });
 
-    const text = String(result?.text || '').trim();
-    if (!text) throw new Error('Empty Gemini response');
-    return { answer: text, source: 'gemini', mode };
+      const text = String(result?.text || '').trim();
+      if (!text) throw new Error(`Empty Gemini response: ${agentErr?.message || 'agent_failed'}`);
+      return { answer: text, source: 'gemini', mode };
+    }
   } catch (err) {
     if (allowGemini && strictGemini) {
       const e = new Error('Gemini call failed');
@@ -1237,4 +1799,5 @@ module.exports = {
   buildCopilotRecommendations,
   askResponsableAssistant,
   makeVersionTag,
+  getPythonRuntimeStatus,
 };

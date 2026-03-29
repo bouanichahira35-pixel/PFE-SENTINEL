@@ -1,5 +1,5 @@
 import { Link, useLocation } from 'react-router-dom';
-import { Package, FileText, ChevronLeft, ChevronRight, LogOut } from 'lucide-react';
+import { Package, FileText, Settings, ChevronLeft, ChevronRight, LogOut } from 'lucide-react';
 import logoETAP from '../../assets/logoETAP.png';
 import './SidebarDem.css';
 
@@ -10,6 +10,7 @@ const SidebarDem = ({ collapsed, onToggle, onLogout, userName }) => {
   const menuItems = [
     { icon: Package, label: 'Produits', path: '/demandeur' },
     { icon: FileText, label: 'Mes Demandes', path: '/demandeur/mes-demandes' },
+    { icon: Settings, label: 'Parametres', path: '/demandeur/parametres' },
   ];
 
   const handleLogout = () => {

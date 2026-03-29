@@ -1,5 +1,5 @@
 const AppSetting = require('../models/AppSetting');
-const { trainAndBuildDatasets } = require('./aiModelService');
+const { trainAndBuildDatasets, getPythonRuntimeStatus } = require('./aiModelService');
 const logger = require('../utils/logger');
 
 let intervalRef = null;
@@ -49,6 +49,12 @@ async function appendVersionSnapshot(registry, metrics, backtesting, maxVersions
 }
 
 async function runGovernedAutoTrain() {
+  const python = getPythonRuntimeStatus();
+  if (!python?.ok) {
+    // Auto-training requires Python. Predictions still work via fallback engine.
+    return;
+  }
+
   const governanceRaw = await getSettingValue('ai_governance_v2', null);
   const governance = normalizeGovernance(governanceRaw || {});
   if (!governance.auto_training_enabled) return;

@@ -25,7 +25,7 @@ function humanDate(value) {
 const AuditFifoMag = ({ userName, onLogout }) => { 
   const navigate = useNavigate();
   const toast = useToast(); 
-  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(() => (typeof window !== 'undefined' ? window.innerWidth <= 768 : false));
 
   const today = new Date();
   const firstDay = new Date(today.getFullYear(), today.getMonth(), 1);
@@ -107,6 +107,10 @@ const AuditFifoMag = ({ userName, onLogout }) => {
 
   return (
     <div className="app-layout">
+      <div
+        className={`sidebar-backdrop ${sidebarCollapsed ? 'hidden' : ''}`}
+        onClick={() => setSidebarCollapsed(true)}
+      />
       <SidebarMag
         collapsed={sidebarCollapsed}
         onToggle={() => setSidebarCollapsed(!sidebarCollapsed)}
@@ -115,7 +119,12 @@ const AuditFifoMag = ({ userName, onLogout }) => {
       />
 
       <div className="main-container">
-        <HeaderPage userName={userName} title="Audit FIFO & Performance" showSearch={false} />
+        <HeaderPage
+          userName={userName}
+          title="Audit FIFO & Performance"
+          showSearch={false}
+          onMenuClick={() => setSidebarCollapsed((prev) => !prev)}
+        />
 
         <main className="main-content"> 
           <div className="fifo-audit-page"> 

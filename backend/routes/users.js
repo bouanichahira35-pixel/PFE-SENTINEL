@@ -29,7 +29,7 @@ router.get('/', requirePermission(PERMISSIONS.USER_MANAGE), async (req, res) => 
     if (status) q.status = status;
 
     const users = await User.find(q)
-      .select('_id username email telephone role status date_creation last_login')
+      .select('_id username email telephone role status date_creation last_login demandeur_profile')
       .sort({ role: 1, username: 1 })
       .lean();
 
@@ -94,7 +94,7 @@ router.get(
         .select('session_id user login_time last_activity_at expires_at ip_address device user_agent updatedAt')
         .populate({
           path: 'user',
-          select: '_id username email telephone role status',
+          select: '_id username email telephone role status demandeur_profile',
         });
 
       const sessions = await sessionsQuery.lean();
@@ -280,6 +280,73 @@ router.post(
       return res.json({ message: 'Sessions revoquees', modified: r.modifiedCount });
     } catch (err) {
       return res.status(500).json({ error: 'Failed to revoke sessions', details: err.message });
+    }
+  }
+);
+
+// PATCH /api/users/:id/demandeur-profile
+// Body: { demandeur_profile: "bureautique" | "menage" | "petrole" }
+router.patch(
+  '/:id/demandeur-profile',
+  requirePermission(PERMISSIONS.USER_MANAGE),
+  strictBody(['demandeur_profile']),
+  async (req, res) => {
+    try {
+      const demandeurProfile = String(req.body?.demandeur_profile || '').trim().toLowerCase();
+      const allowed = new Set(['bureautique', 'menage', 'petrole']);
+      if (!allowed.has(demandeurProfile)) {
+        return res.status(400).json({
+          error: 'demandeur_profile invalide',
+          code: ERROR_CODES.VALIDATION_FAILED,
+          reason: 'Valeurs autorisees: bureautique, menage, petrole',
+        });
+      }
+
+      const user = await User.findById(req.params.id).select('_id role username demandeur_profile').lean();
+      if (!user) {
+        return res.status(404).json({
+          error: 'Utilisateur introuvable',
+          code: ERROR_CODES.USER_NOT_FOUND,
+          reason: 'Aucun utilisateur ne correspond a cet identifiant.',
+        });
+      }
+      if (user.role !== 'demandeur') {
+        return res.status(400).json({
+          error: 'Operation interdite',
+          code: ERROR_CODES.VALIDATION_FAILED,
+          reason: 'Le profil catalogue ne concerne que les demandeurs.',
+        });
+      }
+
+      const before = user.demandeur_profile || 'bureautique';
+      await User.updateOne({ _id: user._id }, { $set: { demandeur_profile: demandeurProfile } });
+
+      await History.create({
+        action_type: 'user_update',
+        user: req.user.id,
+        source: 'ui',
+        description: `Profil catalogue modifie (${before} -> ${demandeurProfile})`,
+        actor_role: req.user.role,
+        tags: ['user', 'demandeur_profile'],
+        context: {
+          target_user_id: String(user._id),
+          target_username: user.username,
+          before,
+          after: demandeurProfile,
+        },
+      });
+
+      return res.json({
+        message: 'Profil catalogue mis a jour',
+        user: { id: user._id, demandeur_profile: demandeurProfile },
+      });
+    } catch (err) {
+      return res.status(500).json({
+        error: 'Failed to update demandeur_profile',
+        code: ERROR_CODES.INTERNAL_ERROR,
+        reason: 'Erreur serveur durant la mise a jour du profil.',
+        details: err.message,
+      });
     }
   }
 );

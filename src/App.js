@@ -2,11 +2,11 @@ import { useState, useEffect, useCallback } from "react";
 import { ToastProvider } from "./components/shared/Toast";
 
 import SplashScreen from "./components/shared/SplashScreen";
-import RoleSelection from "./pages/RoleSelection";
 import LoginPage from "./components/shared/LoginPage";
 import ForgotPassword from "./components/shared/ForgotPassword";
 
 import ProduitsMag from "./pages/magasinier/ProduitsMag";
+import InboxMag from "./pages/magasinier/InboxMag";
 import ListeDemandes from "./pages/magasinier/ListeDemandes";
 import EntreeStock from "./pages/magasinier/EntreeStock.jsx";
 import SortieStock from "./pages/magasinier/SortieStock.jsx";
@@ -15,17 +15,25 @@ import VoirDetails from "./pages/magasinier/VoirDetails";
 import HistoriqueMag from "./pages/magasinier/HistoriqueMag";
 import ChatMag from "./pages/magasinier/ChatMag";
 import ParametresMag from "./pages/magasinier/ParametresMag";
+import InventaireMag from "./pages/magasinier/InventaireMag";
 
 import DashboardResp from "./pages/responsable/DashboardResp";
-import AnalyseResp from "./pages/responsable/AnalyseResp";
-import SurveillanceResp from "./pages/responsable/SurveillanceResp";
+import PilotageResp from "./pages/responsable/PilotageResp";
 import TransactionsResp from "./pages/responsable/TransactionsResp";
 import ChatbotResp from "./pages/responsable/ChatbotResp";
 import ChatResp from "./pages/responsable/ChatResp";
 import ParametresResp from "./pages/responsable/ParametresResp";
+import InventairesResp from "./pages/responsable/InventairesResp";
+import FluxResp from "./pages/responsable/FluxResp";
 
 import ProduitsDem from "./pages/demandeur/ProduitsDem";
 import MesDemandes from "./pages/demandeur/MesDemandes";
+import ParametresDem from "./pages/demandeur/ParametresDem";
+
+import AdminDashboard from "./pages/admin/AdminDashboard";
+import AdminUsers from "./pages/admin/AdminUsers";
+import AdminIA from "./pages/admin/AdminIA";
+import AdminSettings from "./pages/admin/AdminSettings";
 
 import NotFound from "./pages/NotFound";
 import { HOME_PATH_BY_ROLE, ROLES, isKnownRole } from "./constants/roles";
@@ -36,6 +44,7 @@ import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 
 const SESSION_TIMEOUT_MS = 15 * 60 * 1000;
 const LAST_ACTIVITY_KEY = "lastActivityAt";
+const LAST_LOGIN_ROLE_KEY = "lastLoginRole";
 const LOGOUT_REASON_KEY = "logoutReason";
 const AUTH_LOGOUT_EVENT_NAME = "auth-logout";
 
@@ -63,20 +72,39 @@ const App = () => {
   const handleLogout = useCallback(async (reason = "", options = {}) => {
     const remote = options?.remote !== false;
     const token = sessionStorage.getItem("token") || "";
+    const refreshToken = sessionStorage.getItem("refreshToken") || "";
 
-    if (remote && token) {
-      try {
-        await fetch(`${API_BASE}/auth/logout`, {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${token}`,
-          },
-          credentials: "include",
-          body: JSON.stringify({}),
-        });
-      } catch {
-        // best-effort remote logout; always clear local state below
+    if (remote) {
+      let accessLogoutOk = false;
+
+      if (token) {
+        try {
+          await fetch(`${API_BASE}/auth/logout`, {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              Authorization: `Bearer ${token}`,
+            },
+            credentials: "include",
+            body: JSON.stringify({}),
+          });
+          accessLogoutOk = true;
+        } catch {
+          accessLogoutOk = false;
+        }
+      }
+
+      if (!accessLogoutOk) {
+        try {
+          await fetch(`${API_BASE}/auth/logout-refresh`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            credentials: "include",
+            body: JSON.stringify(refreshToken ? { refreshToken } : {}),
+          });
+        } catch {
+          // best-effort
+        }
       }
     }
 
@@ -105,7 +133,7 @@ const App = () => {
   useEffect(() => {
     const onAuthLogout = (event) => {
       const reason = typeof event?.detail?.reason === "string" ? event.detail.reason : "";
-      handleLogout(reason, { remote: false });
+      handleLogout(reason);
     };
 
     window.addEventListener(AUTH_LOGOUT_EVENT_NAME, onAuthLogout);
@@ -184,7 +212,7 @@ const App = () => {
     const writeLastActivity = () => sessionStorage.setItem(LAST_ACTIVITY_KEY, String(Date.now()));
 
     const logoutForInactivity = () => {
-      handleLogout("Deconnexion automatique apres 15 min d'inactivite.", { remote: false });
+      handleLogout("Deconnexion automatique apres 15 min d'inactivite.");
     };
 
     const scheduleInactivityTimer = () => {
@@ -254,12 +282,12 @@ const App = () => {
       const lastActivity = Number(sessionStorage.getItem(LAST_ACTIVITY_KEY) || 0);
 
       if (!lastActivity) {
-        handleLogout("Session expiree. Veuillez vous reconnecter.", { remote: false });
+        handleLogout("Session expiree. Veuillez vous reconnecter.");
         return;
       }
 
       if (now - lastActivity >= SESSION_TIMEOUT_MS) {
-        handleLogout("Session expiree apres 15 min d'inactivite.", { remote: false });
+        handleLogout("Session expiree apres 15 min d'inactivite.");
       }
     }, 5000);
 
@@ -270,7 +298,7 @@ const App = () => {
     setShowSplash(false);
   };
 
-  const handleLogin = (user, token, refreshToken, sessionId) => {
+  const handleLogin = (user, token, refreshToken, sessionId) => { 
     const normalizedRole = String(user?.role || "").toLowerCase();
     if (!isKnownRole(normalizedRole)) {
       handleLogout("Role utilisateur invalide.");
@@ -284,10 +312,13 @@ const App = () => {
     sessionStorage.setItem("token", token);
     if (sessionId) sessionStorage.setItem("sessionId", sessionId);
     sessionStorage.setItem("userName", user.username);
-    sessionStorage.setItem("userRole", normalizedRole);
-    if (user.image_profile) sessionStorage.setItem("imageProfile", user.image_profile);
-    else sessionStorage.removeItem("imageProfile");
-    sessionStorage.setItem(LAST_ACTIVITY_KEY, String(Date.now()));
+    sessionStorage.setItem("userRole", normalizedRole); 
+    sessionStorage.setItem(LAST_LOGIN_ROLE_KEY, normalizedRole); 
+    if (user.image_profile) sessionStorage.setItem("imageProfile", user.image_profile); 
+    else sessionStorage.removeItem("imageProfile"); 
+    if (user.demandeur_profile) sessionStorage.setItem("demandeurProfile", String(user.demandeur_profile));
+    else sessionStorage.removeItem("demandeurProfile");
+    sessionStorage.setItem(LAST_ACTIVITY_KEY, String(Date.now())); 
 
     localStorage.removeItem("token");
     localStorage.removeItem("refreshToken");
@@ -300,6 +331,7 @@ const App = () => {
   }
 
   const homePath = HOME_PATH_BY_ROLE[userRole] || "/";
+  const loginRedirect = "/login";
 
   return (
     <ToastProvider>
@@ -307,13 +339,13 @@ const App = () => {
         <Routes>
           {!isAuthenticated ? (
             <>
-              <Route path="/" element={<RoleSelection />} />
-              <Route path="/login" element={<RoleSelection />} />
-              <Route path="/login/:role" element={<LoginPage onLogin={handleLogin} />} />
+              <Route path="/" element={<Navigate to="/login" replace />} />
+              <Route path="/login" element={<LoginPage onLogin={handleLogin} />} />
+              <Route path="/login/:role" element={<Navigate to="/login" replace />} />
 
               <Route path="/mot-de-passe-oublie" element={<ForgotPassword />} />
 
-              <Route path="*" element={<Navigate to="/" replace />} />
+              <Route path="*" element={<Navigate to={loginRedirect} replace />} />
             </>
           ) : (
             <>
@@ -321,7 +353,9 @@ const App = () => {
               {userRole === ROLES.MAGASINIER && (
                 <>
                   <Route path="/magasinier" element={<ProduitsMag userName={userName} onLogout={handleLogout} />} />
+                  <Route path="/magasinier/inbox" element={<InboxMag userName={userName} onLogout={handleLogout} />} />
                   <Route path="/magasinier/demandes" element={<ListeDemandes userName={userName} onLogout={handleLogout} />} />
+                  <Route path="/magasinier/inventaire" element={<InventaireMag userName={userName} onLogout={handleLogout} />} />
                   <Route path="/magasinier/entree-stock" element={<EntreeStock userName={userName} onLogout={handleLogout} />} />
                   <Route path="/magasinier/sortie-stock" element={<SortieStock userName={userName} onLogout={handleLogout} />} />
                   <Route path="/magasinier/ajouter-produit" element={<AjouterProduit userName={userName} onLogout={handleLogout} />} />
@@ -337,8 +371,11 @@ const App = () => {
               {userRole === ROLES.RESPONSABLE && (
                 <>
                   <Route path="/responsable" element={<DashboardResp userName={userName} onLogout={handleLogout} />} />
-                  <Route path="/responsable/analyse" element={<AnalyseResp userName={userName} onLogout={handleLogout} />} />
-                  <Route path="/responsable/surveillance" element={<SurveillanceResp userName={userName} onLogout={handleLogout} />} />
+                  <Route path="/responsable/pilotage" element={<PilotageResp userName={userName} onLogout={handleLogout} />} />
+                  <Route path="/responsable/flux" element={<FluxResp userName={userName} onLogout={handleLogout} />} />
+                  <Route path="/responsable/inventaires" element={<InventairesResp userName={userName} onLogout={handleLogout} />} />
+                  <Route path="/responsable/analyse" element={<Navigate to="/responsable/pilotage?tab=analyse" replace />} />
+                  <Route path="/responsable/surveillance" element={<Navigate to="/responsable/pilotage?tab=alertes" replace />} />
                   <Route path="/responsable/transactions" element={<TransactionsResp userName={userName} onLogout={handleLogout} />} />
                   <Route path="/responsable/historique" element={<Navigate to="/responsable/transactions" replace />} />
                   <Route path="/responsable/chatbot" element={<ChatbotResp userName={userName} onLogout={handleLogout} />} />
@@ -348,11 +385,21 @@ const App = () => {
                 </>
               )}
 
+              {userRole === ROLES.ADMIN && (
+                <>
+                  <Route path="/admin" element={<AdminDashboard userName={userName} onLogout={handleLogout} />} />
+                  <Route path="/admin/utilisateurs" element={<AdminUsers userName={userName} onLogout={handleLogout} />} />
+                  <Route path="/admin/ia" element={<AdminIA userName={userName} onLogout={handleLogout} />} />
+                  <Route path="/admin/parametres" element={<AdminSettings userName={userName} onLogout={handleLogout} />} />
+                  <Route path="/" element={<Navigate to="/admin" replace />} />
+                </>
+              )}
+
               {userRole === ROLES.DEMANDEUR && (
                 <>
                   <Route path="/demandeur" element={<ProduitsDem userName={userName} onLogout={handleLogout} />} />
                   <Route path="/demandeur/mes-demandes" element={<MesDemandes userName={userName} onLogout={handleLogout} />} />
-                  <Route path="/demandeur/parametres" element={<Navigate to="/demandeur" replace />} />
+                  <Route path="/demandeur/parametres" element={<ParametresDem userName={userName} onLogout={handleLogout} />} />
                   <Route path="/" element={<Navigate to="/demandeur" replace />} />
                 </>
               )}

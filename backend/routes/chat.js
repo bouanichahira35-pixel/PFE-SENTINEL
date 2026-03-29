@@ -1,6 +1,9 @@
 const router = require('express').Router();
 const ChatConversation = require('../models/ChatConversation');
 const ChatMessage = require('../models/ChatMessage');
+const History = require('../models/History');
+const Request = require('../models/Request');
+const Product = require('../models/Product');
 const User = require('../models/User');
 const requireAuth = require('../middlewares/requireAuth');
 const strictBody = require('../middlewares/strictBody');
@@ -151,6 +154,67 @@ router.post('/conversations/direct', strictBody(['user_id']), async (req, res) =
     return res.status(201).json(populated);
   } catch (err) {
     return res.status(400).json({ error: 'Failed to create/get conversation', details: err.message });
+  }
+});
+
+async function buildThreadParticipantsFromHistory(historyDoc, currentUserId) {
+  const ids = new Set();
+  if (currentUserId) ids.add(String(currentUserId));
+  if (historyDoc?.user) ids.add(String(historyDoc.user));
+
+  if (historyDoc?.request) {
+    const reqDoc = await Request.findById(historyDoc.request).lean();
+    if (reqDoc?.demandeur) ids.add(String(reqDoc.demandeur));
+    if (reqDoc?.processed_by) ids.add(String(reqDoc.processed_by));
+    if (reqDoc?.served_by) ids.add(String(reqDoc.served_by));
+    if (reqDoc?.validated_by) ids.add(String(reqDoc.validated_by));
+    if (reqDoc?.prepared_by) ids.add(String(reqDoc.prepared_by));
+  }
+
+  if (historyDoc?.product) {
+    const prodDoc = await Product.findById(historyDoc.product).select('created_by').lean();
+    if (prodDoc?.created_by) ids.add(String(prodDoc.created_by));
+  }
+
+  const list = Array.from(ids).filter(Boolean);
+  const activeUsers = await User.find({ _id: { $in: list }, status: 'active' }).select('_id').lean();
+  return activeUsers.map((u) => u._id);
+}
+
+router.post('/conversations/thread', strictBody(['history_id']), async (req, res) => {
+  try {
+    const historyId = String(req.body?.history_id || '').trim();
+    if (!historyId) return res.status(400).json({ error: 'history_id obligatoire' });
+
+    const historyDoc = await History.findById(historyId).lean();
+    if (!historyDoc) return res.status(404).json({ error: 'Evenement introuvable' });
+
+    // Find existing thread conversation linked to this history item.
+    let conv = await ChatConversation.findOne({
+      type: 'thread',
+      context_kind: 'history',
+      context_id: historyDoc._id,
+    });
+
+    if (!conv) {
+      const participants = await buildThreadParticipantsFromHistory(historyDoc, req.user.id);
+      conv = await ChatConversation.create({
+        type: 'thread',
+        participants,
+        context_kind: 'history',
+        context_id: historyDoc._id,
+        last_message: '',
+        last_message_at: new Date(),
+      });
+    }
+
+    const populated = await ChatConversation.findById(conv._id)
+      .populate('participants', SAFE_USER_FIELDS)
+      .lean();
+
+    return res.status(201).json(populated);
+  } catch (err) {
+    return res.status(400).json({ error: 'Failed to create/get thread conversation', details: err.message });
   }
 });
 

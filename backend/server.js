@@ -12,6 +12,7 @@ const idempotencyGuard = require('./middlewares/idempotencyGuard');
 const { verifyMailer, isMailConfigured } = require('./services/mailerService');
 const { initMailQueue, getMailQueueHealth } = require('./services/mailQueueService');
 const { startAiAutoTrainingJob } = require('./services/aiGovernanceService');
+const { rebuildAiAlerts } = require('./services/alertService');
 const { getQrSecretStatus } = require('./services/qrTokenService');
 const { removeInformatiqueDomain } = require('./services/domainCleanupService');
 
@@ -49,11 +50,41 @@ function isLocalDevOrigin(origin) {
   }
 }
 
+function isPrivateIpv4(hostname) {
+  const m = /^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/.exec(String(hostname || ''));
+  if (!m) return false;
+  const parts = m.slice(1).map((x) => Number(x));
+  if (parts.some((n) => !Number.isFinite(n) || n < 0 || n > 255)) return false;
+
+  const [a, b] = parts;
+  if (a === 10) return true;
+  if (a === 192 && b === 168) return true;
+  if (a === 172 && b >= 16 && b <= 31) return true;
+  return false;
+}
+
+function isLanDevOrigin(origin) {
+  try {
+    const parsed = new URL(origin);
+    const isHttp = parsed.protocol === 'http:' || parsed.protocol === 'https:';
+    const port = Number(parsed.port || '');
+    const looksLikeDevPort = Number.isFinite(port) ? port >= 3000 && port <= 3999 : false;
+    return isHttp && looksLikeDevPort && isPrivateIpv4(parsed.hostname);
+  } catch {
+    return false;
+  }
+}
+
 app.use(cors({
   origin(origin, cb) {
     if (!origin) return cb(null, true);
+
+    // Dev ergonomics: allow any origin in development so phones on LAN can use the app
+    // without constantly updating FRONTEND_URLS when the dev server port changes.
+    // In production, we keep strict allow-listing via FRONTEND_URLS.
+    if (!isProduction) return cb(null, true);
+
     if (allowedOrigins.includes(origin)) return cb(null, true);
-    if (!isProduction && isLocalDevOrigin(origin)) return cb(null, true);
     return cb(new Error(`CORS blocked for origin: ${origin}`));
   },
   credentials: true,
@@ -193,6 +224,7 @@ app.use('/api/laboratories', require('./routes/laboratories'));
 app.use('/api/stock', require('./routes/stock'));
 app.use('/api/requests', require('./routes/requests'));
 app.use('/api/history', require('./routes/history'));
+app.use('/api/feed', require('./routes/feed'));
 app.use('/api/ai', aiLimiter, require('./routes/ai'));
 app.use('/api/chat', chatLimiter, require('./routes/chat'));
 app.use('/api/settings', require('./routes/settings'));
@@ -200,7 +232,10 @@ app.use('/api/security-audit', require('./routes/security-audit'));
 app.use('/api/notifications', require('./routes/notifications'));
 app.use('/api/files', require('./routes/files'));
 app.use('/api/reports', require('./routes/reports'));
-app.use('/api/users', require('./routes/users'));
+app.use('/api/users', require('./routes/users')); 
+app.use('/api/suppliers', require('./routes/suppliers')); 
+app.use('/api/purchase-orders', require('./routes/purchase-orders')); 
+app.use('/api/inventory', require('./routes/inventory'));
 
 app.use((err, req, res, next) => {
   if (err?.code === 'LIMIT_FILE_SIZE') {
@@ -218,6 +253,20 @@ async function runDomainCleanup() {
   }
 }
 
+async function runAiAlertsBoot() {
+  const enable = String(process.env.AI_ALERTS_REBUILD_ON_BOOT || '').trim().toLowerCase();
+  const isProd = String(process.env.NODE_ENV || '').toLowerCase() === 'production';
+  if (isProd && enable !== 'true') return;
+  if (!isProd && enable === 'false') return;
+
+  try {
+    const summary = await rebuildAiAlerts({ max_products: Number(process.env.AI_ALERTS_BOOT_MAX_PRODUCTS || 300) });
+    logger.info({ summary }, '[AI] Alerts rebuild boot completed');
+  } catch (err) {
+    logger.warn({ err: err?.message || err }, '[AI] Alerts rebuild boot failed');
+  }
+}
+
 const PORT = process.env.PORT || 5000;
 initMailQueue()
   .then(async () => {
@@ -231,6 +280,7 @@ initMailQueue()
     }
     await runDomainCleanup();
     startAiAutoTrainingJob();
+    await runAiAlertsBoot();
     app.listen(PORT, () => logger.info({ port: Number(PORT) }, 'API ready'));
   })
   .catch(async (err) => {
@@ -245,6 +295,7 @@ initMailQueue()
     }
     await runDomainCleanup();
     startAiAutoTrainingJob();
+    await runAiAlertsBoot();
     app.listen(PORT, () => logger.info({ port: Number(PORT) }, 'API ready'));
   });
 

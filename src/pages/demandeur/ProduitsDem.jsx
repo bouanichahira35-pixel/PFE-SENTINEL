@@ -10,10 +10,13 @@ import './ProduitsDem.css';
 const ProduitsDem = ({ userName, onLogout }) => {
   const toast = useToast();
   const demandeurName = sessionStorage.getItem('userName') || localStorage.getItem('userName') || userName || '';
-  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(() => (typeof window !== 'undefined' ? window.innerWidth <= 768 : false));
   const [searchQuery, setSearchQuery] = useState('');
   const [products, setProducts] = useState([]);
+  const [categories, setCategories] = useState([]);
+  const [selectedCategory, setSelectedCategory] = useState('all');
   const [isLoadingProducts, setIsLoadingProducts] = useState(false);
+  const [isLoadingCategories, setIsLoadingCategories] = useState(false);
   const [showModal, setShowModal] = useState(false);
   const [selectedProduct, setSelectedProduct] = useState(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -27,16 +30,32 @@ const ProduitsDem = ({ userName, onLogout }) => {
   });
   const [errors, setErrors] = useState({});
 
+  const loadCategories = useCallback(async () => {
+    setIsLoadingCategories(true);
+    try {
+      const items = await get('/categories');
+      const mapped = (items || []).map((c) => ({ id: c._id, name: c.name || 'Categorie' }));
+      setCategories(mapped);
+    } catch (err) {
+      setCategories([]);
+    } finally {
+      setIsLoadingCategories(false);
+    }
+  }, []);
+
   const loadProducts = useCallback(async () => {
     setIsLoadingProducts(true);
     try {
-      const items = await get('/products');
+      const categoryQuery = selectedCategory && selectedCategory !== 'all' ? `?category=${encodeURIComponent(selectedCategory)}` : '';
+      const items = await get(`/products${categoryQuery}`);
       const mapped = (items || [])
         .filter((p) => p.validation_status === 'approved')
         .map((p) => ({
           id: p._id,
           code: p.code_product || '-',
           nom: p.name || 'Produit',
+          categorie: p?.category?.name || '-',
+          categoryId: p?.category?._id || '',
         }));
       setProducts(mapped);
     } catch (err) {
@@ -44,16 +63,18 @@ const ProduitsDem = ({ userName, onLogout }) => {
     } finally {
       setIsLoadingProducts(false);
     }
-  }, [toast]);
+  }, [toast, selectedCategory]);
 
   useEffect(() => {
+    loadCategories();
     loadProducts();
-  }, [loadProducts]);
+  }, [loadProducts, loadCategories]);
 
   const filteredProducts = useMemo(() => {
     return products.filter(product =>
       product.nom.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      product.code.toLowerCase().includes(searchQuery.toLowerCase())
+      product.code.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      String(product.categorie || '').toLowerCase().includes(searchQuery.toLowerCase())
     );
   }, [products, searchQuery]);
 
@@ -103,6 +124,11 @@ const ProduitsDem = ({ userName, onLogout }) => {
         direction_laboratory: formData.directionLaboratoire.trim(),
         beneficiary: demandeurName,
         note: noteParts.join(' | '),
+        priority: formData.urgence === 'tres_urgente'
+          ? 'critical'
+          : formData.urgence === 'urgente'
+            ? 'urgent'
+            : 'normal',
       };
 
       try {
@@ -142,6 +168,10 @@ const ProduitsDem = ({ userName, onLogout }) => {
 
   return (
     <div className="app-layout">
+      <div
+        className={`sidebar-backdrop ${sidebarCollapsed ? 'hidden' : ''}`}
+        onClick={() => setSidebarCollapsed(true)}
+      />
       <SidebarDem 
         collapsed={sidebarCollapsed} 
         onToggle={() => setSidebarCollapsed(!sidebarCollapsed)}
@@ -155,33 +185,53 @@ const ProduitsDem = ({ userName, onLogout }) => {
           title="Catalogue Produits"
           searchValue={searchQuery}
           onSearchChange={setSearchQuery}
+          onMenuClick={() => setSidebarCollapsed((prev) => !prev)}
         />
         
-        <main className="main-content">
-          {isLoadingProducts && <LoadingSpinner overlay text="Chargement des produits..." />}
-          <div className="products-dem-page">
-            <div className="products-dem-table-container">
-              <table className="products-dem-table" role="table">
-                <thead>
-                  <tr>
-                    <th scope="col">Code</th>
-                    <th scope="col">Nom du produit</th>
-                    <th scope="col">Action</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {filteredProducts.map((product, index) => (
-                    <tr key={product.id} style={{ animationDelay: `${index * 50}ms` }}>
-                      <td className="code-cell">{product.code}</td>
-                      <td className="name-cell">
-                        <Package size={16} className="product-icon" aria-hidden="true" />
-                        {product.nom}
-                      </td>
-                      <td>
-                        <button 
-                          className="demander-btn"
-                          onClick={() => handleDemander(product)}
-                          aria-label={`Demander ${product.nom}`}
+        <main className="main-content"> 
+          {isLoadingProducts && <LoadingSpinner overlay text="Chargement des produits..." />} 
+          <div className="products-dem-page"> 
+            <div style={{ display: 'flex', gap: 12, alignItems: 'center', flexWrap: 'wrap', marginBottom: 14 }}>
+              <div style={{ fontSize: 12, fontWeight: 900, color: '#64748b' }}>Categorie:</div>
+              <select
+                value={selectedCategory}
+                onChange={(e) => setSelectedCategory(e.target.value)}
+                disabled={isLoadingCategories || isLoadingProducts}
+                style={{ padding: '10px 12px', borderRadius: 12, border: '1px solid #e2e8f0', fontWeight: 900, minWidth: 220 }}
+              >
+                <option value="all">Toutes</option>
+                {categories.map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {c.name}
+                  </option>
+                ))}
+              </select>
+              {isLoadingCategories && <div style={{ fontSize: 12, fontWeight: 800, color: '#64748b' }}>Chargement categories...</div>}
+            </div>
+            <div className="products-dem-table-container"> 
+              <table className="products-dem-table" role="table"> 
+                <thead> 
+                  <tr> 
+                    <th scope="col">Code</th> 
+                    <th scope="col">Nom du produit</th> 
+                    <th scope="col">Categorie</th>
+                    <th scope="col">Action</th> 
+                  </tr> 
+                </thead> 
+                <tbody> 
+                  {filteredProducts.map((product, index) => ( 
+                    <tr key={product.id} style={{ animationDelay: `${index * 50}ms` }}> 
+                      <td className="code-cell">{product.code}</td> 
+                      <td className="name-cell"> 
+                        <Package size={16} className="product-icon" aria-hidden="true" /> 
+                        {product.nom} 
+                      </td> 
+                      <td style={{ fontWeight: 900, color: '#334155' }}>{product.categorie}</td>
+                      <td> 
+                        <button  
+                          className="demander-btn" 
+                          onClick={() => handleDemander(product)} 
+                          aria-label={`Demander ${product.nom}`} 
                         >
                           <Send size={16} />
                           <span>Demander</span>

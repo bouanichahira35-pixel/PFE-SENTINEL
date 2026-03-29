@@ -1,18 +1,13 @@
 import { useEffect, useRef, useState } from 'react';
-import { useLocation, useNavigate, useParams } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 import { User, Lock, AlertTriangle, Eye } from 'lucide-react';
 import logoETAP from '../../assets/logoETAP.png';
 import { post } from '../../services/api';
-import { HOME_PATH_BY_ROLE, isKnownRole } from '../../constants/roles';
+import { HOME_PATH_BY_ROLE } from '../../constants/roles';
 import './LoginPage.css';
 
 const LoginPage = ({ onLogin }) => {
   const navigate = useNavigate();
-  const location = useLocation();
-  const params = useParams();
-  const roleParam = String(params?.role || '').trim().toLowerCase();
-  const roleFromState = String(location.state?.role || '').trim().toLowerCase();
-  const expectedRole = isKnownRole(roleParam) ? roleParam : isKnownRole(roleFromState) ? roleFromState : '';
   const [formData, setFormData] = useState({
     username: '',
     password: ''
@@ -58,17 +53,9 @@ const LoginPage = ({ onLogin }) => {
         return;
       }
 
-      const payload = expectedRole
-        ? { identifier, password, role: expectedRole }
-        : { identifier, password };
-
-      const data = await post('/auth/login', payload);
+      const data = await post('/auth/login', { identifier, password });
 
       const normalizedRole = String(data?.user?.role || '').toLowerCase();
-      if (expectedRole && normalizedRole !== expectedRole) {
-        setError(`Ce compte n'est pas un compte ${expectedRole}`);
-        return;
-      }
       const redirectPath = HOME_PATH_BY_ROLE[normalizedRole];
       if (!redirectPath) {
         setError('Role utilisateur invalide');
@@ -96,10 +83,6 @@ const LoginPage = ({ onLogin }) => {
   };
 
   const handleForgotPassword = () => {
-    if (expectedRole) {
-      navigate('/mot-de-passe-oublie', { state: { role: expectedRole } });
-      return;
-    }
     navigate('/mot-de-passe-oublie');
   };
 
@@ -121,17 +104,10 @@ const LoginPage = ({ onLogin }) => {
             <img src={logoETAP} alt="ETAP Logo" className="login-logo" />
           </div>
 
-          <p className="login-subtitle">Systeme de Gestion de Stock</p>
-          {expectedRole && (
-            <p className="login-subtitle" style={{ marginTop: 6 }}>
-              Connexion {expectedRole}
-            </p>
-          )}
-
           <form onSubmit={handleSubmit} className="login-form">
             <div className="login-field">
               <label htmlFor="username" className="login-label">
-                Nom d'utilisateur
+                Identifiant
               </label>
               <div className="login-input-wrapper">
                 <User size={20} className="login-input-icon" />
@@ -141,7 +117,7 @@ const LoginPage = ({ onLogin }) => {
                   name="username"
                   value={formData.username}
                   onChange={handleChange}
-                  placeholder="Entrez votre nom d'utilisateur"
+                  placeholder="Email / nom d'utilisateur / telephone"
                   className="login-input"
                   autoComplete="username"
                 />

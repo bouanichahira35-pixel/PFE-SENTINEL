@@ -7,6 +7,7 @@ Backend API de gestion de stock (produits, FIFO lots, demandes, audit, reporting
 - Node.js 20+
 - MongoDB 7+
 - Redis (optionnel, recommande pour la queue mail)
+- Python 3 (optionnel) si vous executez les scripts IA hors Docker
 
 ## Installation
 
@@ -58,6 +59,7 @@ La suite execute:
 En CI, les credentials de test doivent etre fournis via variables d'environnement:
 
 - `TEST_DEMANDEUR_EMAIL`, `TEST_DEMANDEUR_PASSWORD`
+- `TEST_ADMIN_EMAIL`, `TEST_ADMIN_PASSWORD`
 - `TEST_MAGASINIER_EMAIL`, `TEST_MAGASINIER_PASSWORD`
 - `TEST_RESPONSABLE_EMAIL`, `TEST_RESPONSABLE_PASSWORD`
 
@@ -74,6 +76,24 @@ Services inclus dans `docker-compose.yml`:
 - `backend`
 - `mongo`
 - `redis`
+
+Note IA:
+- Le container `backend` installe `python3` pour executer les scripts dans `ai_py/`.
+- En local (sans Docker), Python est optionnel: si Python n'est pas dispo, les predictions restent actives en mode automatique (fallback).
+
+Performance IA (optionnel):
+- `AI_CACHE_TTL_MS` (defaut 60000): TTL du cache in-memory pour predictions/copilot.
+- `AI_CACHE_MAX_ITEMS` (defaut 250): taille max du cache.
+
+## Activer le chatbot (Gemini)
+
+1. Renseigner `GEMINI_API_KEY` dans `backend/.env`.
+2. Redemarrer le backend: `npm start`.
+3. Verifier la configuration: `npm run ai:setup-check`.
+
+## Sessions
+
+- Par defaut, une session expire apres 2h d'inactivite (configurable via `SESSION_INACTIVITY_MS`).
 
 ## CI
 

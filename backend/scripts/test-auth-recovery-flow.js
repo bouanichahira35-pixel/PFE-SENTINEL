@@ -178,6 +178,11 @@ async function run() {
     ...process.env,
     PORT: String(TEST_PORT),
     AI_AUTO_TRAIN_ON_BOOT: 'false',
+    // Tests must not depend on external SMTP connectivity.
+    MAIL_HOST: '',
+    MAIL_USER: '',
+    MAIL_PASS: '',
+    RESET_DEV_OTP_ENABLED: 'true',
   };
 
   const server = spawn(process.execPath, ['server.js'], {

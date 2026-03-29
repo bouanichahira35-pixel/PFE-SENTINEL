@@ -15,6 +15,7 @@ import ProtectedPage from '../../components/shared/ProtectedPage';
 import LoadingSpinner from '../../components/shared/LoadingSpinner';
 import { useToast } from '../../components/shared/Toast';
 import { get } from '../../services/api';
+import useIsMobile from '../../hooks/useIsMobile';
 import './TransactionsResp.css';
 
 function formatDate(value) {
@@ -26,7 +27,8 @@ function formatDate(value) {
 
 const TransactionsResp = ({ userName, onLogout }) => {
   const toast = useToast();
-  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const isMobile = useIsMobile(640);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(() => (typeof window !== 'undefined' ? window.innerWidth <= 768 : false));
   const [isLoading, setIsLoading] = useState(false);
   const [items, setItems] = useState([]);
   const [searchQuery, setSearchQuery] = useState('');
@@ -129,6 +131,10 @@ const TransactionsResp = ({ userName, onLogout }) => {
   return (
     <ProtectedPage userName={userName}>
       <div className="app-layout">
+        <div
+          className={`sidebar-backdrop ${sidebarCollapsed ? 'hidden' : ''}`}
+          onClick={() => setSidebarCollapsed(true)}
+        />
         <SidebarResp
           collapsed={sidebarCollapsed}
           onToggle={() => setSidebarCollapsed(!sidebarCollapsed)}
@@ -141,6 +147,7 @@ const TransactionsResp = ({ userName, onLogout }) => {
             title="Transactions"
             searchValue={searchQuery}
             onSearchChange={setSearchQuery}
+            onMenuClick={() => setSidebarCollapsed((prev) => !prev)}
           />
           <main className="main-content">
             {isLoading && <LoadingSpinner overlay text="Chargement..." />}
@@ -166,54 +173,98 @@ const TransactionsResp = ({ userName, onLogout }) => {
                   <h3><History size={18} /> Historique des transactions</h3>
                   <span>{filtered.length} ligne(s)</span>
                 </div>
-                <div className="tx-table-wrap">
-                  <table className="tx-table">
-                    <thead>
-                      <tr>
-                        <th>Type</th>
-                        <th>Produit</th>
-                        <th>Quantite</th>
-                        <th>Date</th>
-                        <th>Magasinier</th>
-                        <th>Source / Destination</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {filtered.map((item) => (
-                        <tr key={item.id}>
-                          <td>
-                            <span className={`type-pill ${item.type}`}>
-                              {item.type === 'entree' ? <ArrowDownToLine size={13} /> : <ArrowUpFromLine size={13} />}
-                              {item.typeLabel}
-                            </span>
-                          </td>
-                          <td>
-                            <div className="product-cell">
-                              <Package size={14} />
+                {isMobile ? (
+                  <>
+                    {!filtered.length ? (
+                      <div className="tx-empty" style={{ padding: '1rem' }}>Aucune transaction trouvee.</div>
+                    ) : (
+                      <div className="mobile-card-list">
+                        {filtered.map((item) => (
+                          <div key={item.id} className="mobile-card">
+                            <div className="mobile-card-header">
                               <div>
-                                <strong>{item.produit}</strong>
-                                <small>{item.code}</small>
+                                <h3 className="mobile-card-title">{item.produit}</h3>
+                                <div className="mobile-card-subtitle">{item.code}</div>
+                              </div>
+                              <span className={`type-pill ${item.type}`}>
+                                {item.type === 'entree' ? <ArrowDownToLine size={13} /> : <ArrowUpFromLine size={13} />}
+                                {item.typeLabel}
+                              </span>
+                            </div>
+
+                            <div className="mobile-card-grid">
+                              <div className="mobile-kv">
+                                <div className="mobile-kv-label">Quantite</div>
+                                <div className="mobile-kv-value">{item.quantite}</div>
+                              </div>
+                              <div className="mobile-kv">
+                                <div className="mobile-kv-label">Date</div>
+                                <div className="mobile-kv-value">{formatDate(item.dateRaw)}</div>
+                              </div>
+                              <div className="mobile-kv">
+                                <div className="mobile-kv-label">Magasinier</div>
+                                <div className="mobile-kv-value">{item.magasinier || userName || '-'}</div>
+                              </div>
+                              <div className="mobile-kv">
+                                <div className="mobile-kv-label">Source</div>
+                                <div className="mobile-kv-value">{item.source}</div>
                               </div>
                             </div>
-                          </td>
-                          <td>{item.quantite}</td>
-                          <td>
-                            <span className="meta-inline"><Calendar size={13} /> {formatDate(item.dateRaw)}</span>
-                          </td>
-                          <td>
-                            <span className="meta-inline"><User size={13} /> {item.magasinier || userName || '-'}</span>
-                          </td>
-                          <td>{item.source}</td>
-                        </tr>
-                      ))}
-                      {!filtered.length && (
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </>
+                ) : (
+                  <div className="tx-table-wrap">
+                    <table className="tx-table">
+                      <thead>
                         <tr>
-                          <td colSpan={6} className="tx-empty">Aucune transaction trouvee.</td>
+                          <th>Type</th>
+                          <th>Produit</th>
+                          <th>Quantite</th>
+                          <th>Date</th>
+                          <th>Magasinier</th>
+                          <th>Source / Destination</th>
                         </tr>
-                      )}
-                    </tbody>
-                  </table>
-                </div>
+                      </thead>
+                      <tbody>
+                        {filtered.map((item) => (
+                          <tr key={item.id}>
+                            <td>
+                              <span className={`type-pill ${item.type}`}>
+                                {item.type === 'entree' ? <ArrowDownToLine size={13} /> : <ArrowUpFromLine size={13} />}
+                                {item.typeLabel}
+                              </span>
+                            </td>
+                            <td>
+                              <div className="product-cell">
+                                <Package size={14} />
+                                <div>
+                                  <strong>{item.produit}</strong>
+                                  <small>{item.code}</small>
+                                </div>
+                              </div>
+                            </td>
+                            <td>{item.quantite}</td>
+                            <td>
+                              <span className="meta-inline"><Calendar size={13} /> {formatDate(item.dateRaw)}</span>
+                            </td>
+                            <td>
+                              <span className="meta-inline"><User size={13} /> {item.magasinier || userName || '-'}</span>
+                            </td>
+                            <td>{item.source}</td>
+                          </tr>
+                        ))}
+                        {!filtered.length && (
+                          <tr>
+                            <td colSpan={6} className="tx-empty">Aucune transaction trouvee.</td>
+                          </tr>
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
               </div>
             </div>
           </main>

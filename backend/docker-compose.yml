@@ -17,6 +17,7 @@ services:
       INTERNAL_BOND_QR_SECRET: change_me_qr_secret
       MAIL_QUEUE_ENABLED: "true"
       AI_AUTO_TRAIN_ON_BOOT: "false"
+      AI_PYTHON_BIN: python3
     depends_on:
       mongo:
         condition: service_healthy

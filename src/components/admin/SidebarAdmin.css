@@ -1,0 +1,134 @@
+.sidebar-admin {
+  width: 270px;
+  background: #ffffff;
+  border-right: 1px solid #e7ebf3;
+  min-height: 100vh;
+  position: sticky;
+  top: 0;
+  z-index: 20;
+  transition: width 0.25s ease;
+}
+
+.sidebar-admin.collapsed {
+  width: 84px;
+}
+
+.sidebar-admin .sidebar-logo {
+  padding: 14px 14px 10px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.sidebar-admin .sidebar-logo-img {
+  width: 44px;
+  height: 44px;
+  object-fit: contain;
+}
+
+.sidebar-admin .sidebar-logo-text {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.sidebar-admin .sidebar-logo-ident {
+  display: flex;
+  flex-direction: column;
+  line-height: 1.05;
+}
+
+.sidebar-admin .sidebar-logo-title {
+  font-weight: 900;
+  font-size: 12px;
+  letter-spacing: 0.06em;
+  color: #0f172a;
+}
+
+.sidebar-admin .sidebar-user-name {
+  font-weight: 800;
+  font-size: 12px;
+  color: #475569;
+  margin-top: 2px;
+}
+
+.sidebar-admin .sidebar-user-avatar {
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  object-fit: cover;
+  border: 2px solid #eef2ff;
+}
+
+.sidebar-admin .sidebar-toggle-btn,
+.sidebar-admin .sidebar-expand-btn {
+  border: none;
+  background: transparent;
+  color: #475569;
+  cursor: pointer;
+  display: grid;
+  place-items: center;
+}
+
+.sidebar-admin .sidebar-nav {
+  padding: 10px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.sidebar-admin .sidebar-nav-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 10px;
+  border-radius: 12px;
+  color: #334155;
+  text-decoration: none;
+  font-weight: 900;
+  font-size: 13px;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+
+.sidebar-admin .sidebar-nav-item:hover {
+  background: #f8fafc;
+}
+
+.sidebar-admin .sidebar-nav-item.active {
+  background: rgba(2, 132, 199, 0.12);
+  color: #0f172a;
+}
+
+.sidebar-admin .sidebar-nav-icon {
+  flex: 0 0 auto;
+}
+
+.sidebar-admin.collapsed .sidebar-nav-label {
+  display: none;
+}
+
+.sidebar-admin .sidebar-logout {
+  padding: 12px;
+  margin-top: auto;
+}
+
+.sidebar-admin .sidebar-logout-btn {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  border: 1px solid #e7ebf3;
+  background: #fff;
+  border-radius: 12px;
+  padding: 10px 10px;
+  cursor: pointer;
+  font-weight: 900;
+  color: #0f172a;
+}
+
+.sidebar-admin.collapsed .sidebar-logout-btn span {
+  display: none;
+}
+

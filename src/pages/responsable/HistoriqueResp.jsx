@@ -41,7 +41,7 @@ function sumPredictions(items) {
 const HistoriqueResp = ({ userName, onLogout }) => {
   const lang = useUiLanguage();
   const toast = useToast();
-  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(() => (typeof window !== 'undefined' ? window.innerWidth <= 768 : false));
   const [searchQuery, setSearchQuery] = useState('');
   const [filterType, setFilterType] = useState('tous');
   const [filterMagasinier, setFilterMagasinier] = useState('tous');
@@ -287,9 +287,19 @@ const HistoriqueResp = ({ userName, onLogout }) => {
 
   return (
     <div className="app-layout">
+      <div
+        className={`sidebar-backdrop ${sidebarCollapsed ? 'hidden' : ''}`}
+        onClick={() => setSidebarCollapsed(true)}
+      />
       <SidebarResp collapsed={sidebarCollapsed} onToggle={() => setSidebarCollapsed(!sidebarCollapsed)} onLogout={onLogout} userName={userName} />
       <div className="main-container">
-        <HeaderPage userName={userName} title={i18n.title} searchValue={searchQuery} onSearchChange={setSearchQuery} />
+        <HeaderPage
+          userName={userName}
+          title={i18n.title}
+          searchValue={searchQuery}
+          onSearchChange={setSearchQuery}
+          onMenuClick={() => setSidebarCollapsed((prev) => !prev)}
+        />
         <main className="main-content">
           {(isLoadingAi) && <LoadingSpinner overlay text="Chargement IA..." />}
           <div className="historique-resp-page">

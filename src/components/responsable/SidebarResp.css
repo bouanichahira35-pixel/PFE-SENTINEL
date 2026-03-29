@@ -201,3 +201,24 @@
     transform: translateY(0);
   }
 }
+
+@media (max-width: 768px) {
+  .sidebar-resp {
+    position: fixed;
+    top: 0;
+    left: 0;
+    bottom: 0;
+    z-index: 900;
+    width: min(86vw, 280px);
+    max-width: 280px;
+    transform: translateX(0);
+    transition: transform 0.28s ease, width 0.28s ease;
+    box-shadow: 0 18px 48px rgba(15, 23, 42, 0.22);
+  }
+
+  .sidebar-resp.collapsed {
+    width: min(86vw, 280px);
+    max-width: 280px;
+    transform: translateX(-110%);
+  }
+}

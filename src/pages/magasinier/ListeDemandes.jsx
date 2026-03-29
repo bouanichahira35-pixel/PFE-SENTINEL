@@ -10,30 +10,35 @@ import {
   Truck,
   Filter,
   History,
+  ClipboardList,
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import SidebarMag from '../../components/magasinier/SidebarMag';
 import HeaderPage from '../../components/shared/HeaderPage';
 import LoadingSpinner from '../../components/shared/LoadingSpinner';
 import { useToast } from '../../components/shared/Toast';
-import { get, patch } from '../../services/api';
+import { get } from '../../services/api';
 import { useUiLanguage } from '../../utils/uiLanguage';
+import useIsMobile from '../../hooks/useIsMobile';
 import './ListeDemandes.css';
 
 const ListeDemandes = ({ userName, onLogout }) => {
   const lang = useUiLanguage();
   const navigate = useNavigate();
   const toast = useToast();
+  const isMobile = useIsMobile(640);
 
   const i18n = {
     fr: {
-      title: 'Demandes de Produits',
+      title: 'Suivi des demandes',
       tableTitle: 'Demandes produits',
       loading: 'Chargement des demandes...',
       pending: 'En attente',
-      accepted: 'Acceptee',
+      validated: 'Validee',
+      preparing: 'En preparation',
       served: 'Servie',
-      refused: 'Rejetee',
+      rejected: 'Rejetee',
+      cancelled: 'Annulee',
       allStatus: 'Tous statuts',
       stockLow: 'Stock insuffisant pour cette demande',
       failLoad: 'Impossible de charger les demandes',
@@ -44,24 +49,26 @@ const ListeDemandes = ({ userName, onLogout }) => {
       date: 'Date',
       status: 'Statut',
       actions: 'Actions',
+      openInbox: "Ouvrir centre d'actions",
       noResults: 'Aucune demande trouvee',
       lines: 'ligne(s)',
-      waitingCount: 'demande(s) en attente traitement magasinier',
-      waitingResponsible: 'En attente traitement magasinier',
-      accept: 'Accepter',
-      reject: 'Rejeter',
-      acceptedOk: 'Demande acceptee',
-      rejectedOk: 'Demande rejetee',
-      processFail: 'Impossible de traiter la demande',
+      waitingCount: 'demande(s) en attente de preparation',
+      waitingResponsible: 'En attente preparation magasinier',
+      prepare: 'Preparer',
+      serve: 'Servir',
+      preparedOk: 'Demande mise en preparation',
+      prepareFail: 'Impossible de preparer la demande',
     },
     en: {
       title: 'Product Requests',
       tableTitle: 'Product requests',
       loading: 'Loading requests...',
       pending: 'Pending',
-      accepted: 'Accepted',
+      validated: 'Validated',
+      preparing: 'Preparing',
       served: 'Served',
-      refused: 'Rejected',
+      rejected: 'Rejected',
+      cancelled: 'Cancelled',
       allStatus: 'All statuses',
       stockLow: 'Insufficient stock for this request',
       failLoad: 'Failed to load requests',
@@ -74,22 +81,23 @@ const ListeDemandes = ({ userName, onLogout }) => {
       actions: 'Actions',
       noResults: 'No request found',
       lines: 'line(s)',
-      waitingCount: 'pending request(s) awaiting storekeeper handling',
-      waitingResponsible: 'Waiting storekeeper handling',
-      accept: 'Accept',
-      reject: 'Reject',
-      acceptedOk: 'Request accepted',
-      rejectedOk: 'Request rejected',
-      processFail: 'Failed to process request',
+      waitingCount: 'request(s) awaiting preparation',
+      waitingResponsible: 'Waiting storekeeper preparation',
+      prepare: 'Prepare',
+      serve: 'Serve',
+      preparedOk: 'Request moved to preparing',
+      prepareFail: 'Failed to prepare request',
     },
     ar: {
       title: 'Product Requests',
       tableTitle: 'Product requests',
       loading: 'Loading requests...',
       pending: 'Pending',
-      accepted: 'Accepted',
+      validated: 'Validated',
+      preparing: 'Preparing',
       served: 'Served',
-      refused: 'Rejected',
+      rejected: 'Rejected',
+      cancelled: 'Cancelled',
       allStatus: 'All statuses',
       stockLow: 'Insufficient stock for this request',
       failLoad: 'Failed to load requests',
@@ -102,37 +110,43 @@ const ListeDemandes = ({ userName, onLogout }) => {
       actions: 'Actions',
       noResults: 'No request found',
       lines: 'line(s)',
-      waitingCount: 'pending request(s) awaiting storekeeper handling',
-      waitingResponsible: 'Waiting storekeeper handling',
-      accept: 'Accept',
-      reject: 'Reject',
-      acceptedOk: 'Request accepted',
-      rejectedOk: 'Request rejected',
-      processFail: 'Failed to process request',
+      waitingCount: 'request(s) awaiting preparation',
+      waitingResponsible: 'Waiting storekeeper preparation',
+      prepare: 'Prepare',
+      serve: 'Serve',
+      preparedOk: 'Request moved to preparing',
+      prepareFail: 'Failed to prepare request',
     },
   }[lang];
 
-  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(() => (typeof window !== 'undefined' ? window.innerWidth <= 768 : false));
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
   const [demandes, setDemandes] = useState([]);
   const [isLoading, setIsLoading] = useState(false);
-  const [processingId, setProcessingId] = useState('');
+
+  const openInbox = useCallback(() => navigate('/magasinier/inbox'), [navigate]);
 
   const getStatutInfo = useCallback((statut) => {
     switch (statut) {
       case 'pending':
         return { label: i18n.pending, className: 'pending', icon: Clock };
-      case 'accepted':
-        return { label: i18n.accepted, className: 'accepted', icon: CheckCircle };
+      case 'validated':
+        return { label: i18n.validated, className: 'accepted', icon: CheckCircle };
+      case 'preparing':
+        return { label: i18n.preparing, className: 'accepted', icon: History };
       case 'served':
         return { label: i18n.served, className: 'served', icon: Truck };
-      case 'refused':
-        return { label: i18n.refused, className: 'refused', icon: XCircle };
+      case 'received':
+        return { label: 'Cloturee', className: 'served', icon: CheckCircle };
+      case 'rejected':
+        return { label: i18n.rejected, className: 'refused', icon: XCircle };
+      case 'cancelled':
+        return { label: i18n.cancelled, className: 'refused', icon: XCircle };
       default:
         return { label: statut || 'Unknown', className: 'pending', icon: Clock };
     }
-  }, [i18n.pending, i18n.accepted, i18n.served, i18n.refused]);
+  }, [i18n.pending, i18n.validated, i18n.preparing, i18n.served, i18n.rejected, i18n.cancelled]);
 
   const loadDemandes = useCallback(async () => {
     setIsLoading(true);
@@ -167,49 +181,6 @@ const ListeDemandes = ({ userName, onLogout }) => {
     loadDemandes();
   }, [loadDemandes]);
 
-  const goToSortieStock = useCallback((demande) => {
-    navigate('/magasinier/sortie-stock', {
-      state: {
-        product: {
-          id: demande.productId,
-          code: demande.codeProduit,
-          nom: demande.produit,
-          quantite: demande.stockDisponible,
-          categorie: '-',
-          unite: 'Unite',
-        },
-        demandeInfo: {
-          id: demande.id,
-          reference: demande.reference,
-          quantite: demande.quantite,
-          demandeur: demande.demandeur,
-          demandeurId: demande.demandeurId,
-          direction: demande.directionLaboratoire,
-          beneficiaire: demande.beneficiaire,
-          statut: demande.statut,
-        },
-      },
-    });
-  }, [navigate]);
-
-  const handleProcess = useCallback(async (demande, status) => {
-    if (!demande?.id || !['accepted', 'refused'].includes(status)) return;
-    if (status === 'accepted' && demande.stockDisponible < demande.quantite) {
-      toast.error(i18n.stockLow);
-      return;
-    }
-    setProcessingId(demande.id);
-    try {
-      await patch(`/requests/${demande.id}/process`, { status });
-      toast.success(status === 'accepted' ? i18n.acceptedOk : i18n.rejectedOk);
-      await loadDemandes();
-    } catch (err) {
-      toast.error(err.message || i18n.processFail);
-    } finally {
-      setProcessingId('');
-    }
-  }, [toast, i18n.stockLow, i18n.acceptedOk, i18n.rejectedOk, i18n.processFail, loadDemandes]);
-
   const filteredDemandes = useMemo(() => {
     const q = searchQuery.toLowerCase().trim();
     return demandes.filter((demande) => {
@@ -224,12 +195,16 @@ const ListeDemandes = ({ userName, onLogout }) => {
   }, [demandes, searchQuery, statusFilter]);
 
   const pendingCount = useMemo(
-    () => filteredDemandes.filter((d) => d.statut === 'pending').length,
+    () => filteredDemandes.filter((d) => d.statut === 'validated').length,
     [filteredDemandes]
   );
 
   return (
     <div className="app-layout">
+      <div
+        className={`sidebar-backdrop ${sidebarCollapsed ? 'hidden' : ''}`}
+        onClick={() => setSidebarCollapsed(true)}
+      />
       <SidebarMag
         collapsed={sidebarCollapsed}
         onToggle={() => setSidebarCollapsed(!sidebarCollapsed)}
@@ -244,6 +219,7 @@ const ListeDemandes = ({ userName, onLogout }) => {
           searchValue={searchQuery}
           onSearchChange={setSearchQuery}
           onRefresh={loadDemandes}
+          onMenuClick={() => setSidebarCollapsed((prev) => !prev)}
         />
 
         <main className="main-content">
@@ -256,9 +232,11 @@ const ListeDemandes = ({ userName, onLogout }) => {
                 <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)}>
                   <option value="all">{i18n.allStatus}</option>
                   <option value="pending">{i18n.pending}</option>
-                  <option value="accepted">{i18n.accepted}</option>
+                  <option value="validated">{i18n.validated}</option>
+                  <option value="preparing">{i18n.preparing}</option>
                   <option value="served">{i18n.served}</option>
-                  <option value="refused">{i18n.refused}</option>
+                  <option value="rejected">{i18n.rejected}</option>
+                  <option value="cancelled">{i18n.cancelled}</option>
                 </select>
               </div>
               <div className="dm-waiting-chip">{pendingCount} {i18n.waitingCount}</div>
@@ -270,112 +248,158 @@ const ListeDemandes = ({ userName, onLogout }) => {
                 <span>{filteredDemandes.length} {i18n.lines}</span>
               </div>
 
-              <div className="dm-table-wrap">
-                <table className="dm-table">
-                  <thead>
-                    <tr>
-                      <th>{i18n.ref}</th>
-                      <th>{i18n.product}</th>
-                      <th>{i18n.qty}</th>
-                      <th>{i18n.requester}</th>
-                      <th>{i18n.date}</th>
-                      <th>{i18n.status}</th>
-                      <th>{i18n.actions}</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {filteredDemandes.map((demande) => {
-                      const statutInfo = getStatutInfo(demande.statut);
-                      const StatutIcon = statutInfo.icon;
-                      const processing = processingId === demande.id;
-                      const canServe = demande.statut === 'accepted' && demande.stockDisponible >= demande.quantite;
-                      const canAccept = demande.statut === 'pending' && demande.stockDisponible >= demande.quantite;
-                      const insufficientStock = ['pending', 'accepted'].includes(demande.statut)
-                        && demande.stockDisponible < demande.quantite;
+              {isMobile ? (
+                <>
+                  {!filteredDemandes.length ? (
+                    <div className="dm-empty" style={{ padding: '1rem' }}>{i18n.noResults}</div>
+                  ) : (
+                    <div className="mobile-card-list">
+                      {filteredDemandes.map((demande) => {
+                        const statutInfo = getStatutInfo(demande.statut);
+                        const StatutIcon = statutInfo.icon;
+                        const insufficientStock = ['validated', 'preparing'].includes(demande.statut)
+                          && demande.stockDisponible < demande.quantite;
 
-                      return (
-                        <tr key={demande.id}>
-                          <td className="dm-ref">{demande.reference}</td>
-                          <td>
-                            <div className="dm-product-cell">
-                              <Package size={14} />
+                        return (
+                          <div key={demande.id} className="mobile-card">
+                            <div className="mobile-card-header">
                               <div>
-                                <strong>{demande.produit}</strong>
-                                <small>{demande.codeProduit}</small>
+                                <h3 className="mobile-card-title">{demande.produit}</h3>
+                                <div className="mobile-card-subtitle">{demande.reference} • {demande.codeProduit}</div>
+                              </div>
+                              <span className={`dm-status-pill ${statutInfo.className}`}>
+                                <StatutIcon size={13} />
+                                {statutInfo.label}
+                              </span>
+                            </div>
+
+                            <div className="mobile-card-grid">
+                              <div className="mobile-kv">
+                                <div className="mobile-kv-label">{i18n.qty}</div>
+                                <div className="mobile-kv-value">
+                                  <span className="dm-qty">
+                                    {demande.quantite}
+                                    {insufficientStock && (
+                                      <span className="dm-stock-warning" title={i18n.stockLow} style={{ marginLeft: 6 }}>
+                                        <AlertTriangle size={14} />
+                                      </span>
+                                    )}
+                                  </span>
+                                </div>
+                              </div>
+                              <div className="mobile-kv">
+                                <div className="mobile-kv-label">{i18n.requester}</div>
+                                <div className="mobile-kv-value">{demande.demandeur}</div>
+                              </div>
+                              <div className="mobile-kv">
+                                <div className="mobile-kv-label">{i18n.date}</div>
+                                <div className="mobile-kv-value">{new Date(demande.dateRaw || 0).toLocaleString('fr-FR')}</div>
+                              </div>
+                              <div className="mobile-kv">
+                                <div className="mobile-kv-label">Stock</div>
+                                <div className="mobile-kv-value">{demande.stockDisponible}</div>
                               </div>
                             </div>
-                          </td>
-                          <td>
-                            <span className="dm-qty">
-                              {demande.quantite}
-                              {insufficientStock && (
-                                <span className="dm-stock-warning" title={i18n.stockLow}>
-                                  <AlertTriangle size={14} />
-                                </span>
-                              )}
-                            </span>
-                          </td>
-                          <td>
-                            <span className="dm-meta-inline"><User size={13} /> {demande.demandeur}</span>
-                          </td>
-                          <td>
-                            <span className="dm-meta-inline"><Calendar size={13} /> {new Date(demande.dateRaw || 0).toLocaleString('fr-FR')}</span>
-                          </td>
-                          <td>
-                            <span className={`dm-status-pill ${statutInfo.className}`}>
-                              <StatutIcon size={13} />
-                              {statutInfo.label}
-                            </span>
-                          </td>
-                          <td>
-                            {demande.statut === 'pending' ? (
-                              <div className="dm-actions">
+
+                            {['validated', 'preparing'].includes(demande.statut) ? (
+                              <div className="mobile-card-actions">
                                 <button
-                                  className={`dm-action-btn accept ${(!canAccept || processing) ? 'disabled' : ''}`}
-                                  onClick={() => handleProcess(demande, 'accepted')}
-                                  disabled={!canAccept || processing}
-                                  title={!canAccept ? i18n.stockLow : i18n.accept}
-                                  aria-label={`${i18n.accept} ${demande.reference}`}
+                                  type="button"
+                                  className="mobile-action-btn info"
+                                  onClick={openInbox}
+                                  title={i18n.openInbox}
                                 >
-                                  <CheckCircle size={15} />
-                                </button>
-                                <button
-                                  className={`dm-action-btn reject ${processing ? 'disabled' : ''}`}
-                                  onClick={() => handleProcess(demande, 'refused')}
-                                  disabled={processing}
-                                  title={i18n.reject}
-                                  aria-label={`${i18n.reject} ${demande.reference}`}
-                                >
-                                  <XCircle size={15} />
+                                  <ClipboardList size={16} /> {i18n.openInbox}
                                 </button>
                               </div>
-                            ) : demande.statut === 'accepted' ? (
-                              <div className="dm-actions">
-                                <button
-                                  className={`dm-action-btn serve ${(!canServe || processing) ? 'disabled' : ''}`}
-                                  onClick={() => goToSortieStock(demande)}
-                                  disabled={!canServe || processing}
-                                  title={insufficientStock ? i18n.stockLow : i18n.served}
-                                  aria-label={`Servir ${demande.reference}`}
-                                >
-                                  <Truck size={15} />
-                                </button>
-                              </div>
-                            ) : (
-                              <span className="dm-no-action">-</span>
-                            )}
-                          </td>
-                        </tr>
-                      );
-                    })}
-                    {!filteredDemandes.length && (
+                            ) : null}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </>
+              ) : (
+                <div className="dm-table-wrap">
+                  <table className="dm-table">
+                    <thead>
                       <tr>
-                        <td colSpan={7} className="dm-empty">{i18n.noResults}</td>
+                        <th>{i18n.ref}</th>
+                        <th>{i18n.product}</th>
+                        <th>{i18n.qty}</th>
+                        <th>{i18n.requester}</th>
+                        <th>{i18n.date}</th>
+                        <th>{i18n.status}</th>
+                        <th>{i18n.actions}</th>
                       </tr>
-                    )}
-                  </tbody>
-                </table>
-              </div>
+                    </thead>
+                    <tbody>
+                      {filteredDemandes.map((demande) => {
+                        const statutInfo = getStatutInfo(demande.statut);
+                        const StatutIcon = statutInfo.icon;
+                        const insufficientStock = ['validated', 'preparing'].includes(demande.statut)
+                          && demande.stockDisponible < demande.quantite;
+
+                        return (
+                          <tr key={demande.id}>
+                            <td className="dm-ref">{demande.reference}</td>
+                            <td>
+                              <div className="dm-product-cell">
+                                <Package size={14} />
+                                <div>
+                                  <strong>{demande.produit}</strong>
+                                  <small>{demande.codeProduit}</small>
+                                </div>
+                              </div>
+                            </td>
+                            <td>
+                              <span className="dm-qty">
+                                {demande.quantite}
+                                {insufficientStock && (
+                                  <span className="dm-stock-warning" title={i18n.stockLow}>
+                                    <AlertTriangle size={14} />
+                                  </span>
+                                )}
+                              </span>
+                            </td>
+                            <td>
+                              <span className="dm-meta-inline"><User size={13} /> {demande.demandeur}</span>
+                            </td>
+                            <td>
+                              <span className="dm-meta-inline"><Calendar size={13} /> {new Date(demande.dateRaw || 0).toLocaleString('fr-FR')}</span>
+                            </td>
+                            <td>
+                              <span className={`dm-status-pill ${statutInfo.className}`}>
+                                <StatutIcon size={13} />
+                                {statutInfo.label}
+                              </span>
+                            </td>
+                            <td>
+                              {['validated', 'preparing'].includes(demande.statut) ? (
+                                <button
+                                  type="button"
+                                  className="dm-open-inbox"
+                                  onClick={openInbox}
+                                  title={i18n.openInbox}
+                                >
+                                  <ClipboardList size={15} /> {i18n.openInbox}
+                                </button>
+                              ) : (
+                                <span className="dm-no-action">-</span>
+                              )}
+                            </td>
+                          </tr>
+                        );
+                      })}
+                      {!filteredDemandes.length && (
+                        <tr>
+                          <td colSpan={7} className="dm-empty">{i18n.noResults}</td>
+                        </tr>
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              )}
             </div>
           </div>
         </main>

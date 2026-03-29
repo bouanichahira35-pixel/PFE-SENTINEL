@@ -23,6 +23,13 @@ function getTestEnv(name, fallbackForLocal) {
 
   const users = [
     {
+      username: 'Admin Informatique',
+      email: getTestEnv('TEST_ADMIN_EMAIL', 'admin@example.local'),
+      telephone: '+21698000000',
+      role: 'admin',
+      password: getTestEnv('TEST_ADMIN_PASSWORD', 'ChangeMe_Admin_123'),
+    },
+    {
       username: 'Sarra Ben Youssef',
       email: getTestEnv('TEST_DEMANDEUR_EMAIL', 'demandeur@example.local'),
       telephone: '+21698123456',

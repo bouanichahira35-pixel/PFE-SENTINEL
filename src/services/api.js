@@ -1,4 +1,20 @@
-export const API_BASE = process.env.REACT_APP_API_URL || "http://localhost:5000/api";
+function computeDefaultApiBase() {
+  const fromEnv = String(process.env.REACT_APP_API_URL || "").trim();
+  if (fromEnv) return fromEnv;
+
+  // Default: backend runs on the same machine as the frontend, but on port 5000.
+  // This is required for testing on a phone over LAN (where `localhost` would point to the phone).
+  if (typeof window !== "undefined" && window.location) {
+    const protocol = window.location.protocol || "http:";
+    const host = window.location.hostname || "localhost";
+    const port = String(process.env.REACT_APP_API_PORT || "5000").trim() || "5000";
+    return `${protocol}//${host}:${port}/api`;
+  }
+
+  return "http://localhost:5000/api";
+}
+
+export const API_BASE = computeDefaultApiBase();
 
 const API_CACHE_TTL_MS = 45 * 1000;
 const API_CACHE_MAX_ITEMS = 60;
@@ -120,8 +136,28 @@ function buildApiError(data) {
     ? data.details.join(", ")
     : (typeof data.details === "string" ? data.details : "");
   const base = data.error || "Erreur API";
-  const suffix = [reason, details].filter(Boolean).join(" | ");
+  const raw = typeof data.raw === "string" ? data.raw : "";
+  const rawHint = raw.trim().startsWith("<!DOCTYPE") || raw.trim().startsWith("<html")
+    ? "Reponse HTML recue. Verifiez API_BASE / proxy (backend)"
+    : "";
+  const suffix = [reason, details, rawHint].filter(Boolean).join(" | ");
   return new Error(suffix ? `${base}: ${suffix}` : base);
+}
+
+async function readJsonOrText(res) {
+  const contentType = String(res?.headers?.get?.("content-type") || "").toLowerCase();
+  const text = await res.text().catch(() => "");
+  const looksJson = contentType.includes("application/json") || contentType.includes("+json");
+  if (looksJson) {
+    if (!text) return {};
+    try {
+      return JSON.parse(text);
+    } catch {
+      return { error: "invalid_json", raw: text.slice(0, 400), content_type: contentType };
+    }
+  }
+  if (!text) return {};
+  return { error: "non_json_response", raw: text.slice(0, 400), content_type: contentType };
 }
 
 function recordCacheHit() {
@@ -172,7 +208,7 @@ async function request(path, method, payload, retried = false) {
       credentials: "include",
       body: payload ? JSON.stringify(payload) : undefined,
     });
-    data = await res.json().catch(() => ({}));
+    data = await readJsonOrText(res);
   } catch (err) {
     const latencyMs = Math.max(0, Math.round(nowMs() - startedAt));
     recordNetworkResult({ latencyMs, failed: true });
@@ -249,8 +285,12 @@ export function put(path, payload) {
   return request(path, "PUT", payload);
 }
 
-export function patch(path, payload) {
-  return request(path, "PATCH", payload);
+export function patch(path, payload) { 
+  return request(path, "PATCH", payload); 
+} 
+
+export function del(path) {
+  return request(path, "DELETE");
 }
 
 async function uploadFileInternal(path, file, fieldName, retried = false) {
@@ -287,7 +327,7 @@ async function uploadFileInternal(path, file, fieldName, retried = false) {
   }
 
   const latencyMs = Math.max(0, Math.round(nowMs() - startedAt));
-  const data = await res.json().catch(() => ({}));
+  const data = await readJsonOrText(res);
 
   if ((res.status === 401 || res.status === 403) && token) {
     const reason = typeof data?.error === "string" ? data.error : "";

@@ -124,7 +124,8 @@ async function run() {
       note: 'Auto critical flow',
     })).data;
 
-    await magApi.patch(`/requests/${createdRequest._id}/process`, { status: 'accepted' });
+    await respApi.patch(`/requests/${createdRequest._id}/validate`, { status: 'validated' });
+    await magApi.patch(`/requests/${createdRequest._id}/prepare`, {});
 
     const createdExit = (await magApi.post('/stock/exits', {
       product: createdProduct._id,

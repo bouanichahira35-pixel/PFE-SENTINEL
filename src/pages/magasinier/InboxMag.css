@@ -1,0 +1,271 @@
+.inboxmag-root {
+  display: flex;
+  min-height: 100vh;
+  background: #f1f5f9;
+}
+
+.inboxmag-main {
+  flex: 1;
+  margin-left: 250px;
+  transition: margin-left 0.25s ease;
+}
+
+.inboxmag-main.collapsed {
+  margin-left: 80px;
+}
+
+.inboxmag-page {
+  padding: 1.2rem;
+  max-width: 1380px;
+  margin: 0 auto;
+}
+
+.inboxmag-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.8rem;
+  flex-wrap: wrap;
+  margin-bottom: 0.8rem;
+}
+
+.inboxmag-kpis {
+  display: flex;
+  gap: 0.6rem;
+  flex-wrap: wrap;
+}
+
+.inboxmag-kpi {
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 0.9rem;
+  padding: 0.55rem 0.7rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+  min-width: 190px;
+}
+
+.inboxmag-kpi span {
+  font-size: 0.72rem;
+  font-weight: 900;
+  color: #64748b;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.inboxmag-kpi strong {
+  font-size: 1.15rem;
+  font-weight: 900;
+  color: #0f172a;
+}
+
+.inboxmag-refresh {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  border: 1px solid #e2e8f0;
+  background: #ffffff;
+  border-radius: 0.9rem;
+  padding: 0.6rem 0.75rem;
+  cursor: pointer;
+  font-weight: 900;
+  color: #0f172a;
+}
+
+.inboxmag-refresh:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.inboxmag-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.9rem;
+}
+
+.inboxmag-card {
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 1.1rem;
+  padding: 0.9rem;
+  box-shadow: 0 10px 24px rgba(15, 23, 42, 0.06);
+  min-height: 240px;
+}
+
+.inboxmag-card-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.6rem;
+  flex-wrap: wrap;
+  margin-bottom: 0.75rem;
+}
+
+.inboxmag-card-head h3 {
+  margin: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  font-size: 1rem;
+  font-weight: 900;
+  color: #0f172a;
+}
+
+.inboxmag-card-head small {
+  font-size: 0.78rem;
+  color: #64748b;
+  font-weight: 800;
+}
+
+.inboxmag-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.inboxmag-item {
+  border: 1px solid #e2e8f0;
+  border-radius: 1rem;
+  background: linear-gradient(180deg, #ffffff 0%, #f8fbff 100%);
+  padding: 0.75rem;
+}
+
+.inboxmag-item-top {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.7rem;
+  flex-wrap: wrap;
+}
+
+.inboxmag-title {
+  display: flex;
+  gap: 0.55rem;
+  align-items: baseline;
+  flex-wrap: wrap;
+}
+
+.inboxmag-title span {
+  font-size: 0.78rem;
+  color: #64748b;
+  font-weight: 900;
+}
+
+.inboxmag-meta {
+  font-size: 0.78rem;
+  color: #334155;
+  font-weight: 900;
+}
+
+.inboxmag-sub {
+  margin-top: 0.55rem;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.6rem;
+  font-size: 0.8rem;
+  font-weight: 900;
+  color: #334155;
+}
+
+.inboxmag-note {
+  margin-top: 0.6rem;
+  color: #334155;
+  font-size: 0.85rem;
+  font-weight: 700;
+}
+
+.inboxmag-actions {
+  margin-top: 0.75rem;
+  display: flex;
+  gap: 0.55rem;
+  flex-wrap: wrap;
+}
+
+.inboxmag-btn {
+  border: 1px solid #e2e8f0;
+  border-radius: 0.85rem;
+  padding: 0.55rem 0.7rem;
+  cursor: pointer;
+  font-weight: 900;
+  background: #ffffff;
+  color: #0f172a;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+}
+
+.inboxmag-btn.primary {
+  border: 0;
+  color: #ffffff;
+  background: linear-gradient(135deg, #0f766e, #0284c7);
+}
+
+.inboxmag-btn.ok {
+  border: 0;
+  color: #ffffff;
+  background: linear-gradient(135deg, #16a34a, #0f766e);
+}
+
+.inboxmag-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.inboxmag-pill {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.16rem 0.52rem;
+  border-radius: 999px;
+  font-size: 0.7rem;
+  font-weight: 900;
+}
+
+.inboxmag-pill.critique {
+  background: #fee2e2;
+  color: #b91c1c;
+}
+
+.inboxmag-pill.moyen {
+  background: #ccfbf1;
+  color: #115e59;
+}
+
+.inboxmag-pill.faible {
+  background: #e0f2fe;
+  color: #075985;
+}
+
+.inboxmag-warn {
+  display: inline-flex;
+  margin-left: 0.35rem;
+  color: #b45309;
+}
+
+.inboxmag-empty {
+  border: 1px dashed #cbd5e1;
+  border-radius: 0.9rem;
+  background: #f8fafc;
+  color: #64748b;
+  padding: 1rem;
+  text-align: center;
+  font-weight: 800;
+}
+
+.inboxmag-muted {
+  color: #64748b;
+  font-weight: 900;
+}
+
+@media (max-width: 1100px) {
+  .inboxmag-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 860px) {
+  .inboxmag-sub {
+    grid-template-columns: 1fr;
+  }
+}
+

@@ -7,6 +7,7 @@ import LoadingSpinner from '../../components/shared/LoadingSpinner';
 import { useToast } from '../../components/shared/Toast';
 import { get } from '../../services/api';
 import { useUiLanguage } from '../../utils/uiLanguage';
+import useIsMobile from '../../hooks/useIsMobile';
 import './ProduitsMag.css';
 const ITEMS_PER_PAGE = 8;
 
@@ -14,7 +15,8 @@ const ProduitsMag = ({ userName, onLogout }) => {
   const lang = useUiLanguage();
   const navigate = useNavigate();
   const toast = useToast();
-  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const isMobile = useIsMobile(640);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(() => (typeof window !== 'undefined' ? window.innerWidth <= 768 : false));
   const [searchQuery, setSearchQuery] = useState('');
   const [categoryFilter, setCategoryFilter] = useState('all');
   const [statusFilter, setStatusFilter] = useState('all');
@@ -221,6 +223,10 @@ const ProduitsMag = ({ userName, onLogout }) => {
 
   return (
     <div className="app-layout">
+      <div
+        className={`sidebar-backdrop ${sidebarCollapsed ? 'hidden' : ''}`}
+        onClick={() => setSidebarCollapsed(true)}
+      />
       <SidebarMag 
         collapsed={sidebarCollapsed} 
         onToggle={() => setSidebarCollapsed(!sidebarCollapsed)}
@@ -235,6 +241,7 @@ const ProduitsMag = ({ userName, onLogout }) => {
           searchValue={searchQuery}
           onSearchChange={setSearchQuery}
           onRefresh={handleRefresh}
+          onMenuClick={() => setSidebarCollapsed((prev) => !prev)}
         />
         
         <main className="main-content">
@@ -297,89 +304,164 @@ const ProduitsMag = ({ userName, onLogout }) => {
               </div>
             </div>
 
-            <div className="produits-table-container">
-              <table className="produits-table" role="table">
-                <thead>
-                  <tr>
-                    <th scope="col">{i18n.code}</th>
-                    <th scope="col">{i18n.product}</th>
-                    <th scope="col">{i18n.category}</th>
-                    <th scope="col">{i18n.qty}</th>
-                    <th scope="col">{i18n.min}</th>
-                    <th scope="col">{i18n.validation}</th>
-                    <th scope="col">{i18n.state}</th>
-                    <th scope="col">{i18n.actions}</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {paginatedProducts.map((product, index) => {
-                    const status = getProductStatus(product.quantite, product.seuilMin);
-                    return (
-                      <tr key={product.id} style={{ animationDelay: `${index * 30}ms` }}>
-                        <td className="code-cell">{product.code}</td>
-                        <td className="product-cell">
-                          <Package size={16} className="product-icon" />
-                          {product.nom}
-                        </td>
-                        <td>
-                          <span className="category-badge">{product.categorie}</span>
-                        </td>
-                        <td className="quantity-cell">{product.quantite}</td>
-                        <td className="seuil-cell">{product.seuilMin}</td>
-                        <td>
-                          {(() => {
-                            const validation = getValidationLabel(product.validationStatus);
-                        return <span className={`validation-badge ${validation.className}`}>{validation.label === 'Valide' ? i18n.validated : validation.label === 'Rejete' ? i18n.rejected : i18n.pending}</span>;
-                      })()}
-                        </td>
-                        <td>
-                          <span className={`status-badge ${status}`}>
-                            {status === 'disponible' ? i18n.available : 
-                             status === 'sous-seuil' ? i18n.low : i18n.out}
-                          </span>
-                        </td>
-                        <td>
-                          <div className="action-buttons">
-                            <button 
-                              className="action-btn view"
-                              onClick={() => handleVoirDetails(product)}
-                              title={i18n.details}
-                              aria-label={`${i18n.details} ${product.nom}`}
-                            >
-                              <Eye size={16} />
+            {isMobile ? (
+              <>
+                {filteredProducts.length === 0 ? (
+                  <div className="empty-state">
+                    <Package size={48} />
+                    <p>{i18n.noProducts}</p>
+                  </div>
+                ) : (
+                  <div className="mobile-card-list">
+                    {paginatedProducts.map((product) => {
+                      const status = getProductStatus(product.quantite, product.seuilMin);
+                      const validation = getValidationLabel(product.validationStatus);
+                      const statusLabel = status === 'disponible' ? i18n.available : status === 'sous-seuil' ? i18n.low : i18n.out;
+                      const validationLabel = validation.label === 'Valide' ? i18n.validated : validation.label === 'Rejete' ? i18n.rejected : i18n.pending;
+
+                      return (
+                        <div key={product.id} className="mobile-card">
+                          <div className="mobile-card-header">
+                            <div>
+                              <h3 className="mobile-card-title">{product.nom}</h3>
+                              <div className="mobile-card-subtitle">{product.code}</div>
+                            </div>
+                            <span className={`status-badge ${status}`}>{statusLabel}</span>
+                          </div>
+
+                          <div className="mobile-card-grid">
+                            <div className="mobile-kv">
+                              <div className="mobile-kv-label">{i18n.category}</div>
+                              <div className="mobile-kv-value">{product.categorie || '-'}</div>
+                            </div>
+                            <div className="mobile-kv">
+                              <div className="mobile-kv-label">{i18n.qty}</div>
+                              <div className="mobile-kv-value">{product.quantite}</div>
+                            </div>
+                            <div className="mobile-kv">
+                              <div className="mobile-kv-label">{i18n.min}</div>
+                              <div className="mobile-kv-value">{product.seuilMin}</div>
+                            </div>
+                            <div className="mobile-kv">
+                              <div className="mobile-kv-label">{i18n.validation}</div>
+                              <div className="mobile-kv-value">
+                                <span className={`validation-badge ${validation.className}`}>{validationLabel}</span>
+                              </div>
+                            </div>
+                          </div>
+
+                          <div className="mobile-card-actions three">
+                            <button type="button" className="mobile-action-btn info" onClick={() => handleVoirDetails(product)}>
+                              <Eye size={16} /> {i18n.details}
                             </button>
-                            <button 
-                              className="action-btn entry"
-                              onClick={() => handleEntreeStock(product)}
-                              title={i18n.entry}
-                              aria-label={`${i18n.entry} ${product.nom}`}
-                            >
-                              <ArrowDownToLine size={16} />
+                            <button type="button" className="mobile-action-btn success" onClick={() => handleEntreeStock(product)}>
+                              <ArrowDownToLine size={16} /> {i18n.entry}
                             </button>
-                            <button 
-                              className="action-btn exit"
+                            <button
+                              type="button"
+                              className="mobile-action-btn danger"
                               onClick={() => handleSortieStock(product)}
                               disabled={product.quantite === 0}
                               title={product.quantite === 0 ? i18n.outStock : i18n.exit}
-                              aria-label={`${i18n.exit} ${product.nom}`}
                             >
-                              <ArrowUpFromLine size={16} />
+                              <ArrowUpFromLine size={16} /> {i18n.exit}
                             </button>
                           </div>
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </>
+            ) : (
+              <div className="produits-table-container">
+                <table className="produits-table" role="table">
+                  <thead>
+                    <tr>
+                      <th scope="col">{i18n.code}</th>
+                      <th scope="col">{i18n.product}</th>
+                      <th scope="col">{i18n.category}</th>
+                      <th scope="col">{i18n.qty}</th>
+                      <th scope="col">{i18n.min}</th>
+                      <th scope="col">{i18n.validation}</th>
+                      <th scope="col">{i18n.state}</th>
+                      <th scope="col">{i18n.actions}</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {paginatedProducts.map((product, index) => {
+                      const status = getProductStatus(product.quantite, product.seuilMin);
+                      return (
+                        <tr key={product.id} style={{ animationDelay: `${index * 30}ms` }}>
+                          <td className="code-cell">{product.code}</td>
+                          <td className="product-cell">
+                            <Package size={16} className="product-icon" />
+                            {product.nom}
+                          </td>
+                          <td>
+                            <span className="category-badge">{product.categorie}</span>
+                          </td>
+                          <td className="quantity-cell">{product.quantite}</td>
+                          <td className="seuil-cell">{product.seuilMin}</td>
+                          <td>
+                            {(() => {
+                              const validation = getValidationLabel(product.validationStatus);
+                              return (
+                                <span className={`validation-badge ${validation.className}`}>
+                                  {validation.label === 'Valide' ? i18n.validated : validation.label === 'Rejete' ? i18n.rejected : i18n.pending}
+                                </span>
+                              );
+                            })()}
+                          </td>
+                          <td>
+                            <span className={`status-badge ${status}`}>
+                              {status === 'disponible' ? i18n.available :
+                               status === 'sous-seuil' ? i18n.low : i18n.out}
+                            </span>
+                          </td>
+                          <td>
+                            <div className="action-buttons">
+                              <button
+                                className="action-btn view"
+                                onClick={() => handleVoirDetails(product)}
+                                title={i18n.details}
+                                aria-label={`${i18n.details} ${product.nom}`}
+                              >
+                                <Eye size={16} />
+                              </button>
+                              <button
+                                className="action-btn entry"
+                                onClick={() => handleEntreeStock(product)}
+                                title={i18n.entry}
+                                aria-label={`${i18n.entry} ${product.nom}`}
+                              >
+                                <ArrowDownToLine size={16} />
+                              </button>
+                              <button
+                                className="action-btn exit"
+                                onClick={() => handleSortieStock(product)}
+                                disabled={product.quantite === 0}
+                                title={product.quantite === 0 ? i18n.outStock : i18n.exit}
+                                aria-label={`${i18n.exit} ${product.nom}`}
+                              >
+                                <ArrowUpFromLine size={16} />
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
 
-              {filteredProducts.length === 0 && (
-                <div className="empty-state">
-                  <Package size={48} />
-                  <p>{i18n.noProducts}</p>
-                </div>
-              )}
-            </div>
+                {filteredProducts.length === 0 && (
+                  <div className="empty-state">
+                    <Package size={48} />
+                    <p>{i18n.noProducts}</p>
+                  </div>
+                )}
+              </div>
+            )}
 
             {totalPages > 1 && (
               <div className="pagination">

@@ -1,0 +1,23 @@
+category_name;category_description;category_audiences;product_name;product_description;family;unite;seuil_minimum;emplacement
+Bureautique;Consommables bureautiques (papier, classement, impression).;bureautique;Papier A4 80g (ramette 500);Ramette papier bureautique A4 80g.;economat;Ramette;20;Dépôt - Bureautique
+Bureautique;Consommables bureautiques (papier, classement, impression).;bureautique;Toner imprimante (noir);Consommable impression laser noir.;economat;Unite;3;Dépôt - Bureautique
+Bureautique;Consommables bureautiques (papier, classement, impression).;bureautique;Stylos bille bleus (lot);Lot stylos bille usage bureau.;economat;Boite;10;Dépôt - Bureautique
+Menage;Produits d'entretien et consommables de nettoyage.;menage;Détergent multi-surfaces;Produit entretien multi-usages.;produit_chimique;Litre;15;Dépôt - Entretien
+Menage;Produits d'entretien et consommables de nettoyage.;menage;Gants ménage;Gants de protection pour entretien.;economat;Boite;10;Dépôt - Entretien
+HSE;Équipements de protection individuelle et sécurité.; ;Casque de sécurité;Casque de protection chantier.;economat;Unite;10;Dépôt - HSE
+HSE;Équipements de protection individuelle et sécurité.; ;Lunettes de protection;Lunettes anti-projection.;economat;Unite;15;Dépôt - HSE
+HSE;Équipements de protection individuelle et sécurité.; ;Gants anti-coupure;Gants protection manutention.;economat;Paire;20;Dépôt - HSE
+Maintenance;Pièces et consommables de maintenance mécanique.;petrole;Roulement standard;Pièce de rechange mécanique (roulement).;economat;Unite;5;Atelier - Maintenance
+Maintenance;Pièces et consommables de maintenance mécanique.;petrole;Courroie trapézoïdale;Courroie transmission (diverses tailles).;economat;Unite;6;Atelier - Maintenance
+Maintenance;Pièces et consommables de maintenance mécanique.;petrole;Graisse industrielle;Lubrifiant maintenance équipements.;produit_chimique;Kg;8;Atelier - Maintenance
+Instrumentation;Capteurs, transmetteurs et accessoires d’instrumentation.;petrole;Capteur pression;Capteur pression process (spare).;economat;Unite;2;Magasin - Instrumentation
+Instrumentation;Capteurs, transmetteurs et accessoires d’instrumentation.;petrole;Sonde température;Sonde température industrielle.;economat;Unite;2;Magasin - Instrumentation
+Électricité;Appareillage électrique, câbles et protections.;petrole;Disjoncteur 16A;Protection électrique tableau.;economat;Unite;5;Magasin - Électricité
+Électricité;Appareillage électrique, câbles et protections.;petrole;Câble électrique (bobine);Câble puissance / commande selon section.;economat;Metre;100;Magasin - Électricité
+Laboratoire;Consommables et réactifs de laboratoire.; ;Solvant (isopropanol);Solvant nettoyage / préparation labo.;produit_chimique;Litre;10;Labo - Chimie
+Laboratoire;Consommables et réactifs de laboratoire.; ;Flacons échantillons;Flacons pour prélèvements et analyses.;consommable_laboratoire;Unite;50;Labo - Stock
+Gaz Techniques;Gaz industriels et accessoires.;petrole;Azote (bouteille);Gaz technique (bouteille).;gaz;Unite;2;Zone - Gaz
+Gaz Techniques;Gaz industriels et accessoires.;petrole;Oxygène (bouteille);Gaz technique (bouteille).;gaz;Unite;2;Zone - Gaz
+Site Pétrole;Consommables courants pour exploitation site.;petrole;Filtre huile (équipement);Filtre huile pour équipements site.;economat;Unite;6;Site - Dépôt
+Site Pétrole;Consommables courants pour exploitation site.;petrole;Filtre carburant;Filtre carburant pour groupes/engins.;economat;Unite;6;Site - Dépôt
+Site Pétrole;Consommables courants pour exploitation site.;petrole;Absorbants hydrocarbures;Kit absorbants anti-déversement.;economat;Boite;5;Site - HSE

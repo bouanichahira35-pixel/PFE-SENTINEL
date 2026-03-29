@@ -1,0 +1,251 @@
+category_name;category_description;category_audiences;product_name;product_description;family;unite;seuil_minimum;emplacement
+Bureautique;Consommables bureautiques (papier, classement, impression).;bureautique;Papier A4 80g (ramette 500);;economat;Ramette;20;Dépôt - Bureautique
+Bureautique;Consommables bureautiques (papier, classement, impression).;bureautique;Papier A3 80g (ramette 500);;economat;Ramette;10;Dépôt - Bureautique
+Bureautique;Consommables bureautiques (papier, classement, impression).;bureautique;Toner imprimante (noir);;economat;Unite;3;Dépôt - Bureautique
+Bureautique;Consommables bureautiques (papier, classement, impression).;bureautique;Toner imprimante (cyan);;economat;Unite;2;Dépôt - Bureautique
+Bureautique;Consommables bureautiques (papier, classement, impression).;bureautique;Toner imprimante (magenta);;economat;Unite;2;Dépôt - Bureautique
+Bureautique;Consommables bureautiques (papier, classement, impression).;bureautique;Toner imprimante (jaune);;economat;Unite;2;Dépôt - Bureautique
+Bureautique;Consommables bureautiques (papier, classement, impression).;bureautique;Stylos bille bleus (boîte);;economat;Boite;10;Dépôt - Bureautique
+Bureautique;Consommables bureautiques (papier, classement, impression).;bureautique;Marqueurs permanents (boîte);;economat;Boite;6;Dépôt - Bureautique
+Bureautique;Consommables bureautiques (papier, classement, impression).;bureautique;Classeurs A4 (unité);;economat;Unite;15;Dépôt - Bureautique
+Bureautique;Consommables bureautiques (papier, classement, impression).;bureautique;Chemises cartonnées (lot);;economat;Boite;8;Dépôt - Bureautique
+Ménage;Produits d'entretien et consommables de nettoyage.;menage;Détergent multi-surfaces (bidon 5L);;produit_chimique;Bidon;6;Dépôt - Entretien
+Ménage;Produits d'entretien et consommables de nettoyage.;menage;Eau de javel (bidon 5L);;produit_chimique;Bidon;6;Dépôt - Entretien
+Ménage;Produits d'entretien et consommables de nettoyage.;menage;Désinfectant (bidon 5L);;produit_chimique;Bidon;5;Dépôt - Entretien
+Ménage;Produits d'entretien et consommables de nettoyage.;menage;Sacs poubelle 100L (rouleau);;economat;Unite;10;Dépôt - Entretien
+Ménage;Produits d'entretien et consommables de nettoyage.;menage;Gants ménage (boîte);;economat;Boite;10;Dépôt - Entretien
+HSE;Équipements de protection individuelle et sécurité.;;Casque de sécurité;;economat;Unite;10;Dépôt - HSE
+HSE;Équipements de protection individuelle et sécurité.;;Lunettes de protection;;economat;Unite;15;Dépôt - HSE
+HSE;Équipements de protection individuelle et sécurité.;;Gants anti-coupure;;economat;Paire;20;Dépôt - HSE
+HSE;Équipements de protection individuelle et sécurité.;;Chaussures de sécurité;;economat;Paire;12;Dépôt - HSE
+HSE;Équipements de protection individuelle et sécurité.;;Masque FFP2;;economat;Boite;8;Dépôt - HSE
+HSE;Équipements de protection individuelle et sécurité.;;Bouchons anti-bruit;;economat;Boite;6;Dépôt - HSE
+Maintenance;Pièces et consommables de maintenance mécanique.;petrole;Boulon hexagonal M6 classe 8.8;;economat;Boite;5;Atelier - Maintenance
+Maintenance;Pièces et consommables de maintenance mécanique.;petrole;Ecrou M6 classe 8.8;;economat;Boite;5;Atelier - Maintenance
+Maintenance;Pièces et consommables de maintenance mécanique.;petrole;Rondelle M6;;economat;Boite;5;Atelier - Maintenance
+Maintenance;Pièces et consommables de maintenance mécanique.;petrole;Boulon hexagonal M6 classe 10.9;;economat;Boite;5;Atelier - Maintenance
+Maintenance;Pièces et consommables de maintenance mécanique.;petrole;Ecrou M6 classe 10.9;;economat;Boite;5;Atelier - Maintenance
+Maintenance;Pièces et consommables de maintenance mécanique.;petrole;Rondelle M6;;economat;Boite;5;Atelier - Maintenance
+Maintenance;Pièces et consommables de maintenance mécanique.;petrole;Boulon hexagonal M8 classe 8.8;;economat;Boite;5;Atelier - Maintenance
+Maintenance;Pièces et consommables de maintenance mécanique.;petrole;Ecrou M8 classe 8.8;;economat;Boite;5;Atelier - Maintenance
+Maintenance;Pièces et consommables de maintenance mécanique.;petrole;Rondelle M8;;economat;Boite;5;Atelier - Maintenance
+Maintenance;Pièces et consommables de maintenance mécanique.;petrole;Boulon hexagonal M8 classe 10.9;;economat;Boite;5;Atelier - Maintenance
+Maintenance;Pièces et consommables de maintenance mécanique.;petrole;Ecrou M8 classe 10.9;;economat;Boite;5;Atelier - Maintenance
+Maintenance;Pièces et consommables de maintenance mécanique.;petrole;Rondelle M8;;economat;Boite;5;Atelier - Maintenance
+Maintenance;Pièces et consommables de maintenance mécanique.;petrole;Boulon hexagonal M10 classe 8.8;;economat;Boite;5;Atelier - Maintenance
+Maintenance;Pièces et consommables de maintenance mécanique.;petrole;Ecrou M10 classe 8.8;;economat;Boite;5;Atelier - Maintenance
+Maintenance;Pièces et consommables de maintenance mécanique.;petrole;Rondelle M10;;economat;Boite;5;Atelier - Maintenance
+Maintenance;Pièces et consommables de maintenance mécanique.;petrole;Boulon hexagonal M10 classe 10.9;;economat;Boite;5;Atelier - Maintenance
+Maintenance;Pièces et consommables de maintenance mécanique.;petrole;Ecrou M10 classe 10.9;;economat;Boite;5;Atelier - Maintenance
+Maintenance;Pièces et consommables de maintenance mécanique.;petrole;Rondelle M10;;economat;Boite;5;Atelier - Maintenance
+Maintenance;Pièces et consommables de maintenance mécanique.;petrole;Boulon hexagonal M12 classe 8.8;;economat;Boite;5;Atelier - Maintenance
+Maintenance;Pièces et consommables de maintenance mécanique.;petrole;Ecrou M12 classe 8.8;;economat;Boite;5;Atelier - Maintenance
+Maintenance;Pièces et consommables de maintenance mécanique.;petrole;Rondelle M12;;economat;Boite;5;Atelier - Maintenance
+Maintenance;Pièces et consommables de maintenance mécanique.;petrole;Boulon hexagonal M12 classe 10.9;;economat;Boite;5;Atelier - Maintenance
+Maintenance;Pièces et consommables de maintenance mécanique.;petrole;Ecrou M12 classe 10.9;;economat;Boite;5;Atelier - Maintenance
+Maintenance;Pièces et consommables de maintenance mécanique.;petrole;Rondelle M12;;economat;Boite;5;Atelier - Maintenance
+Maintenance;Pièces et consommables de maintenance mécanique.;petrole;Boulon hexagonal M16 classe 8.8;;economat;Boite;5;Atelier - Maintenance
+Maintenance;Pièces et consommables de maintenance mécanique.;petrole;Ecrou M16 classe 8.8;;economat;Boite;5;Atelier - Maintenance
+Maintenance;Pièces et consommables de maintenance mécanique.;petrole;Rondelle M16;;economat;Boite;5;Atelier - Maintenance
+Maintenance;Pièces et consommables de maintenance mécanique.;petrole;Boulon hexagonal M16 classe 10.9;;economat;Boite;5;Atelier - Maintenance
+Maintenance;Pièces et consommables de maintenance mécanique.;petrole;Ecrou M16 classe 10.9;;economat;Boite;5;Atelier - Maintenance
+Maintenance;Pièces et consommables de maintenance mécanique.;petrole;Rondelle M16;;economat;Boite;5;Atelier - Maintenance
+Maintenance;Pièces et consommables de maintenance mécanique.;petrole;Boulon hexagonal M20 classe 8.8;;economat;Boite;5;Atelier - Maintenance
+Maintenance;Pièces et consommables de maintenance mécanique.;petrole;Ecrou M20 classe 8.8;;economat;Boite;5;Atelier - Maintenance
+Maintenance;Pièces et consommables de maintenance mécanique.;petrole;Rondelle M20;;economat;Boite;5;Atelier - Maintenance
+Maintenance;Pièces et consommables de maintenance mécanique.;petrole;Boulon hexagonal M20 classe 10.9;;economat;Boite;5;Atelier - Maintenance
+Maintenance;Pièces et consommables de maintenance mécanique.;petrole;Ecrou M20 classe 10.9;;economat;Boite;5;Atelier - Maintenance
+Maintenance;Pièces et consommables de maintenance mécanique.;petrole;Rondelle M20;;economat;Boite;5;Atelier - Maintenance
+Maintenance;Pièces et consommables de maintenance mécanique.;petrole;Roulement 6204;;economat;Unite;6;Atelier - Maintenance
+Maintenance;Pièces et consommables de maintenance mécanique.;petrole;Roulement 6205;;economat;Unite;6;Atelier - Maintenance
+Maintenance;Pièces et consommables de maintenance mécanique.;petrole;Roulement 6206;;economat;Unite;6;Atelier - Maintenance
+Maintenance;Pièces et consommables de maintenance mécanique.;petrole;Roulement 6305;;economat;Unite;6;Atelier - Maintenance
+Maintenance;Pièces et consommables de maintenance mécanique.;petrole;Roulement 6306;;economat;Unite;6;Atelier - Maintenance
+Maintenance;Pièces et consommables de maintenance mécanique.;petrole;Courroie trapézoïdale A-25;;economat;Unite;4;Atelier - Maintenance
+Maintenance;Pièces et consommables de maintenance mécanique.;petrole;Courroie trapézoïdale A-30;;economat;Unite;4;Atelier - Maintenance
+Maintenance;Pièces et consommables de maintenance mécanique.;petrole;Courroie trapézoïdale A-35;;economat;Unite;4;Atelier - Maintenance
+Maintenance;Pièces et consommables de maintenance mécanique.;petrole;Courroie trapézoïdale A-40;;economat;Unite;4;Atelier - Maintenance
+Maintenance;Pièces et consommables de maintenance mécanique.;petrole;Courroie trapézoïdale A-45;;economat;Unite;4;Atelier - Maintenance
+Maintenance;Pièces et consommables de maintenance mécanique.;petrole;Courroie trapézoïdale A-50;;economat;Unite;4;Atelier - Maintenance
+Maintenance;Pièces et consommables de maintenance mécanique.;petrole;Courroie trapézoïdale A-55;;economat;Unite;4;Atelier - Maintenance
+Maintenance;Pièces et consommables de maintenance mécanique.;petrole;Courroie trapézoïdale A-60;;economat;Unite;4;Atelier - Maintenance
+Maintenance;Pièces et consommables de maintenance mécanique.;petrole;Courroie trapézoïdale A-65;;economat;Unite;4;Atelier - Maintenance
+Maintenance;Pièces et consommables de maintenance mécanique.;petrole;Courroie trapézoïdale A-70;;economat;Unite;4;Atelier - Maintenance
+Maintenance;Pièces et consommables de maintenance mécanique.;petrole;Courroie trapézoïdale A-75;;economat;Unite;4;Atelier - Maintenance
+Maintenance;Pièces et consommables de maintenance mécanique.;petrole;Courroie trapézoïdale A-80;;economat;Unite;4;Atelier - Maintenance
+Maintenance;Pièces et consommables de maintenance mécanique.;petrole;Courroie trapézoïdale B-25;;economat;Unite;4;Atelier - Maintenance
+Maintenance;Pièces et consommables de maintenance mécanique.;petrole;Courroie trapézoïdale B-30;;economat;Unite;4;Atelier - Maintenance
+Maintenance;Pièces et consommables de maintenance mécanique.;petrole;Courroie trapézoïdale B-35;;economat;Unite;4;Atelier - Maintenance
+Maintenance;Pièces et consommables de maintenance mécanique.;petrole;Courroie trapézoïdale B-40;;economat;Unite;4;Atelier - Maintenance
+Maintenance;Pièces et consommables de maintenance mécanique.;petrole;Courroie trapézoïdale B-45;;economat;Unite;4;Atelier - Maintenance
+Maintenance;Pièces et consommables de maintenance mécanique.;petrole;Courroie trapézoïdale B-50;;economat;Unite;4;Atelier - Maintenance
+Maintenance;Pièces et consommables de maintenance mécanique.;petrole;Courroie trapézoïdale B-55;;economat;Unite;4;Atelier - Maintenance
+Maintenance;Pièces et consommables de maintenance mécanique.;petrole;Courroie trapézoïdale B-60;;economat;Unite;4;Atelier - Maintenance
+Maintenance;Pièces et consommables de maintenance mécanique.;petrole;Courroie trapézoïdale B-65;;economat;Unite;4;Atelier - Maintenance
+Maintenance;Pièces et consommables de maintenance mécanique.;petrole;Courroie trapézoïdale B-70;;economat;Unite;4;Atelier - Maintenance
+Maintenance;Pièces et consommables de maintenance mécanique.;petrole;Courroie trapézoïdale B-75;;economat;Unite;4;Atelier - Maintenance
+Maintenance;Pièces et consommables de maintenance mécanique.;petrole;Courroie trapézoïdale B-80;;economat;Unite;4;Atelier - Maintenance
+Maintenance;Pièces et consommables de maintenance mécanique.;petrole;Courroie trapézoïdale C-25;;economat;Unite;4;Atelier - Maintenance
+Maintenance;Pièces et consommables de maintenance mécanique.;petrole;Courroie trapézoïdale C-30;;economat;Unite;4;Atelier - Maintenance
+Maintenance;Pièces et consommables de maintenance mécanique.;petrole;Courroie trapézoïdale C-35;;economat;Unite;4;Atelier - Maintenance
+Maintenance;Pièces et consommables de maintenance mécanique.;petrole;Courroie trapézoïdale C-40;;economat;Unite;4;Atelier - Maintenance
+Maintenance;Pièces et consommables de maintenance mécanique.;petrole;Courroie trapézoïdale C-45;;economat;Unite;4;Atelier - Maintenance
+Maintenance;Pièces et consommables de maintenance mécanique.;petrole;Courroie trapézoïdale C-50;;economat;Unite;4;Atelier - Maintenance
+Maintenance;Pièces et consommables de maintenance mécanique.;petrole;Courroie trapézoïdale C-55;;economat;Unite;4;Atelier - Maintenance
+Maintenance;Pièces et consommables de maintenance mécanique.;petrole;Courroie trapézoïdale C-60;;economat;Unite;4;Atelier - Maintenance
+Maintenance;Pièces et consommables de maintenance mécanique.;petrole;Courroie trapézoïdale C-65;;economat;Unite;4;Atelier - Maintenance
+Maintenance;Pièces et consommables de maintenance mécanique.;petrole;Courroie trapézoïdale C-70;;economat;Unite;4;Atelier - Maintenance
+Maintenance;Pièces et consommables de maintenance mécanique.;petrole;Courroie trapézoïdale C-75;;economat;Unite;4;Atelier - Maintenance
+Maintenance;Pièces et consommables de maintenance mécanique.;petrole;Courroie trapézoïdale C-80;;economat;Unite;4;Atelier - Maintenance
+Maintenance;Pièces et consommables de maintenance mécanique.;petrole;Graisse industrielle (cartouche);;produit_chimique;Unite;10;Atelier - Maintenance
+Maintenance;Pièces et consommables de maintenance mécanique.;petrole;Huile hydraulique ISO 46 (bidon 20L);;produit_chimique;Bidon;4;Atelier - Maintenance
+Maintenance;Pièces et consommables de maintenance mécanique.;petrole;Dégraissant industriel (bidon 5L);;produit_chimique;Bidon;6;Atelier - Maintenance
+Instrumentation;Capteurs, transmetteurs et accessoires d’instrumentation.;petrole;Transmetteur pression 0-10 bar;;economat;Unite;2;Magasin - Instrumentation
+Instrumentation;Capteurs, transmetteurs et accessoires d’instrumentation.;petrole;Manomètre 0-10 bar;;economat;Unite;3;Magasin - Instrumentation
+Instrumentation;Capteurs, transmetteurs et accessoires d’instrumentation.;petrole;Transmetteur pression 0-25 bar;;economat;Unite;2;Magasin - Instrumentation
+Instrumentation;Capteurs, transmetteurs et accessoires d’instrumentation.;petrole;Manomètre 0-25 bar;;economat;Unite;3;Magasin - Instrumentation
+Instrumentation;Capteurs, transmetteurs et accessoires d’instrumentation.;petrole;Transmetteur pression 0-100 bar;;economat;Unite;2;Magasin - Instrumentation
+Instrumentation;Capteurs, transmetteurs et accessoires d’instrumentation.;petrole;Manomètre 0-100 bar;;economat;Unite;3;Magasin - Instrumentation
+Instrumentation;Capteurs, transmetteurs et accessoires d’instrumentation.;petrole;Sonde température 0-100°C;;economat;Unite;2;Magasin - Instrumentation
+Instrumentation;Capteurs, transmetteurs et accessoires d’instrumentation.;petrole;Thermomètre industriel 0-100°C;;economat;Unite;2;Magasin - Instrumentation
+Instrumentation;Capteurs, transmetteurs et accessoires d’instrumentation.;petrole;Sonde température 0-200°C;;economat;Unite;2;Magasin - Instrumentation
+Instrumentation;Capteurs, transmetteurs et accessoires d’instrumentation.;petrole;Thermomètre industriel 0-200°C;;economat;Unite;2;Magasin - Instrumentation
+Instrumentation;Capteurs, transmetteurs et accessoires d’instrumentation.;petrole;Sonde température 0-400°C;;economat;Unite;2;Magasin - Instrumentation
+Instrumentation;Capteurs, transmetteurs et accessoires d’instrumentation.;petrole;Thermomètre industriel 0-400°C;;economat;Unite;2;Magasin - Instrumentation
+Électricité;Appareillage électrique, câbles et protections.;petrole;Disjoncteur 6A;;economat;Unite;5;Magasin - Électricité
+Électricité;Appareillage électrique, câbles et protections.;petrole;Disjoncteur 10A;;economat;Unite;5;Magasin - Électricité
+Électricité;Appareillage électrique, câbles et protections.;petrole;Disjoncteur 16A;;economat;Unite;5;Magasin - Électricité
+Électricité;Appareillage électrique, câbles et protections.;petrole;Disjoncteur 20A;;economat;Unite;5;Magasin - Électricité
+Électricité;Appareillage électrique, câbles et protections.;petrole;Disjoncteur 32A;;economat;Unite;5;Magasin - Électricité
+Électricité;Appareillage électrique, câbles et protections.;petrole;Disjoncteur 40A;;economat;Unite;5;Magasin - Électricité
+Électricité;Appareillage électrique, câbles et protections.;petrole;Disjoncteur 63A;;economat;Unite;5;Magasin - Électricité
+Électricité;Appareillage électrique, câbles et protections.;petrole;Câble électrique 1.5mm² (bobine);;economat;Bobine;2;Magasin - Électricité
+Électricité;Appareillage électrique, câbles et protections.;petrole;Câble électrique 2.5mm² (bobine);;economat;Bobine;2;Magasin - Électricité
+Électricité;Appareillage électrique, câbles et protections.;petrole;Câble électrique 4mm² (bobine);;economat;Bobine;2;Magasin - Électricité
+Électricité;Appareillage électrique, câbles et protections.;petrole;Câble électrique 6mm² (bobine);;economat;Bobine;2;Magasin - Électricité
+Électricité;Appareillage électrique, câbles et protections.;petrole;Câble électrique 10mm² (bobine);;economat;Bobine;2;Magasin - Électricité
+Électricité;Appareillage électrique, câbles et protections.;petrole;Câble électrique 16mm² (bobine);;economat;Bobine;2;Magasin - Électricité
+Laboratoire;Consommables et réactifs de laboratoire.;;Isopropanol (bouteille 1L);;produit_chimique;Unite;8;Labo - Stock
+Laboratoire;Consommables et réactifs de laboratoire.;;Acide chlorhydrique (bouteille 1L);;produit_chimique;Unite;6;Labo - Stock
+Laboratoire;Consommables et réactifs de laboratoire.;;Acide sulfurique (bouteille 1L);;produit_chimique;Unite;4;Labo - Stock
+Laboratoire;Consommables et réactifs de laboratoire.;;Flacons échantillons (50ml);;consommable_laboratoire;Boite;10;Labo - Stock
+Laboratoire;Consommables et réactifs de laboratoire.;;Gants nitrile (boîte);;economat;Boite;10;Labo - Stock
+Laboratoire;Consommables et réactifs de laboratoire.;;Filtres seringue (boîte);;consommable_laboratoire;Boite;6;Labo - Stock
+Gaz Techniques;Gaz industriels, détendeurs et accessoires.;petrole;Azote (bouteille);;gaz;Unite;2;Zone - Gaz
+Gaz Techniques;Gaz industriels, détendeurs et accessoires.;petrole;Détendeur Azote;;economat;Unite;2;Zone - Gaz
+Gaz Techniques;Gaz industriels, détendeurs et accessoires.;petrole;Oxygène (bouteille);;gaz;Unite;2;Zone - Gaz
+Gaz Techniques;Gaz industriels, détendeurs et accessoires.;petrole;Détendeur Oxygène;;economat;Unite;2;Zone - Gaz
+Gaz Techniques;Gaz industriels, détendeurs et accessoires.;petrole;Argon (bouteille);;gaz;Unite;2;Zone - Gaz
+Gaz Techniques;Gaz industriels, détendeurs et accessoires.;petrole;Détendeur Argon;;economat;Unite;2;Zone - Gaz
+Gaz Techniques;Gaz industriels, détendeurs et accessoires.;petrole;CO2 (bouteille);;gaz;Unite;2;Zone - Gaz
+Gaz Techniques;Gaz industriels, détendeurs et accessoires.;petrole;Détendeur CO2;;economat;Unite;2;Zone - Gaz
+Site Pétrole;Consommables d’exploitation site (oilfield).;petrole;Filtre huile (référence site) 01;;economat;Unite;6;Site - Dépôt
+Site Pétrole;Consommables d’exploitation site (oilfield).;petrole;Filtre huile (référence site) 02;;economat;Unite;6;Site - Dépôt
+Site Pétrole;Consommables d’exploitation site (oilfield).;petrole;Filtre huile (référence site) 03;;economat;Unite;6;Site - Dépôt
+Site Pétrole;Consommables d’exploitation site (oilfield).;petrole;Filtre huile (référence site) 04;;economat;Unite;6;Site - Dépôt
+Site Pétrole;Consommables d’exploitation site (oilfield).;petrole;Filtre huile (référence site) 05;;economat;Unite;6;Site - Dépôt
+Site Pétrole;Consommables d’exploitation site (oilfield).;petrole;Filtre huile (référence site) 06;;economat;Unite;6;Site - Dépôt
+Site Pétrole;Consommables d’exploitation site (oilfield).;petrole;Filtre huile (référence site) 07;;economat;Unite;6;Site - Dépôt
+Site Pétrole;Consommables d’exploitation site (oilfield).;petrole;Filtre huile (référence site) 08;;economat;Unite;6;Site - Dépôt
+Site Pétrole;Consommables d’exploitation site (oilfield).;petrole;Filtre huile (référence site) 09;;economat;Unite;6;Site - Dépôt
+Site Pétrole;Consommables d’exploitation site (oilfield).;petrole;Filtre huile (référence site) 10;;economat;Unite;6;Site - Dépôt
+Site Pétrole;Consommables d’exploitation site (oilfield).;petrole;Filtre huile (référence site) 11;;economat;Unite;6;Site - Dépôt
+Site Pétrole;Consommables d’exploitation site (oilfield).;petrole;Filtre huile (référence site) 12;;economat;Unite;6;Site - Dépôt
+Site Pétrole;Consommables d’exploitation site (oilfield).;petrole;Filtre huile (référence site) 13;;economat;Unite;6;Site - Dépôt
+Site Pétrole;Consommables d’exploitation site (oilfield).;petrole;Filtre huile (référence site) 14;;economat;Unite;6;Site - Dépôt
+Site Pétrole;Consommables d’exploitation site (oilfield).;petrole;Filtre huile (référence site) 15;;economat;Unite;6;Site - Dépôt
+Site Pétrole;Consommables d’exploitation site (oilfield).;petrole;Filtre huile (référence site) 16;;economat;Unite;6;Site - Dépôt
+Site Pétrole;Consommables d’exploitation site (oilfield).;petrole;Filtre huile (référence site) 17;;economat;Unite;6;Site - Dépôt
+Site Pétrole;Consommables d’exploitation site (oilfield).;petrole;Filtre huile (référence site) 18;;economat;Unite;6;Site - Dépôt
+Site Pétrole;Consommables d’exploitation site (oilfield).;petrole;Filtre huile (référence site) 19;;economat;Unite;6;Site - Dépôt
+Site Pétrole;Consommables d’exploitation site (oilfield).;petrole;Filtre huile (référence site) 20;;economat;Unite;6;Site - Dépôt
+Site Pétrole;Consommables d’exploitation site (oilfield).;petrole;Filtre air (référence site) 01;;economat;Unite;6;Site - Dépôt
+Site Pétrole;Consommables d’exploitation site (oilfield).;petrole;Filtre air (référence site) 02;;economat;Unite;6;Site - Dépôt
+Site Pétrole;Consommables d’exploitation site (oilfield).;petrole;Filtre air (référence site) 03;;economat;Unite;6;Site - Dépôt
+Site Pétrole;Consommables d’exploitation site (oilfield).;petrole;Filtre air (référence site) 04;;economat;Unite;6;Site - Dépôt
+Site Pétrole;Consommables d’exploitation site (oilfield).;petrole;Filtre air (référence site) 05;;economat;Unite;6;Site - Dépôt
+Site Pétrole;Consommables d’exploitation site (oilfield).;petrole;Filtre air (référence site) 06;;economat;Unite;6;Site - Dépôt
+Site Pétrole;Consommables d’exploitation site (oilfield).;petrole;Filtre air (référence site) 07;;economat;Unite;6;Site - Dépôt
+Site Pétrole;Consommables d’exploitation site (oilfield).;petrole;Filtre air (référence site) 08;;economat;Unite;6;Site - Dépôt
+Site Pétrole;Consommables d’exploitation site (oilfield).;petrole;Filtre air (référence site) 09;;economat;Unite;6;Site - Dépôt
+Site Pétrole;Consommables d’exploitation site (oilfield).;petrole;Filtre air (référence site) 10;;economat;Unite;6;Site - Dépôt
+Site Pétrole;Consommables d’exploitation site (oilfield).;petrole;Filtre air (référence site) 11;;economat;Unite;6;Site - Dépôt
+Site Pétrole;Consommables d’exploitation site (oilfield).;petrole;Filtre air (référence site) 12;;economat;Unite;6;Site - Dépôt
+Site Pétrole;Consommables d’exploitation site (oilfield).;petrole;Filtre air (référence site) 13;;economat;Unite;6;Site - Dépôt
+Site Pétrole;Consommables d’exploitation site (oilfield).;petrole;Filtre air (référence site) 14;;economat;Unite;6;Site - Dépôt
+Site Pétrole;Consommables d’exploitation site (oilfield).;petrole;Filtre air (référence site) 15;;economat;Unite;6;Site - Dépôt
+Site Pétrole;Consommables d’exploitation site (oilfield).;petrole;Filtre air (référence site) 16;;economat;Unite;6;Site - Dépôt
+Site Pétrole;Consommables d’exploitation site (oilfield).;petrole;Filtre air (référence site) 17;;economat;Unite;6;Site - Dépôt
+Site Pétrole;Consommables d’exploitation site (oilfield).;petrole;Filtre air (référence site) 18;;economat;Unite;6;Site - Dépôt
+Site Pétrole;Consommables d’exploitation site (oilfield).;petrole;Filtre air (référence site) 19;;economat;Unite;6;Site - Dépôt
+Site Pétrole;Consommables d’exploitation site (oilfield).;petrole;Filtre air (référence site) 20;;economat;Unite;6;Site - Dépôt
+Site Pétrole;Consommables d’exploitation site (oilfield).;petrole;Filtre carburant (référence site) 01;;economat;Unite;6;Site - Dépôt
+Site Pétrole;Consommables d’exploitation site (oilfield).;petrole;Filtre carburant (référence site) 02;;economat;Unite;6;Site - Dépôt
+Site Pétrole;Consommables d’exploitation site (oilfield).;petrole;Filtre carburant (référence site) 03;;economat;Unite;6;Site - Dépôt
+Site Pétrole;Consommables d’exploitation site (oilfield).;petrole;Filtre carburant (référence site) 04;;economat;Unite;6;Site - Dépôt
+Site Pétrole;Consommables d’exploitation site (oilfield).;petrole;Filtre carburant (référence site) 05;;economat;Unite;6;Site - Dépôt
+Site Pétrole;Consommables d’exploitation site (oilfield).;petrole;Filtre carburant (référence site) 06;;economat;Unite;6;Site - Dépôt
+Site Pétrole;Consommables d’exploitation site (oilfield).;petrole;Filtre carburant (référence site) 07;;economat;Unite;6;Site - Dépôt
+Site Pétrole;Consommables d’exploitation site (oilfield).;petrole;Filtre carburant (référence site) 08;;economat;Unite;6;Site - Dépôt
+Site Pétrole;Consommables d’exploitation site (oilfield).;petrole;Filtre carburant (référence site) 09;;economat;Unite;6;Site - Dépôt
+Site Pétrole;Consommables d’exploitation site (oilfield).;petrole;Filtre carburant (référence site) 10;;economat;Unite;6;Site - Dépôt
+Site Pétrole;Consommables d’exploitation site (oilfield).;petrole;Filtre carburant (référence site) 11;;economat;Unite;6;Site - Dépôt
+Site Pétrole;Consommables d’exploitation site (oilfield).;petrole;Filtre carburant (référence site) 12;;economat;Unite;6;Site - Dépôt
+Site Pétrole;Consommables d’exploitation site (oilfield).;petrole;Filtre carburant (référence site) 13;;economat;Unite;6;Site - Dépôt
+Site Pétrole;Consommables d’exploitation site (oilfield).;petrole;Filtre carburant (référence site) 14;;economat;Unite;6;Site - Dépôt
+Site Pétrole;Consommables d’exploitation site (oilfield).;petrole;Filtre carburant (référence site) 15;;economat;Unite;6;Site - Dépôt
+Site Pétrole;Consommables d’exploitation site (oilfield).;petrole;Filtre carburant (référence site) 16;;economat;Unite;6;Site - Dépôt
+Site Pétrole;Consommables d’exploitation site (oilfield).;petrole;Filtre carburant (référence site) 17;;economat;Unite;6;Site - Dépôt
+Site Pétrole;Consommables d’exploitation site (oilfield).;petrole;Filtre carburant (référence site) 18;;economat;Unite;6;Site - Dépôt
+Site Pétrole;Consommables d’exploitation site (oilfield).;petrole;Filtre carburant (référence site) 19;;economat;Unite;6;Site - Dépôt
+Site Pétrole;Consommables d’exploitation site (oilfield).;petrole;Filtre carburant (référence site) 20;;economat;Unite;6;Site - Dépôt
+Site Pétrole;Consommables d’exploitation site (oilfield).;petrole;Absorbants hydrocarbures (kit);;economat;Boite;5;Site - Dépôt
+Site Pétrole;Consommables d’exploitation site (oilfield).;petrole;Rubalise / signalisation (rouleau);;economat;Unite;6;Site - Dépôt
+Tuyauterie;Raccords, brides, joints, flexibles, robinetterie.;petrole;Bride DN15 PN16;;economat;Unite;4;Magasin - Tuyauterie
+Tuyauterie;Raccords, brides, joints, flexibles, robinetterie.;petrole;Joint spiralé DN15 PN16;;economat;Unite;10;Magasin - Tuyauterie
+Tuyauterie;Raccords, brides, joints, flexibles, robinetterie.;petrole;Vanne papillon DN15 PN16;;economat;Unite;2;Magasin - Tuyauterie
+Tuyauterie;Raccords, brides, joints, flexibles, robinetterie.;petrole;Clapet anti-retour DN15 PN16;;economat;Unite;2;Magasin - Tuyauterie
+Tuyauterie;Raccords, brides, joints, flexibles, robinetterie.;petrole;Bride DN15 PN40;;economat;Unite;4;Magasin - Tuyauterie
+Tuyauterie;Raccords, brides, joints, flexibles, robinetterie.;petrole;Joint spiralé DN15 PN40;;economat;Unite;10;Magasin - Tuyauterie
+Tuyauterie;Raccords, brides, joints, flexibles, robinetterie.;petrole;Vanne papillon DN15 PN40;;economat;Unite;2;Magasin - Tuyauterie
+Tuyauterie;Raccords, brides, joints, flexibles, robinetterie.;petrole;Clapet anti-retour DN15 PN40;;economat;Unite;2;Magasin - Tuyauterie
+Tuyauterie;Raccords, brides, joints, flexibles, robinetterie.;petrole;Bride DN25 PN16;;economat;Unite;4;Magasin - Tuyauterie
+Tuyauterie;Raccords, brides, joints, flexibles, robinetterie.;petrole;Joint spiralé DN25 PN16;;economat;Unite;10;Magasin - Tuyauterie
+Tuyauterie;Raccords, brides, joints, flexibles, robinetterie.;petrole;Vanne papillon DN25 PN16;;economat;Unite;2;Magasin - Tuyauterie
+Tuyauterie;Raccords, brides, joints, flexibles, robinetterie.;petrole;Clapet anti-retour DN25 PN16;;economat;Unite;2;Magasin - Tuyauterie
+Tuyauterie;Raccords, brides, joints, flexibles, robinetterie.;petrole;Bride DN25 PN40;;economat;Unite;4;Magasin - Tuyauterie
+Tuyauterie;Raccords, brides, joints, flexibles, robinetterie.;petrole;Joint spiralé DN25 PN40;;economat;Unite;10;Magasin - Tuyauterie
+Tuyauterie;Raccords, brides, joints, flexibles, robinetterie.;petrole;Vanne papillon DN25 PN40;;economat;Unite;2;Magasin - Tuyauterie
+Tuyauterie;Raccords, brides, joints, flexibles, robinetterie.;petrole;Clapet anti-retour DN25 PN40;;economat;Unite;2;Magasin - Tuyauterie
+Tuyauterie;Raccords, brides, joints, flexibles, robinetterie.;petrole;Bride DN40 PN16;;economat;Unite;4;Magasin - Tuyauterie
+Tuyauterie;Raccords, brides, joints, flexibles, robinetterie.;petrole;Joint spiralé DN40 PN16;;economat;Unite;10;Magasin - Tuyauterie
+Tuyauterie;Raccords, brides, joints, flexibles, robinetterie.;petrole;Vanne papillon DN40 PN16;;economat;Unite;2;Magasin - Tuyauterie
+Tuyauterie;Raccords, brides, joints, flexibles, robinetterie.;petrole;Clapet anti-retour DN40 PN16;;economat;Unite;2;Magasin - Tuyauterie
+Tuyauterie;Raccords, brides, joints, flexibles, robinetterie.;petrole;Bride DN40 PN40;;economat;Unite;4;Magasin - Tuyauterie
+Tuyauterie;Raccords, brides, joints, flexibles, robinetterie.;petrole;Joint spiralé DN40 PN40;;economat;Unite;10;Magasin - Tuyauterie
+Tuyauterie;Raccords, brides, joints, flexibles, robinetterie.;petrole;Vanne papillon DN40 PN40;;economat;Unite;2;Magasin - Tuyauterie
+Tuyauterie;Raccords, brides, joints, flexibles, robinetterie.;petrole;Clapet anti-retour DN40 PN40;;economat;Unite;2;Magasin - Tuyauterie
+Tuyauterie;Raccords, brides, joints, flexibles, robinetterie.;petrole;Bride DN50 PN16;;economat;Unite;4;Magasin - Tuyauterie
+Tuyauterie;Raccords, brides, joints, flexibles, robinetterie.;petrole;Joint spiralé DN50 PN16;;economat;Unite;10;Magasin - Tuyauterie
+Tuyauterie;Raccords, brides, joints, flexibles, robinetterie.;petrole;Vanne papillon DN50 PN16;;economat;Unite;2;Magasin - Tuyauterie
+Tuyauterie;Raccords, brides, joints, flexibles, robinetterie.;petrole;Clapet anti-retour DN50 PN16;;economat;Unite;2;Magasin - Tuyauterie
+Tuyauterie;Raccords, brides, joints, flexibles, robinetterie.;petrole;Bride DN50 PN40;;economat;Unite;4;Magasin - Tuyauterie
+Tuyauterie;Raccords, brides, joints, flexibles, robinetterie.;petrole;Joint spiralé DN50 PN40;;economat;Unite;10;Magasin - Tuyauterie
+Tuyauterie;Raccords, brides, joints, flexibles, robinetterie.;petrole;Vanne papillon DN50 PN40;;economat;Unite;2;Magasin - Tuyauterie
+Tuyauterie;Raccords, brides, joints, flexibles, robinetterie.;petrole;Clapet anti-retour DN50 PN40;;economat;Unite;2;Magasin - Tuyauterie
+Tuyauterie;Raccords, brides, joints, flexibles, robinetterie.;petrole;Bride DN80 PN16;;economat;Unite;4;Magasin - Tuyauterie
+Tuyauterie;Raccords, brides, joints, flexibles, robinetterie.;petrole;Joint spiralé DN80 PN16;;economat;Unite;10;Magasin - Tuyauterie
+Tuyauterie;Raccords, brides, joints, flexibles, robinetterie.;petrole;Vanne papillon DN80 PN16;;economat;Unite;2;Magasin - Tuyauterie
+Tuyauterie;Raccords, brides, joints, flexibles, robinetterie.;petrole;Clapet anti-retour DN80 PN16;;economat;Unite;2;Magasin - Tuyauterie
+Tuyauterie;Raccords, brides, joints, flexibles, robinetterie.;petrole;Bride DN80 PN40;;economat;Unite;4;Magasin - Tuyauterie
+Tuyauterie;Raccords, brides, joints, flexibles, robinetterie.;petrole;Joint spiralé DN80 PN40;;economat;Unite;10;Magasin - Tuyauterie
+Tuyauterie;Raccords, brides, joints, flexibles, robinetterie.;petrole;Vanne papillon DN80 PN40;;economat;Unite;2;Magasin - Tuyauterie
+Tuyauterie;Raccords, brides, joints, flexibles, robinetterie.;petrole;Clapet anti-retour DN80 PN40;;economat;Unite;2;Magasin - Tuyauterie
+Tuyauterie;Raccords, brides, joints, flexibles, robinetterie.;petrole;Bride DN100 PN16;;economat;Unite;4;Magasin - Tuyauterie
+Tuyauterie;Raccords, brides, joints, flexibles, robinetterie.;petrole;Joint spiralé DN100 PN16;;economat;Unite;10;Magasin - Tuyauterie
+Tuyauterie;Raccords, brides, joints, flexibles, robinetterie.;petrole;Vanne papillon DN100 PN16;;economat;Unite;2;Magasin - Tuyauterie
+Tuyauterie;Raccords, brides, joints, flexibles, robinetterie.;petrole;Clapet anti-retour DN100 PN16;;economat;Unite;2;Magasin - Tuyauterie
+Tuyauterie;Raccords, brides, joints, flexibles, robinetterie.;petrole;Bride DN100 PN40;;economat;Unite;4;Magasin - Tuyauterie
+Tuyauterie;Raccords, brides, joints, flexibles, robinetterie.;petrole;Joint spiralé DN100 PN40;;economat;Unite;10;Magasin - Tuyauterie
+Tuyauterie;Raccords, brides, joints, flexibles, robinetterie.;petrole;Vanne papillon DN100 PN40;;economat;Unite;2;Magasin - Tuyauterie
+Tuyauterie;Raccords, brides, joints, flexibles, robinetterie.;petrole;Clapet anti-retour DN100 PN40;;economat;Unite;2;Magasin - Tuyauterie

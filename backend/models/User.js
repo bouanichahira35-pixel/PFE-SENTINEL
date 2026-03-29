@@ -21,8 +21,15 @@ const userSchema = new mongoose.Schema({
   },
   role: {
     type: String,
-    enum: ['demandeur', 'magasinier', 'responsable'],
+    enum: ['demandeur', 'magasinier', 'responsable', 'admin'],
     required: true
+  },
+  // Pour les demandeurs: limite le catalogue visible (ex: bureautique / menage / petrole).
+  // Les roles magasinier/responsable voient tout le catalogue.
+  demandeur_profile: {
+    type: String,
+    enum: ['bureautique', 'menage', 'petrole'],
+    default: 'bureautique',
   },
   telephone: {
     type: String,

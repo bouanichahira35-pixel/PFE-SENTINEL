@@ -13,7 +13,7 @@ const MAX_AVATAR_SIZE_BYTES = 5 * 1024 * 1024;
 const ParametresMag = ({ userName, onLogout }) => {
   const toast = useToast();
   const uiLanguage = useUiLanguage();
-  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(() => (typeof window !== 'undefined' ? window.innerWidth <= 768 : false));
   const { isDarkMode, toggleTheme } = useTheme();
   const [activeTab, setActiveTab] = useState('profil');
   const initializedThemeRef = useRef(false);
@@ -244,6 +244,10 @@ const ParametresMag = ({ userName, onLogout }) => {
 
   return (
     <div className="app-layout">
+      <div
+        className={`sidebar-backdrop ${sidebarCollapsed ? 'hidden' : ''}`}
+        onClick={() => setSidebarCollapsed(true)}
+      />
       <SidebarMag
         collapsed={sidebarCollapsed}
         onToggle={() => setSidebarCollapsed(!sidebarCollapsed)}
@@ -252,7 +256,13 @@ const ParametresMag = ({ userName, onLogout }) => {
       />
 
       <div className="main-container">
-        <HeaderPage userName={userName} title={i18n.title} showSearch={false} onRefresh={loadSettings} />
+        <HeaderPage
+          userName={userName}
+          title={i18n.title}
+          showSearch={false}
+          onRefresh={loadSettings}
+          onMenuClick={() => setSidebarCollapsed((prev) => !prev)}
+        />
 
         <main className="main-content">
           {isLoading && <div className="users-empty">{i18n.loading}</div>}

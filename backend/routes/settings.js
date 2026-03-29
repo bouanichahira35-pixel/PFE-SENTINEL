@@ -1,9 +1,11 @@
-const router = require('express').Router();
-const bcrypt = require('bcryptjs');
-const AppSetting = require('../models/AppSetting');
-const User = require('../models/User');
-const requireAuth = require('../middlewares/requireAuth');
-const { enqueueMail } = require('../services/mailQueueService');
+const router = require('express').Router(); 
+const bcrypt = require('bcryptjs'); 
+const AppSetting = require('../models/AppSetting'); 
+const User = require('../models/User'); 
+const Product = require('../models/Product');
+const History = require('../models/History');
+const requireAuth = require('../middlewares/requireAuth'); 
+const { enqueueMail } = require('../services/mailQueueService'); 
 
 const BCRYPT_SALT_ROUNDS = Number(process.env.BCRYPT_SALT_ROUNDS || 12);
 const USER_PREFS_DEFAULT = Object.freeze({
@@ -203,20 +205,108 @@ router.post('/me/test-email', async (req, res) => {
   }
 });
 
-router.get('/stock-rules/config', async (req, res) => {
+router.get('/stock-rules/config', async (req, res) => { 
+  try { 
+    if (req.user.role !== 'responsable') return res.status(403).json({ error: 'Acces refuse' }); 
+    const value = await getAppSettingValue('stock_rules_config', STOCK_RULES_DEFAULT); 
+    return res.json({ value }); 
+  } catch (err) { 
+    return res.status(500).json({ error: 'Failed to fetch stock rules config' }); 
+  } 
+}); 
+
+// GET /api/settings/stock-rules/impact
+// Donne un aperçu de l'impact des règles sur un catalogue volumineux.
+router.get('/stock-rules/impact', async (req, res) => {
   try {
     if (req.user.role !== 'responsable') return res.status(403).json({ error: 'Acces refuse' });
-    const value = await getAppSettingValue('stock_rules_config', STOCK_RULES_DEFAULT);
-    return res.json({ value });
+    const cfg = await getAppSettingValue('stock_rules_config', STOCK_RULES_DEFAULT);
+
+    const approvedFilter = { validation_status: 'approved' };
+    const [totalApproved, noThresholdCount, ruptureCount] = await Promise.all([
+      Product.countDocuments(approvedFilter),
+      Product.countDocuments({ ...approvedFilter, seuil_minimum: 0 }),
+      Product.countDocuments({ ...approvedFilter, quantity_current: { $lte: 0 } }),
+    ]);
+
+    // Under-threshold count uses product.seuil_minimum only (current canon).
+    const underThresholdAgg = await Product.aggregate([
+      { $match: approvedFilter },
+      {
+        $match: {
+          $expr: {
+            $and: [
+              { $gt: ['$quantity_current', 0] },
+              { $gt: ['$seuil_minimum', 0] },
+              { $lte: ['$quantity_current', '$seuil_minimum'] },
+            ],
+          },
+        },
+      },
+      { $count: 'count' },
+    ]);
+    const underThresholdCount = underThresholdAgg?.[0]?.count || 0;
+
+    // Produit "inactif" = pas de mouvement (exits/entries) : on ne calcule pas ici pour rester léger.
+    return res.json({
+      ok: true,
+      config: {
+        seuilAlerte: Number(cfg?.seuilAlerte ?? STOCK_RULES_DEFAULT.seuilAlerte),
+        joursInactivite: Number(cfg?.joursInactivite ?? STOCK_RULES_DEFAULT.joursInactivite),
+        validationObligatoire: Boolean(cfg?.validationObligatoire),
+      },
+      counts: {
+        total_approved_products: totalApproved,
+        products_without_threshold: noThresholdCount,
+        products_under_threshold: underThresholdCount,
+        products_in_rupture: ruptureCount,
+      },
+      note:
+        "Un produit avec seuil_minimum = 0 ne declenche pas d'alerte de seuil. Vous pouvez appliquer le seuil global aux produits sans seuil.",
+    });
   } catch (err) {
-    return res.status(500).json({ error: 'Failed to fetch stock rules config' });
+    return res.status(500).json({ error: 'Failed to compute stock rules impact', details: err.message });
   }
 });
 
-router.patch('/stock-rules/config', async (req, res) => {
+// POST /api/settings/stock-rules/apply-default-threshold
+// Applique le seuil global (seuilAlerte) aux produits approuvés dont seuil_minimum=0.
+router.post('/stock-rules/apply-default-threshold', async (req, res) => {
   try {
     if (req.user.role !== 'responsable') return res.status(403).json({ error: 'Acces refuse' });
-    const payload = {
+    const cfg = await getAppSettingValue('stock_rules_config', STOCK_RULES_DEFAULT);
+    const seuil = Number(cfg?.seuilAlerte ?? STOCK_RULES_DEFAULT.seuilAlerte);
+    if (!Number.isFinite(seuil) || seuil < 0) {
+      return res.status(400).json({ error: 'seuilAlerte invalide' });
+    }
+
+    const filter = { validation_status: 'approved', seuil_minimum: 0 };
+    const r = await Product.updateMany(filter, { $set: { seuil_minimum: seuil } });
+
+    await History.create({
+      action_type: 'stock_rules_apply',
+      user: req.user.id,
+      source: 'ui',
+      description: `Application du seuil global (${seuil}) sur produits sans seuil`,
+      actor_role: req.user.role,
+      tags: ['stock_rules', 'threshold', 'bulk_update'],
+      context: {
+        seuil_applique: seuil,
+        filter,
+        modified: r.modifiedCount,
+      },
+    });
+
+    return res.json({ ok: true, modified: r.modifiedCount, seuil_applique: seuil });
+  } catch (err) {
+    return res.status(500).json({ error: 'Failed to apply default threshold', details: err.message });
+  }
+});
+ 
+router.patch('/stock-rules/config', async (req, res) => { 
+  try { 
+    if (req.user.role !== 'responsable') return res.status(403).json({ error: 'Acces refuse' }); 
+    const payload = { 
       seuilAlerte: Number(req.body?.seuilAlerte ?? STOCK_RULES_DEFAULT.seuilAlerte),
       joursInactivite: Number(req.body?.joursInactivite ?? STOCK_RULES_DEFAULT.joursInactivite),
       validationObligatoire: Boolean(req.body?.validationObligatoire),
@@ -231,12 +321,12 @@ router.patch('/stock-rules/config', async (req, res) => {
     return res.json({ message: 'Regles stock mises a jour', value: payload });
   } catch (err) {
     return res.status(500).json({ error: 'Failed to update stock rules config' });
-  }
+  } 
 });
 
 router.get('/ai/config', async (req, res) => {
   try {
-    if (req.user.role !== 'responsable') return res.status(403).json({ error: 'Acces refuse' });
+    if (req.user.role !== 'admin') return res.status(403).json({ error: 'Acces refuse' });
     const value = await getAppSettingValue('ai_config', AI_SETTINGS_DEFAULT);
     return res.json({ value });
   } catch (err) {
@@ -246,12 +336,22 @@ router.get('/ai/config', async (req, res) => {
 
 router.patch('/ai/config', async (req, res) => {
   try {
-    if (req.user.role !== 'responsable') return res.status(403).json({ error: 'Acces refuse' });
-    const payload = {
-      predictionsEnabled: Boolean(req.body?.predictionsEnabled),
-      alertesAuto: Boolean(req.body?.alertesAuto),
-      analyseConsommation: Boolean(req.body?.analyseConsommation),
-    };
+    if (req.user.role !== 'admin') return res.status(403).json({ error: 'Acces refuse' });
+
+    const current = await getAppSettingValue('ai_config', AI_SETTINGS_DEFAULT);
+
+    // Merge-patch semantics: only update keys explicitly provided by the client.
+    const payload = { ...current };
+    if (Object.prototype.hasOwnProperty.call(req.body || {}, 'predictionsEnabled')) {
+      payload.predictionsEnabled = Boolean(req.body.predictionsEnabled);
+    }
+    if (Object.prototype.hasOwnProperty.call(req.body || {}, 'alertesAuto')) {
+      payload.alertesAuto = Boolean(req.body.alertesAuto);
+    }
+    if (Object.prototype.hasOwnProperty.call(req.body || {}, 'analyseConsommation')) {
+      payload.analyseConsommation = Boolean(req.body.analyseConsommation);
+    }
+
     await setAppSettingValue('ai_config', payload, req.user.id);
     return res.json({ message: 'Configuration IA mise a jour', value: payload });
   } catch (err) {

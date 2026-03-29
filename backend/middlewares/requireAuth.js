@@ -3,11 +3,9 @@ const { normalizeRole, isTechnicalRole } = require('../constants/roles');
 const UserSession = require('../models/UserSession');
 const User = require('../models/User');
 const { logSecurityEvent } = require('../services/securityAuditService');
+const { getSessionInactivityMs, formatInactivityMessage } = require('../utils/sessionPolicy');
 
-const SESSION_INACTIVITY_MS = Math.max(
-  60 * 1000,
-  Number(process.env.SESSION_INACTIVITY_MS || 15 * 60 * 1000)
-);
+const SESSION_INACTIVITY_MS = getSessionInactivityMs();
 
 const ACTIVE_STATUS_ALIASES = new Set(['active', 'actif', 'enabled', 'enable', 'true', '1']);
 const BLOCKED_STATUS_ALIASES = new Set(['blocked', 'bloque', 'disabled', 'inactive', 'false', '0']);
@@ -100,7 +98,7 @@ async function requireAuth(req, res, next) {
         success: false,
         details: 'Session expiree apres inactivite',
       });
-      return res.status(401).json({ error: 'Session expiree apres 15 min d inactivite' });
+      return res.status(401).json({ error: formatInactivityMessage(SESSION_INACTIVITY_MS) });
     }
 
     await UserSession.updateOne(
@@ -108,7 +106,7 @@ async function requireAuth(req, res, next) {
       { $set: { last_activity_at: now } }
     );
 
-    const user = await User.findById(payload.id).select('_id role status username');
+    const user = await User.findById(payload.id).select('_id role status username demandeur_profile');
     const normalizedRole = normalizeRole(user?.role);
     const normalizedStatus = normalizeUserStatus(user?.status);
 
@@ -151,6 +149,7 @@ async function requireAuth(req, res, next) {
       role: normalizedRole,
       username: user.username || payload.username,
       sessionId: payload.sid,
+      demandeur_profile: user.demandeur_profile || 'bureautique',
     };
     return next();
   } catch (err) {

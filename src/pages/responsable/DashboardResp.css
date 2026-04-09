@@ -823,6 +823,12 @@
   color: #64748b;
 }
 
+.dash-product-thumb {
+  border: 1px solid rgba(148, 163, 184, 0.35);
+  background: rgba(99, 102, 241, 0.06);
+  flex: 0 0 auto;
+}
+
 .reason-col {
   max-width: 280px;
   color: #334155;

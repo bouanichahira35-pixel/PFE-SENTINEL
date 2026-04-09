@@ -397,6 +397,7 @@ router.post('/login', async (req, res) => {
         telephone: user.telephone, 
         image_profile: user.image_profile || null, 
         demandeur_profile: user.demandeur_profile || 'bureautique',
+        service_direction: user.service_direction || '',
       }, 
     }); 
   } catch (err) { 

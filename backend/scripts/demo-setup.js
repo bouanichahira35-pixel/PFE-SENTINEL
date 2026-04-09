@@ -42,11 +42,20 @@ async function run() {
     throw new Error(`Seed failed (exit=${seed.status})`);
   }
 
+  const seedAnomalies = spawnSync(process.execPath, ['scripts/seed-critical-anomalies.js'], {
+    cwd: process.cwd(),
+    env: process.env,
+    stdio: 'inherit',
+  });
+  if (seedAnomalies.status !== 0) {
+    throw new Error(`Seed critical anomalies failed (exit=${seedAnomalies.status})`);
+  }
+
   // eslint-disable-next-line no-console
   console.log('DEMO_SETUP_OK', {
     users: 'seed-human',
     ai_config: 'enabled',
-    seed: 'magasinier-large',
+    seed: 'magasinier-large + anomalies',
   });
 }
 

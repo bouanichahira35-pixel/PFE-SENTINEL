@@ -23,7 +23,9 @@ const {
   asOptionalString,
   asPositiveNumber,
   isValidObjectIdLike,
+  isSafeText,
 } = require('../utils/validation');
+const { normalizeRequestStatus } = require('../utils/requestStatus');
 const SAFE_USER_FIELDS = 'username email role status telephone';
 
 function parsePeriod(fromRaw, toRaw) {
@@ -48,6 +50,47 @@ function sanitizeDurationMs(value) {
   if (n === undefined) return undefined;
   if (Number.isNaN(n)) return NaN;
   return Math.round(n);
+}
+
+function validateOptionalText(errors, field, value, { min = 0, max = 200 } = {}) {
+  const v = asOptionalString(value);
+  if (v === undefined) return undefined;
+  if (!isSafeText(v, { min, max })) {
+    errors.push(`${field} invalide (max ${max}, sans < >)`);
+    return undefined;
+  }
+  return v;
+}
+
+function validateOptionalEnum(errors, field, value, allowed) {
+  const v = asOptionalString(value);
+  if (v === undefined) return undefined;
+  if (!allowed.includes(v)) {
+    errors.push(`${field} invalide`);
+    return undefined;
+  }
+  return v;
+}
+
+function validateAttachments(errors, value) {
+  if (value === undefined || value === null) return undefined;
+  if (!Array.isArray(value)) {
+    errors.push('attachments invalide (tableau attendu)');
+    return undefined;
+  }
+  if (value.length > 8) {
+    errors.push('attachments trop nombreux (max 8)');
+    return undefined;
+  }
+  const sanitized = [];
+  for (const item of value) {
+    if (!item || typeof item !== 'object') continue;
+    const fileName = validateOptionalText(errors, 'attachments.file_name', item.file_name, { min: 1, max: 140 });
+    const fileUrl = validateOptionalText(errors, 'attachments.file_url', item.file_url, { min: 1, max: 220 });
+    if (!fileName || !fileUrl) continue;
+    sanitized.push({ file_name: fileName, file_url: fileUrl });
+  }
+  return sanitized;
 }
 
 function escapeHtml(value) {
@@ -216,11 +259,20 @@ function sanitizeExitMode(value) {
 
 function sanitizeAttachments(input) {
   if (!Array.isArray(input)) return [];
-  return input.map((a) => ({
-    label: a?.label || '',
-    file_name: a?.file_name || '',
-    file_url: a?.file_url || '',
-  }));
+  const out = [];
+  for (const a of input.slice(0, 8)) {
+    if (!a || typeof a !== 'object') continue;
+    const label = asOptionalString(a.label);
+    const fileName = asOptionalString(a.file_name);
+    const fileUrl = asOptionalString(a.file_url);
+    // Keep legacy-compatible shape, but avoid injecting HTML/control chars in logs/UI.
+    out.push({
+      label: label && isSafeText(label, { min: 0, max: 80 }) ? label : '',
+      file_name: fileName && isSafeText(fileName, { min: 0, max: 140 }) ? fileName : '',
+      file_url: fileUrl && isSafeText(fileUrl, { min: 0, max: 220 }) ? fileUrl : '',
+    });
+  }
+  return out;
 }
 
 async function ensureLegacyOpenLot(product, session) {
@@ -322,6 +374,7 @@ router.post(
   ]),
   async (req, res) => {
     try {
+      const errors = [];
       if (!isValidObjectIdLike(req.body?.product)) {
         return res.status(400).json({ error: 'product id invalide' });
       }
@@ -330,13 +383,18 @@ router.post(
         return res.status(400).json({ error: 'quantity doit etre > 0' });
       }
 
-      const product = await Product.findById(req.body.product).select('_id name code_product quantity_current validation_status lifecycle_status').lean();
+      const withdrawalPaperNumber = validateOptionalText(errors, 'withdrawal_paper_number', req.body?.withdrawal_paper_number, { min: 0, max: 80 });
+      const directionLaboratory = validateOptionalText(errors, 'direction_laboratory', req.body?.direction_laboratory, { min: 0, max: 80 });
+      const beneficiary = validateOptionalText(errors, 'beneficiary', req.body?.beneficiary, { min: 0, max: 80 });
+      const note = validateOptionalText(errors, 'note', req.body?.note, { min: 0, max: 600 });
+      const validHours = asPositiveNumber(req.body?.valid_hours);
+      if (validHours !== undefined && Number.isNaN(validHours)) errors.push('valid_hours invalide');
+      if (errors.length > 0) return res.status(400).json({ error: 'Validation failed', details: errors });
+
+      const product = await Product.findById(req.body.product).select('_id name code_product quantity_current lifecycle_status').lean();
       if (!product) return res.status(404).json({ error: 'Produit introuvable' });
       if (String(product.lifecycle_status || 'active') !== 'active') {
         return res.status(409).json({ error: 'Produit archive / indisponible' });
-      }
-      if (product.validation_status !== 'approved') {
-        return res.status(400).json({ error: 'Produit non valide. Validation responsable requise.' });
       }
 
       const bondId = await getNextInternalBondNumber();
@@ -347,15 +405,15 @@ router.post(
         product_code: product.code_product,
         product_name: product.name,
         quantity: Number(quantity),
-        withdrawal_paper_number: asOptionalString(req.body?.withdrawal_paper_number),
-        direction_laboratory: asOptionalString(req.body?.direction_laboratory),
-        beneficiary: asOptionalString(req.body?.beneficiary),
+        withdrawal_paper_number: withdrawalPaperNumber,
+        direction_laboratory: directionLaboratory,
+        beneficiary,
         request_id: req.body?.request ? String(req.body.request) : '',
-        note: asOptionalString(req.body?.note),
+        note,
         issued_by: String(req.user.id),
       };
       const signed = signQrPayload(tokenPayload, {
-        ttl_hours: asPositiveNumber(req.body?.valid_hours) || 24,
+        ttl_hours: (validHours && Number.isFinite(validHours)) ? validHours : 24,
       });
 
       return res.status(201).json({
@@ -688,6 +746,29 @@ router.post(
     const submissionDurationMs = sanitizeDurationMs(req.body.submission_duration_ms);
     if (Number.isNaN(submissionDurationMs)) errors.push('submission_duration_ms invalide');
 
+    // Optional text fields: keep them safe & bounded (no < >, no control chars).
+    const purchaseOrderNumber = validateOptionalText(errors, 'purchase_order_number', req.body.purchase_order_number, { min: 0, max: 80 });
+    const purchaseVoucherNumber = validateOptionalText(errors, 'purchase_voucher_number', req.body.purchase_voucher_number, { min: 0, max: 80 });
+    const deliveryNoteNumberRaw = validateOptionalText(errors, 'delivery_note_number', req.body.delivery_note_number, { min: 0, max: 80 });
+    const serviceRequester = validateOptionalText(errors, 'service_requester', req.body.service_requester, { min: 0, max: 80 });
+    const supplier = validateOptionalText(errors, 'supplier', req.body.supplier, { min: 0, max: 90 });
+    const commercialName = validateOptionalText(errors, 'commercial_name', req.body.commercial_name, { min: 0, max: 140 });
+    const referenceCode = validateOptionalText(errors, 'reference_code', req.body.reference_code, { min: 0, max: 80 });
+    const lotNumber = validateOptionalText(errors, 'lot_number', req.body.lot_number, { min: 0, max: 80 });
+    const lotQrValue = validateOptionalText(errors, 'lot_qr_value', req.body.lot_qr_value, { min: 0, max: 140 });
+    const inventoryNumber = validateOptionalText(errors, 'inventory_number', req.body.inventory_number, { min: 0, max: 80 });
+    const patrimoineNumber = validateOptionalText(errors, 'patrimoine_number', req.body.patrimoine_number, { min: 0, max: 80 });
+    const beneficiary = validateOptionalText(errors, 'beneficiary', req.body.beneficiary, { min: 0, max: 80 });
+    const chemicalStatus = validateOptionalText(errors, 'chemical_status', req.body.chemical_status, { min: 0, max: 80 });
+    const dangerousAttestation = validateOptionalText(errors, 'dangerous_product_attestation', req.body.dangerous_product_attestation, { min: 0, max: 120 });
+    const contractNumber = validateOptionalText(errors, 'contract_number', req.body.contract_number, { min: 0, max: 80 });
+    const observation = validateOptionalText(errors, 'observation', req.body.observation, { min: 0, max: 600 });
+    const supplierDocQrValue = validateOptionalText(errors, 'supplier_doc_qr_value', req.body.supplier_doc_qr_value, { min: 0, max: 180 });
+    const entryMode = sanitizeEntryMode(req.body.entry_mode);
+    const attachments = sanitizeAttachments(req.body.attachments);
+    const expiryDate = req.body.expiry_date !== undefined ? asDate(req.body.expiry_date) : undefined;
+    if (expiryDate === null) errors.push('expiry_date invalide');
+
     if (errors.length > 0) {
       return res.status(400).json({ error: 'Validation failed', details: errors });
     }
@@ -699,13 +780,8 @@ router.post(
     if (String(product.lifecycle_status || 'active') !== 'active') {
       return res.status(409).json({ error: 'Produit archive / indisponible' });
     }
-    if (product.validation_status !== 'approved') {
-      return res.status(400).json({ error: 'Produit non valide. Validation responsable requise.' });
-    }
 
-    const supplier = asOptionalString(req.body.supplier);
-    const deliveryNoteNumber = asOptionalString(req.body.delivery_note_number);
-    const supplierDocQrValue = asOptionalString(req.body.supplier_doc_qr_value);
+    const deliveryNoteNumber = deliveryNoteNumberRaw;
 
     if (deliveryNoteNumber && supplier) {
       const normalizedSupplier = normalizeHumanText(supplier);
@@ -751,27 +827,27 @@ router.post(
         quantity,
         unit_price: unitPrice,
         submission_duration_ms: submissionDurationMs,
-        purchase_order_number: asOptionalString(req.body.purchase_order_number),
-        purchase_voucher_number: asOptionalString(req.body.purchase_voucher_number),
+        purchase_order_number: purchaseOrderNumber,
+        purchase_voucher_number: purchaseVoucherNumber,
         delivery_note_number: deliveryNoteNumber,
         supplier_doc_qr_value: supplierDocQrValue,
-        entry_mode: sanitizeEntryMode(req.body.entry_mode),
+        entry_mode: entryMode,
         delivery_date: deliveryDate,
-        service_requester: asOptionalString(req.body.service_requester),
+        service_requester: serviceRequester,
         supplier,
-        commercial_name: asOptionalString(req.body.commercial_name),
-        reference_code: asOptionalString(req.body.reference_code),
-        lot_number: asOptionalString(req.body.lot_number),
-        lot_qr_value: asOptionalString(req.body.lot_qr_value),
-        inventory_number: asOptionalString(req.body.inventory_number),
-        patrimoine_number: asOptionalString(req.body.patrimoine_number),
-        beneficiary: asOptionalString(req.body.beneficiary),
-        expiry_date: asDate(req.body.expiry_date) || undefined,
-        chemical_status: asOptionalString(req.body.chemical_status),
-        dangerous_product_attestation: asOptionalString(req.body.dangerous_product_attestation),
-        contract_number: asOptionalString(req.body.contract_number),
-        observation: asOptionalString(req.body.observation),
-        attachments: sanitizeAttachments(req.body.attachments),
+        commercial_name: commercialName,
+        reference_code: referenceCode,
+        lot_number: lotNumber,
+        lot_qr_value: lotQrValue,
+        inventory_number: inventoryNumber,
+        patrimoine_number: patrimoineNumber,
+        beneficiary,
+        expiry_date: expiryDate || undefined,
+        chemical_status: chemicalStatus,
+        dangerous_product_attestation: dangerousAttestation,
+        contract_number: contractNumber,
+        observation,
+        attachments,
         date_entry: dateEntry || new Date(),
         magasinier: req.user.id,
       };
@@ -887,9 +963,6 @@ router.put(
 
       const product = await Product.findById(entry.product).session(session);
       if (!product) throw new Error('Linked product not found');
-      if (product.validation_status !== 'approved') {
-        throw new Error('Produit non valide. Validation responsable requise.');
-      }
 
       if (deliveryNoteNumber && supplier) {
         const normalizedSupplier = normalizeHumanText(supplier);
@@ -1148,6 +1221,14 @@ router.post(
     const submissionDurationMs = sanitizeDurationMs(req.body.submission_duration_ms);
     if (Number.isNaN(submissionDurationMs)) errors.push('submission_duration_ms invalide');
 
+    const withdrawalPaperNumber = validateOptionalText(errors, 'withdrawal_paper_number', req.body.withdrawal_paper_number, { min: 0, max: 80 });
+    const directionLaboratoryRaw = validateOptionalText(errors, 'direction_laboratory', req.body.direction_laboratory, { min: 0, max: 80 });
+    const beneficiaryRaw = validateOptionalText(errors, 'beneficiary', req.body.beneficiary, { min: 0, max: 80 });
+    const note = validateOptionalText(errors, 'note', req.body.note, { min: 0, max: 600 });
+    const scannedLotQrRaw = validateOptionalText(errors, 'scanned_lot_qr', req.body.scanned_lot_qr, { min: 0, max: 180 });
+    const internalBondTokenRaw = validateOptionalText(errors, 'internal_bond_token', req.body.internal_bond_token, { min: 0, max: 4000 });
+    const attachments = sanitizeAttachments(req.body.attachments);
+
     if (errors.length > 0) {
       return res.status(400).json({
         error: 'Validation failed',
@@ -1172,13 +1253,6 @@ router.post(
         reason: 'La sortie est interdite sur un produit archive.',
       });
     }
-    if (product.validation_status !== 'approved') {
-      return res.status(400).json({
-        error: 'Produit non valide. Validation responsable requise.',
-        code: ERROR_CODES.PRODUCT_NOT_APPROVED,
-        reason: 'La sortie est interdite tant que le produit est en pending/rejected.',
-      });
-    }
 
     const currentStock = Number(product.quantity_current || 0);
     if (currentStock < quantity) {
@@ -1189,7 +1263,7 @@ router.post(
       });
     }
 
-    const internalBondToken = asOptionalString(req.body.internal_bond_token);
+    const internalBondToken = internalBondTokenRaw;
     let internalBondPayload = null;
     if (internalBondToken) {
       try {
@@ -1241,20 +1315,24 @@ router.post(
         if (String(linkedRequest.product) !== String(product._id)) {
           throw new Error('La demande ne correspond pas a ce produit');
         }
-        if (['refused', 'served'].includes(String(linkedRequest.status || '').toLowerCase())) {
+        const reqStatus = normalizeRequestStatus(linkedRequest.status);
+        if (['rejected', 'cancelled', 'served', 'received'].includes(reqStatus)) {
           throw new Error('La demande ne peut plus etre servie');
+        }
+        if (!['validated', 'preparing'].includes(reqStatus)) {
+          throw new Error('Validation responsable requise avant service');
         }
       }
 
       const directionLaboratory = linkedRequest
         ? asOptionalString(linkedRequest?.direction_laboratory)
-        : asOptionalString(req.body.direction_laboratory) || asOptionalString(internalBondPayload?.direction_laboratory);
+        : directionLaboratoryRaw || asOptionalString(internalBondPayload?.direction_laboratory);
       const beneficiary = linkedRequest
         ? asOptionalString(linkedRequest?.beneficiary) || asOptionalString(linkedRequest?.demandeur?.username)
-        : asOptionalString(req.body.beneficiary) || asOptionalString(internalBondPayload?.beneficiary);
+        : beneficiaryRaw || asOptionalString(internalBondPayload?.beneficiary);
       const demandeurId = linkedRequest?.demandeur?._id || req.body.demandeur || linkedRequest?.demandeur;
 
-      const scannedLotQr = asOptionalString(req.body.scanned_lot_qr);
+      const scannedLotQr = scannedLotQrRaw;
       let fifoScanAcceptedPayload = null;
 
       const lots = await StockLot.find({
@@ -1364,7 +1442,7 @@ router.post(
 
       const payload = {
         exit_number: await getNextExitNumber(),
-        withdrawal_paper_number: asOptionalString(req.body.withdrawal_paper_number) || asOptionalString(internalBondPayload?.withdrawal_paper_number),
+        withdrawal_paper_number: withdrawalPaperNumber || asOptionalString(internalBondPayload?.withdrawal_paper_number),
         product: req.body.product,
         quantity,
         submission_duration_ms: submissionDurationMs,
@@ -1376,8 +1454,8 @@ router.post(
         scanned_lot_qr: scannedLotQr,
         fifo_reference: consumedLots.map((x) => x.lot_number || 'N/A').join(', '),
         consumed_lots: consumedLots,
-        attachments: sanitizeAttachments(req.body.attachments),
-        note: asOptionalString(req.body.note),
+        attachments,
+        note,
         internal_bond_token: internalBondToken,
         internal_bond_id: asOptionalString(internalBondPayload?.bond_id),
         exit_mode: sanitizeExitMode(req.body.exit_mode || (internalBondToken ? 'internal_bond' : (scannedLotQr ? 'fifo_qr' : 'manual'))),

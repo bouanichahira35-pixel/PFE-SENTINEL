@@ -14,7 +14,7 @@ import HeaderPage from '../../components/shared/HeaderPage';
 import ProtectedPage from '../../components/shared/ProtectedPage';
 import LoadingSpinner from '../../components/shared/LoadingSpinner';
 import { useToast } from '../../components/shared/Toast';
-import { get, patch, post, put } from '../../services/api';
+import { get, post, put } from '../../services/api';
 import './SurveillanceResp.css';
 
 function levelFromRisk(probability, underThreshold) {
@@ -38,13 +38,12 @@ const SurveillanceResp = ({ userName, onLogout }) => {
   const loadData = useCallback(async () => {
     setIsLoading(true);
     try {
-      const [pending, stockoutRes, copilotRes, anomalyRes] = await Promise.all([
-        get('/products?validation_status=pending'),
+      const [stockoutRes, copilotRes, anomalyRes] = await Promise.all([
         post('/ai/predict/stockout', { horizon_days: 7 }).catch(() => ({ predictions: [] })),
         post('/ai/copilot/recommendations', { horizon_days: 14, top_n: 10, simulations: [] }).catch(() => null),
         post('/ai/predict/anomaly', {}).catch(() => ({ predictions: [] })),
       ]);
-      setPendingProducts(Array.isArray(pending) ? pending : []);
+      setPendingProducts([]);
       setAiStockout(Array.isArray(stockoutRes?.predictions) ? stockoutRes.predictions : []);
       setAiCopilot(copilotRes || null);
       setAiAnomaly(Array.isArray(anomalyRes?.predictions) ? anomalyRes.predictions : []);
@@ -159,12 +158,11 @@ const SurveillanceResp = ({ userName, onLogout }) => {
         return;
       }
       await put(`/products/${id}`, { seuil_minimum: seuilToSave });
-      await patch(`/products/${id}/validation`, { validation_status: 'approved' });
       await loadData();
-      toast.success('Produit valide');
+      toast.success('Produit mis a jour');
       cancelEditSeuil();
     } catch (err) {
-      toast.error(err.message || 'Echec validation produit');
+      toast.error(err.message || 'Echec mise a jour produit');
     } finally {
       setIsSubmitting(false);
     }
@@ -173,9 +171,7 @@ const SurveillanceResp = ({ userName, onLogout }) => {
   const handleReject = async (id) => {
     setIsSubmitting(true);
     try {
-      await patch(`/products/${id}/validation`, { validation_status: 'rejected' });
-      await loadData();
-      toast.warning('Produit rejete');
+      toast.warning("Rejet/validation des produits desactivee: un produit cree est utilisable immediatement.");
       cancelEditSeuil();
     } catch (err) {
       toast.error(err.message || 'Echec rejet produit');
@@ -219,7 +215,7 @@ const SurveillanceResp = ({ userName, onLogout }) => {
                 </div>
                 <div className="surv-kpi">
                   <Clock size={18} />
-                  <div><span>En attente validation</span><strong>{mappedPendingProducts.length}</strong></div> 
+                  <div><span>Produits a traiter</span><strong>{mappedPendingProducts.length}</strong></div> 
                 </div> 
               </div> 
 

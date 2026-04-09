@@ -188,9 +188,9 @@ async function run() {
     try {
       await magApi.patch(`/requests/${reqDoc._id}/serve`, {
         stock_exit_id: firstExit._id,
-        note: 'Should fail before acceptance',
+        note: 'Should fail before validation',
       });
-      throw new Error('Serve without accepted status unexpectedly succeeded');
+      throw new Error('Serve without validated status unexpectedly succeeded');
     } catch (err) {
       expectHttpStatus(err, 400);
       const details = String(err?.response?.data?.details || '');

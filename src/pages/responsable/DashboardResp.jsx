@@ -19,6 +19,7 @@ import ProtectedPage from '../../components/shared/ProtectedPage';
 import LoadingSpinner from '../../components/shared/LoadingSpinner';
 import { useToast } from '../../components/shared/Toast';
 import { get, post } from '../../services/api';
+import ProtectedImage from '../../components/shared/ProtectedImage';
 import './DashboardResp.css';
 
 const CHART_WIDTH = 360;
@@ -151,6 +152,8 @@ const DashboardResp = ({ userName, onLogout }) => {
   const [, setAiModelStatus] = useState(null);
   const [assistantStatus, setAssistantStatus] = useState(null);
   const [stockoutForecast, setStockoutForecast] = useState([]);
+  const [aiAlerts, setAiAlerts] = useState([]);
+  const [supplierOps, setSupplierOps] = useState(() => ({ active_suppliers: 0, open_orders: 0, late_open_orders: 0 }));
   const [isLoading, setIsLoading] = useState(false);
 
   const loadData = useCallback(async () => {
@@ -160,13 +163,17 @@ const DashboardResp = ({ userName, onLogout }) => {
       const fromIso = encodeURIComponent(range.from.toISOString());
       const toIso = encodeURIComponent(range.to.toISOString());
 
-      const [all, insights, stockoutRes, activityRes, modelStatusRes, assistantStatusRes] = await Promise.all([
-        get('/products?validation_status=approved'),
+      await post('/ai/alerts/refresh', { window_days: range.days }).catch(() => null);
+
+      const [all, insights, stockoutRes, activityRes, modelStatusRes, assistantStatusRes, supplierInsightsRes, aiAlertsRes] = await Promise.all([
+        get('/products'),
         get(`/history/insights?from=${fromIso}&to=${toIso}`).catch(() => ({ daily_trend: [], top_consumed_products: [], anomalies: [] })),
         post('/ai/predict/stockout', { horizon_days: 7 }).catch(() => ({ predictions: [] })),
         get(`/history?limit=12&from=${fromIso}&to=${toIso}`).catch(() => ({ items: [] })),
         get('/ai/models/status').catch(() => null),
         get('/ai/assistant/status').catch(() => null),
+        get('/suppliers/insights?max=3&window_days=180').catch(() => null),
+        get('/ai/alerts').catch(() => []),
       ]);
 
       setAllProducts(Array.isArray(all) ? all : []);
@@ -195,6 +202,12 @@ const DashboardResp = ({ userName, onLogout }) => {
       setRecentActivity(Array.isArray(activityRes?.items) ? activityRes.items.slice(0, 12) : []);
       setAiModelStatus(modelStatusRes && typeof modelStatusRes === 'object' ? modelStatusRes : null);
       setAssistantStatus(assistantStatusRes && typeof assistantStatusRes === 'object' ? assistantStatusRes : null);
+      setAiAlerts(Array.isArray(aiAlertsRes) ? aiAlertsRes : []);
+      setSupplierOps(
+        supplierInsightsRes?.summary && supplierInsightsRes?.ok
+          ? supplierInsightsRes.summary
+          : { active_suppliers: 0, open_orders: 0, late_open_orders: 0 }
+      );
     } catch (err) {
       toast.error(err.message || 'Erreur chargement dashboard');
     } finally {
@@ -276,6 +289,16 @@ const DashboardResp = ({ userName, onLogout }) => {
 
   const topRiskProduct = useMemo(() => (riskSource.length ? riskSource[0] : null), [riskSource]);
 
+  const productImageById = useMemo(() => {
+    const map = {};
+    (allProducts || []).forEach((p) => {
+      const id = p?._id || p?.id;
+      if (!id) return;
+      map[String(id)] = p?.image_product || p?.image || '';
+    });
+    return map;
+  }, [allProducts]);
+
   const smartAlerts = useMemo(() => ( 
     riskSource
       .filter((row) => Number(row.risk_probability || 0) >= 25 || Number(row.current_stock || 0) <= Number(row.seuil_minimum || 0))
@@ -286,8 +309,11 @@ const DashboardResp = ({ userName, onLogout }) => {
         const inRupture = stock <= 0;
         const underThreshold = stock > 0 && stock <= seuil;
         const suggestedOrder = Number(row.recommended_order_qty || 0);
+        const pid = String(row.product_id || '');
         return {
           id: `${row.product_id || 'p'}-${idx}`,
+          productId: pid,
+          image: pid ? (productImageById[pid] || '') : '',
           productName: row.product_name || 'Produit', 
           level: levelFromRisk(row.risk_probability, stock, seuil), 
           action: suggestedOrder > 0 ? `Commander ${suggestedOrder} u.` : 'Surveillance active.',
@@ -299,11 +325,48 @@ const DashboardResp = ({ userName, onLogout }) => {
           riskProbability: Number(row.risk_probability || 0), 
         }; 
       }) 
-  ), [riskSource]); 
+  ), [productImageById, riskSource]); 
 
   const criticalAlertsCount = useMemo(() => (
     smartAlerts.filter((a) => String(a.level || '').toLowerCase() === 'critique').length
   ), [smartAlerts]);
+
+  const aiAlertsSummary = useMemo(() => {
+    const list = Array.isArray(aiAlerts) ? aiAlerts : [];
+    const normalized = list.map((a) => {
+      const risk = String(a?.risk_level || '').toLowerCase();
+      const type = String(a?.alert_type || '').toLowerCase();
+      const status = String(a?.status || 'new').toLowerCase();
+      const productName = a?.product?.name || a?.product?.code_product || a?.product_name || 'Produit';
+      return {
+        id: String(a?._id || `${type}_${productName}_${a?.detected_at || ''}`),
+        productName,
+        risk,
+        type,
+        status,
+        message: String(a?.message || '').trim(),
+        detected_at: a?.detected_at || a?.createdAt || null,
+      };
+    });
+
+    const newAlerts = normalized.filter((a) => a.status === 'new');
+    const criticalNew = newAlerts.filter((a) => a.risk === 'high' || a.type === 'rupture').length;
+
+    const top = [...newAlerts]
+      .sort((a, b) => {
+        const pa = a.risk === 'high' ? 3 : a.risk === 'medium' ? 2 : 1;
+        const pb = b.risk === 'high' ? 3 : b.risk === 'medium' ? 2 : 1;
+        if (pb !== pa) return pb - pa;
+        return new Date(b.detected_at || 0) - new Date(a.detected_at || 0);
+      })
+      .slice(0, 3);
+
+    return { newCount: newAlerts.length, criticalNewCount: criticalNew, top };
+  }, [aiAlerts]);
+
+  const alertsBadgeCount = useMemo(() => (
+    aiAlerts.length ? aiAlertsSummary.criticalNewCount : criticalAlertsCount
+  ), [aiAlerts.length, aiAlertsSummary.criticalNewCount, criticalAlertsCount]);
 
   const consumptionSeries = useMemo(() => {
     return historyTrend.slice(-10).map((x) => ({
@@ -503,8 +566,8 @@ const DashboardResp = ({ userName, onLogout }) => {
                   >
                     <Sparkles size={16} />
                     <span>Alertes</span>
-                    <span className={`dash-badge ${criticalAlertsCount > 0 ? 'hot' : ''}`}>
-                      {criticalAlertsCount}
+                    <span className={`dash-badge ${alertsBadgeCount > 0 ? 'hot' : ''}`}>
+                      {alertsBadgeCount}
                     </span>
                   </button>
                   <button
@@ -571,14 +634,24 @@ const DashboardResp = ({ userName, onLogout }) => {
                   <span>Entrées</span>
                   <strong><AnimatedNumber value={movementStats.entries} /></strong>
                 </div>
-                <div className="perf-chip">
-                  <span>Sorties</span>
-                  <strong><AnimatedNumber value={movementStats.exits} /></strong>
-                </div>
-                <div className="perf-chip">
-                  <span>Alertes (critiques)</span>
-                  <strong><AnimatedNumber value={criticalAlertsCount} /></strong>
-                </div>
+	                <div className="perf-chip">
+	                  <span>Sorties</span>
+	                  <strong><AnimatedNumber value={movementStats.exits} /></strong>
+	                </div>
+	                <button
+	                  type="button"
+	                  className="perf-chip"
+	                  onClick={() => navigate('/responsable/parametres?tab=fournisseurs')}
+	                  style={{ cursor: 'pointer', textAlign: 'left' }}
+	                  title="Voir les incidents fournisseurs"
+	                >
+	                  <span>Retards fournisseurs</span>
+	                  <strong><AnimatedNumber value={supplierOps.late_open_orders || 0} /></strong>
+	                </button>
+	                <div className="perf-chip">
+	                  <span>Alertes (critiques)</span>
+	                  <strong><AnimatedNumber value={alertsBadgeCount} /></strong>
+	                </div>
               </div>
 
               <div className="decision-strip">
@@ -795,6 +868,35 @@ const DashboardResp = ({ userName, onLogout }) => {
                 <div className="card-header">
                   <h3 className="card-title"><AlertTriangle size={17} /><span>Alertes prioritaires</span></h3>
                 </div>
+                {aiAlertsSummary.newCount > 0 && (
+                  <div style={{ padding: '10px 14px', borderTop: '1px solid rgba(148,163,184,.35)', background: 'rgba(99,102,241,.06)' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10 }}>
+                      <div style={{ fontWeight: 950, color: '#0f172a' }}>
+                        Alertes IA (nouvelles): {aiAlertsSummary.newCount}
+                      </div>
+                      <button
+                        type="button"
+                        className="dash-action"
+                        onClick={() => navigate('/responsable/pilotage?tab=alertes')}
+                        style={{ padding: '6px 10px' }}
+                      >
+                        <Sparkles size={14} />
+                        <span>Voir</span>
+                      </button>
+                    </div>
+                    <div style={{ marginTop: 8, display: 'grid', gap: 6 }}>
+                      {aiAlertsSummary.top.map((a) => (
+                        <div key={a.id} style={{ display: 'flex', gap: 10, alignItems: 'baseline', fontSize: 13 }}>
+                          <span style={{ fontWeight: 950, color: a.risk === 'high' ? '#b91c1c' : a.risk === 'medium' ? '#b45309' : '#334155' }}>
+                            {a.type.toUpperCase()}
+                          </span>
+                          <span style={{ fontWeight: 900, color: '#0f172a' }}>{a.productName}</span>
+                          <span style={{ color: '#475569' }}>{a.message || 'Signal detecte'}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
                 <div className="alert-table-wrap">
                   <table className="alert-table">
                     <thead>
@@ -809,7 +911,18 @@ const DashboardResp = ({ userName, onLogout }) => {
                     <tbody> 
                       {smartAlerts.map((row) => (
                         <tr key={row.id}>
-                          <td><strong>{row.productName}</strong></td> 
+                          <td>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                              <ProtectedImage
+                                filePath={row.image}
+                                alt={row.productName}
+                                className="dash-product-thumb"
+                                fallbackText=""
+                                style={{ width: 28, height: 28, borderRadius: 10, objectFit: 'cover' }}
+                              />
+                              <strong>{row.productName}</strong>
+                            </div>
+                          </td> 
                           <td><span className={`level-pill ${row.level.toLowerCase()}`}>{row.level}</span></td> 
                           <td className="reason-col">{row.reason}</td>
                           <td>{row.action}</td> 

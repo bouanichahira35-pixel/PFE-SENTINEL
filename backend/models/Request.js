@@ -1,4 +1,5 @@
 const mongoose = require('../db');
+const { normalizeRequestStatus } = require('../utils/requestStatus');
 
 const requestSchema = new mongoose.Schema(
   {
@@ -53,5 +54,11 @@ requestSchema.index({ demandeur: 1, status: 1, date_request: -1 });
 requestSchema.index({ product: 1, status: 1, date_request: -1 });
 requestSchema.index({ processed_by: 1, date_processing: -1 });
 requestSchema.index({ stock_exit: 1 }, { sparse: true });
+
+requestSchema.pre('validate', function canonicalizeLegacyStatus() {
+  if (this.status) {
+    this.status = normalizeRequestStatus(this.status);
+  }
+});
 
 module.exports = mongoose.model('Request', requestSchema);

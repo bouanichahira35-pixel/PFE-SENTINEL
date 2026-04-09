@@ -12,7 +12,8 @@ Ce document liste les contradictions (reelles ou potentielles) observees dans le
   - Reporting et tris "createdAt/updatedAt" non uniformes.
   - Certains ecrans/exports peuvent supposer l'existence de `createdAt`.
 - Suggestion:
-  - Uniformiser: activer `timestamps` sur `User` ET conserver les champs legacy si necessaires (ou migrer).
+  - OK (corrige): `User` utilise maintenant `{ timestamps: true }` tout en conservant `date_creation/last_login` (legacy).
+  - Backfill optionnel pour l'existant: `backend/scripts/backfill-user-timestamps.js`.
 
 ### A2) Statuts "legacy" dans `Request.status`
 - Constat:
@@ -22,8 +23,8 @@ Ce document liste les contradictions (reelles ou potentielles) observees dans le
   - UI peut afficher des libelles differents (acceptation vs validation) selon documents.
   - Analytics/filtrage par status peut rater des elements si pas normalise partout.
 - Suggestion:
-  - Migration de donnees (batch) pour convertir tout l'existant vers le canonique.
-  - Cote API: renvoyer toujours un `status` canonique (ce qui est deja largement fait via `serializeRequest`).
+  - OK (corrige): l'API renvoie un `status` canonique et le filtrage inclut aussi les valeurs legacy (validated inclut accepted, rejected inclut refused).
+  - Migration de donnees (batch) disponible: `backend/scripts/migrate-request-statuses.js` (convertit accepted/refused -> validated/rejected).
 
 ### A3) "Status produit derive" vs etats bloquants (`bloque`, `archived`)
 - Constat:
@@ -136,4 +137,3 @@ Ce document liste les contradictions (reelles ou potentielles) observees dans le
 3. Uniformiser `User` (timestamps, champs dates, conventions).
 4. Activer ou supprimer `RoleSelection` et `ProtectedRoute`.
 5. Centraliser la regle "status produit" (bloque/archived prioritaire).
-

@@ -1,15 +1,58 @@
 import { useState, useMemo, useCallback, useEffect } from 'react';
-import { Package, Send, X } from 'lucide-react';
+import { Package, Send, X, Monitor, Wrench, FlaskConical, FileText } from 'lucide-react';
 import SidebarDem from '../../components/demandeur/SidebarDem';
 import HeaderPage from '../../components/shared/HeaderPage';
 import LoadingSpinner from '../../components/shared/LoadingSpinner';
+import ProtectedImage from '../../components/shared/ProtectedImage';
 import { useToast } from '../../components/shared/Toast';
 import { get, post } from '../../services/api';
+import { asPositiveInt, isSafeText, sanitizeText } from '../../utils/formGuards';
 import './ProduitsDem.css';
+
+function computeStockBadge(quantity, seuil) {
+  const q = Number(quantity || 0);
+  const s = Number(seuil || 0);
+  if (q <= 0) return { label: 'Rupture', className: 'rupture' };
+  if (q <= s) return { label: 'Faible', className: 'low' };
+  return { label: 'Disponible', className: 'ok' };
+}
+
+function categoryIconNode(categoryName) {
+  const name = String(categoryName || '').toLowerCase();
+  const commonStyle = { width: 18, height: 18, color: '#334155' };
+  if (name.includes('info')) return <Monitor {...commonStyle} />;
+  if (name.includes('outil')) return <Wrench {...commonStyle} />;
+  if (name.includes('chim') || name.includes('gaz') || name.includes('labo')) return <FlaskConical {...commonStyle} />;
+  if (name.includes('fourn')) return <FileText {...commonStyle} />;
+  return <Package {...commonStyle} />;
+}
+
+function slugify(value) {
+  return String(value || '')
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/(^-|-$)/g, '');
+}
+
+function resolveProductImage(product) {
+  if (product?.image) return product.image;
+  const categorySlug = slugify(product?.categorie || '');
+  if (categorySlug) return `/catalogue/${categorySlug}.svg`;
+  return '/catalogue/default.svg';
+}
+
+const PROFILE_LABELS = {
+  bureautique: 'Bureautique (RH / Admin)',
+  menage: 'Ménage / Entretien',
+  petrole: 'Site pétrole (Externe / Terrain)',
+};
 
 const ProduitsDem = ({ userName, onLogout }) => {
   const toast = useToast();
   const demandeurName = sessionStorage.getItem('userName') || localStorage.getItem('userName') || userName || '';
+  const demandeurProfile = sessionStorage.getItem('demandeurProfile') || 'bureautique';
   const [sidebarCollapsed, setSidebarCollapsed] = useState(() => (typeof window !== 'undefined' ? window.innerWidth <= 768 : false));
   const [searchQuery, setSearchQuery] = useState('');
   const [products, setProducts] = useState([]);
@@ -49,13 +92,15 @@ const ProduitsDem = ({ userName, onLogout }) => {
       const categoryQuery = selectedCategory && selectedCategory !== 'all' ? `?category=${encodeURIComponent(selectedCategory)}` : '';
       const items = await get(`/products${categoryQuery}`);
       const mapped = (items || [])
-        .filter((p) => p.validation_status === 'approved')
         .map((p) => ({
           id: p._id,
           code: p.code_product || '-',
           nom: p.name || 'Produit',
           categorie: p?.category?.name || '-',
           categoryId: p?.category?._id || '',
+          image: p?.image_product || '',
+          quantite: Number(p?.quantity_current || 0),
+          seuilMin: Number(p?.seuil_minimum || 0),
         }));
       setProducts(mapped);
     } catch (err) {
@@ -86,14 +131,18 @@ const ProduitsDem = ({ userName, onLogout }) => {
 
   const validateForm = useCallback(() => {
     const newErrors = {};
-    if (!formData.quantite || parseInt(formData.quantite) < 1) {
+    const qty = asPositiveInt(formData.quantite, { min: 1, max: 100000 });
+    if (!Number.isFinite(qty)) {
       newErrors.quantite = 'Quantite valide requise';
     }
-    if (!formData.motif.trim()) {
-      newErrors.motif = 'Motif requis';
+    if (!isSafeText(formData.motif, { min: 2, max: 120 })) {
+      newErrors.motif = 'Motif obligatoire (2-120, sans < >)';
     }
-    if (!formData.directionLaboratoire.trim()) {
-      newErrors.directionLaboratoire = 'Direction / laboratoire requis';
+    if (!isSafeText(formData.directionLaboratoire, { min: 2, max: 80 })) {
+      newErrors.directionLaboratoire = 'Direction / laboratoire obligatoire (2-80, sans < >)';
+    }
+    if (formData.commentaire && !isSafeText(formData.commentaire, { min: 0, max: 300 })) {
+      newErrors.commentaire = 'Commentaire trop long (max 300)';
     }
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
@@ -113,17 +162,17 @@ const ProduitsDem = ({ userName, onLogout }) => {
     setIsSubmitting(true);
     try {
       const noteParts = [
-        `Motif: ${formData.motif.trim()}`,
-        `Urgence: ${formData.urgence}`,
-        formData.commentaire.trim() ? `Commentaire: ${formData.commentaire.trim()}` : '',
+        `Motif: ${sanitizeText(formData.motif, { maxLen: 120 })}`,
+        `Urgence: ${sanitizeText(formData.urgence, { maxLen: 30 })}`,
+        formData.commentaire.trim() ? `Commentaire: ${sanitizeText(formData.commentaire, { maxLen: 300 })}` : '',
       ].filter(Boolean);
 
       const payload = {
         product: selectedProduct.id,
-        quantity_requested: Number(formData.quantite),
-        direction_laboratory: formData.directionLaboratoire.trim(),
+        quantity_requested: Number(asPositiveInt(formData.quantite, { min: 1, max: 100000 })),
+        direction_laboratory: sanitizeText(formData.directionLaboratoire, { maxLen: 80 }),
         beneficiary: demandeurName,
-        note: noteParts.join(' | '),
+        note: sanitizeText(noteParts.join(' | '), { maxLen: 600 }),
         priority: formData.urgence === 'tres_urgente'
           ? 'critical'
           : formData.urgence === 'urgente'
@@ -136,7 +185,7 @@ const ProduitsDem = ({ userName, onLogout }) => {
       } catch (err) {
         const msg = String(err?.message || '');
         if (!msg.toLowerCase().includes('champs non autorises')) throw err;
-        const legacyNote = [payload.note, `Direction: ${payload.direction_laboratory}`].filter(Boolean).join(' | ');
+        const legacyNote = sanitizeText([payload.note, `Direction: ${payload.direction_laboratory}`].filter(Boolean).join(' | '), { maxLen: 600 });
         await post('/requests', {
           product: payload.product,
           quantity_requested: payload.quantity_requested,
@@ -207,40 +256,53 @@ const ProduitsDem = ({ userName, onLogout }) => {
                 ))}
               </select>
               {isLoadingCategories && <div style={{ fontSize: 12, fontWeight: 800, color: '#64748b' }}>Chargement categories...</div>}
+              <div style={{ marginLeft: 'auto', fontSize: 12, fontWeight: 900, color: '#0f172a', background: '#eef2ff', padding: '6px 10px', borderRadius: 999 }}>
+                Profil catalogue: {PROFILE_LABELS[demandeurProfile] || 'Bureautique'}
+              </div>
             </div>
-            <div className="products-dem-table-container"> 
-              <table className="products-dem-table" role="table"> 
-                <thead> 
-                  <tr> 
-                    <th scope="col">Code</th> 
-                    <th scope="col">Nom du produit</th> 
-                    <th scope="col">Categorie</th>
-                    <th scope="col">Action</th> 
-                  </tr> 
-                </thead> 
-                <tbody> 
-                  {filteredProducts.map((product, index) => ( 
-                    <tr key={product.id} style={{ animationDelay: `${index * 50}ms` }}> 
-                      <td className="code-cell">{product.code}</td> 
-                      <td className="name-cell"> 
-                        <Package size={16} className="product-icon" aria-hidden="true" /> 
-                        {product.nom} 
-                      </td> 
-                      <td style={{ fontWeight: 900, color: '#334155' }}>{product.categorie}</td>
-                      <td> 
-                        <button  
-                          className="demander-btn" 
-                          onClick={() => handleDemander(product)} 
-                          aria-label={`Demander ${product.nom}`} 
-                        >
-                          <Send size={16} />
-                          <span>Demander</span>
-                        </button>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+            <div className="products-dem-grid">
+              {filteredProducts.map((product, index) => {
+                const badge = computeStockBadge(product.quantite, product.seuilMin);
+                return (
+                  <article className="product-card" key={product.id} style={{ animationDelay: `${index * 40}ms` }}>
+                    <div className="product-card-media">
+                      <ProtectedImage
+                        filePath={resolveProductImage(product)}
+                        alt={product.nom}
+                        className="product-card-img"
+                        fallbackText=""
+                        fallbackNode={
+                          <div className="product-card-fallback">
+                            {categoryIconNode(product.categorie)}
+                          </div>
+                        }
+                        style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                      />
+                      <span className={`stock-pill ${badge.className}`}>{badge.label}</span>
+                    </div>
+
+                    <div className="product-card-body">
+                      <div className="product-card-name">{product.nom}</div>
+                      <div className="product-card-code">{product.code}</div>
+                      <div className="product-card-meta">
+                        <span className="product-card-cat">{product.categorie}</span>
+                        <span className="product-card-seuil">Seuil: {product.seuilMin}</span>
+                      </div>
+                    </div>
+
+                    <div className="product-card-actions">
+                      <button
+                        className="demander-btn"
+                        onClick={() => handleDemander(product)}
+                        aria-label={`Demander ${product.nom}`}
+                      >
+                        <Send size={16} />
+                        <span>Demander</span>
+                      </button>
+                    </div>
+                  </article>
+                );
+              })}
 
               {filteredProducts.length === 0 && (
                 <div className="empty-state">
@@ -280,7 +342,18 @@ const ProduitsDem = ({ userName, onLogout }) => {
             </div>
 
             <div className="modal-product-info">
-              <Package size={20} aria-hidden="true" />
+              <ProtectedImage
+                filePath={resolveProductImage(selectedProduct)}
+                alt={selectedProduct?.nom || 'Produit'}
+                className="modal-product-photo"
+                fallbackText={selectedProduct?.code || ''}
+                fallbackNode={
+                  selectedProduct?.categorie
+                    ? <div style={{ display: 'grid', placeItems: 'center' }}>{categoryIconNode(selectedProduct.categorie)}</div>
+                    : null
+                }
+                style={{ width: 46, height: 46, borderRadius: 12, objectFit: 'cover' }}
+              />
               <div>
                 <span className="modal-product-name">{selectedProduct?.nom}</span>
                 <span className="modal-product-code">{selectedProduct?.code}</span>
@@ -294,6 +367,8 @@ const ProduitsDem = ({ userName, onLogout }) => {
                   id="quantite"
                   type="number"
                   min="1"
+                  max="1000000000"
+                  step="1"
                   value={formData.quantite}
                   onChange={(e) => setFormData({ ...formData, quantite: e.target.value })}
                   placeholder="Entrez la quantite"
@@ -310,6 +385,7 @@ const ProduitsDem = ({ userName, onLogout }) => {
                 <input
                   id="motif"
                   type="text"
+                  maxLength={120}
                   value={formData.motif}
                   onChange={(e) => setFormData({ ...formData, motif: e.target.value })}
                   placeholder="Ex: Remplacement materiel defectueux"
@@ -339,6 +415,7 @@ const ProduitsDem = ({ userName, onLogout }) => {
                 <input
                   id="directionLaboratoire"
                   type="text"
+                  maxLength={80}
                   value={formData.directionLaboratoire}
                   onChange={(e) => setFormData({ ...formData, directionLaboratoire: e.target.value })}
                   placeholder="Ex: DSP"
@@ -369,6 +446,7 @@ const ProduitsDem = ({ userName, onLogout }) => {
                 <label htmlFor="commentaire">Commentaire (optionnel)</label>
                 <textarea
                   id="commentaire"
+                  maxLength={600}
                   value={formData.commentaire}
                   onChange={(e) => setFormData({ ...formData, commentaire: e.target.value })}
                   placeholder="Informations supplementaires..."

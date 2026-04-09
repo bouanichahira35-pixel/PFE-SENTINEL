@@ -4,7 +4,7 @@ const requireAuth = require('../middlewares/requireAuth');
 const requirePermission = require('../middlewares/requirePermission');
 const strictBody = require('../middlewares/strictBody');
 const { PERMISSIONS } = require('../constants/permissions');
-const { isValidObjectIdLike } = require('../utils/validation');
+const { asOptionalString, asTrimmedString, isSafeText, isValidObjectIdLike } = require('../utils/validation');
 
 router.get('/', requireAuth, async (req, res) => {
   try {
@@ -23,8 +23,29 @@ router.get('/', requireAuth, async (req, res) => {
 
 router.post('/', requireAuth, requirePermission(PERMISSIONS.CATEGORY_MANAGE), async (req, res) => {
   try {
+    const errors = [];
+    const name = asTrimmedString(req.body?.name);
+    const description = asOptionalString(req.body?.description);
+    const rawAudiences = Array.isArray(req.body?.audiences) ? req.body.audiences : [];
+
+    if (!name || !isSafeText(name, { min: 2, max: 60 })) errors.push('name invalide');
+    if (description !== undefined && !isSafeText(description, { min: 0, max: 400 })) errors.push('description invalide');
+
+    const allowed = new Set(['bureautique', 'menage', 'petrole']);
+    const audiences = rawAudiences
+      .slice(0, 10)
+      .map((v) => String(v || '').trim().toLowerCase())
+      .filter(Boolean);
+    for (const v of audiences) {
+      if (!allowed.has(v)) errors.push(`audiences invalide: ${v}`);
+    }
+
+    if (errors.length) return res.status(400).json({ error: 'Validation error', details: errors });
+
     const payload = {
-      ...req.body,
+      name,
+      description: description || '',
+      audiences: Array.from(new Set(audiences)),
       created_by: req.user.id,
     };
 
@@ -51,12 +72,14 @@ router.patch(
 
       if (req.body.name !== undefined) {
         const name = String(req.body.name || '').trim();
-        if (!name) return res.status(400).json({ error: 'name ne peut pas etre vide' });
+        if (!name || !isSafeText(name, { min: 2, max: 60 })) return res.status(400).json({ error: 'name invalide' });
         category.name = name;
       }
 
       if (req.body.description !== undefined) {
-        category.description = String(req.body.description || '');
+        const description = String(req.body.description || '');
+        if (!isSafeText(description, { min: 0, max: 400 })) return res.status(400).json({ error: 'description invalide' });
+        category.description = description;
       }
 
       if (req.body.audiences !== undefined) {

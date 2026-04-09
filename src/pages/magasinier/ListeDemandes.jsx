@@ -19,6 +19,7 @@ import LoadingSpinner from '../../components/shared/LoadingSpinner';
 import { useToast } from '../../components/shared/Toast';
 import { get } from '../../services/api';
 import { useUiLanguage } from '../../utils/uiLanguage';
+import { normalizeRequestStatus } from '../../utils/requestStatus';
 import useIsMobile from '../../hooks/useIsMobile';
 import './ListeDemandes.css';
 
@@ -164,7 +165,7 @@ const ListeDemandes = ({ userName, onLogout }) => {
         demandeur: r.demandeur?.username || 'Demandeur',
         demandeurId: r.demandeur?._id,
         dateRaw: r.date_request || r.createdAt,
-        statut: r.status,
+        statut: normalizeRequestStatus(r.status),
         stockDisponible: Number(r.product?.quantity_current || 0),
       }));
 

@@ -25,6 +25,7 @@ import ChatResp from "./pages/responsable/ChatResp";
 import ParametresResp from "./pages/responsable/ParametresResp";
 import InventairesResp from "./pages/responsable/InventairesResp";
 import FluxResp from "./pages/responsable/FluxResp";
+import FournisseursResp from "./pages/responsable/FournisseursResp";
 
 import ProduitsDem from "./pages/demandeur/ProduitsDem";
 import MesDemandes from "./pages/demandeur/MesDemandes";
@@ -34,6 +35,10 @@ import AdminDashboard from "./pages/admin/AdminDashboard";
 import AdminUsers from "./pages/admin/AdminUsers";
 import AdminIA from "./pages/admin/AdminIA";
 import AdminSettings from "./pages/admin/AdminSettings";
+import AdminSecurity from "./pages/admin/AdminSecurity";
+import AdminSessions from "./pages/admin/AdminSessions";
+import AdminRbac from "./pages/admin/AdminRbac";
+import SupplierPortal from "./pages/supplier/SupplierPortal";
 
 import NotFound from "./pages/NotFound";
 import { HOME_PATH_BY_ROLE, ROLES, isKnownRole } from "./constants/roles";
@@ -42,7 +47,9 @@ import { API_BASE } from "./services/api";
 
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 
-const SESSION_TIMEOUT_MS = 15 * 60 * 1000;
+// Align with backend inactivity policy (default 2h via SESSION_INACTIVITY_MS).
+// Frontend inactivity guard is best-effort and should not log out earlier than backend.
+const SESSION_TIMEOUT_MS = 2 * 60 * 60 * 1000;
 const LAST_ACTIVITY_KEY = "lastActivityAt";
 const LAST_LOGIN_ROLE_KEY = "lastLoginRole";
 const LOGOUT_REASON_KEY = "logoutReason";
@@ -120,6 +127,7 @@ const App = () => {
     sessionStorage.removeItem("userName");
     sessionStorage.removeItem("userRole");
     sessionStorage.removeItem("imageProfile");
+    sessionStorage.removeItem("serviceDirection");
     sessionStorage.removeItem(LAST_ACTIVITY_KEY);
 
     localStorage.removeItem("token");
@@ -128,6 +136,7 @@ const App = () => {
     localStorage.removeItem("userName");
     localStorage.removeItem("userRole");
     localStorage.removeItem("imageProfile");
+    localStorage.removeItem("serviceDirection");
   }, []);
 
   useEffect(() => {
@@ -202,7 +211,7 @@ const App = () => {
     };
   }, [handleLogout]);
 
-  // Inactivity timeout timer (15 min max without activity, even after tab/app switch).
+  // Inactivity timeout timer (best-effort; aligned with backend inactivity policy).
   useEffect(() => {
     if (!isAuthenticated) return undefined;
 
@@ -212,7 +221,8 @@ const App = () => {
     const writeLastActivity = () => sessionStorage.setItem(LAST_ACTIVITY_KEY, String(Date.now()));
 
     const logoutForInactivity = () => {
-      handleLogout("Deconnexion automatique apres 15 min d'inactivite.");
+      const minutes = Math.max(1, Math.round(SESSION_TIMEOUT_MS / 60000));
+      handleLogout(`Deconnexion automatique apres ${minutes} min d'inactivite.`);
     };
 
     const scheduleInactivityTimer = () => {
@@ -273,27 +283,6 @@ const App = () => {
     };
   }, [isAuthenticated, handleLogout]);
 
-  // Safety guard: enforce max 15 min inactivity based on last recorded activity.
-  useEffect(() => {
-    if (!isAuthenticated) return undefined;
-
-    const interval = setInterval(() => {
-      const now = Date.now();
-      const lastActivity = Number(sessionStorage.getItem(LAST_ACTIVITY_KEY) || 0);
-
-      if (!lastActivity) {
-        handleLogout("Session expiree. Veuillez vous reconnecter.");
-        return;
-      }
-
-      if (now - lastActivity >= SESSION_TIMEOUT_MS) {
-        handleLogout("Session expiree apres 15 min d'inactivite.");
-      }
-    }, 5000);
-
-    return () => clearInterval(interval);
-  }, [isAuthenticated, handleLogout]);
-
   const handleSplashComplete = () => {
     setShowSplash(false);
   };
@@ -318,6 +307,8 @@ const App = () => {
     else sessionStorage.removeItem("imageProfile"); 
     if (user.demandeur_profile) sessionStorage.setItem("demandeurProfile", String(user.demandeur_profile));
     else sessionStorage.removeItem("demandeurProfile");
+    if (user.service_direction) sessionStorage.setItem("serviceDirection", String(user.service_direction));
+    else sessionStorage.removeItem("serviceDirection");
     sessionStorage.setItem(LAST_ACTIVITY_KEY, String(Date.now())); 
 
     localStorage.removeItem("token");
@@ -344,6 +335,7 @@ const App = () => {
               <Route path="/login/:role" element={<Navigate to="/login" replace />} />
 
               <Route path="/mot-de-passe-oublie" element={<ForgotPassword />} />
+              <Route path="/fournisseur" element={<SupplierPortal />} />
 
               <Route path="*" element={<Navigate to={loginRedirect} replace />} />
             </>
@@ -378,6 +370,7 @@ const App = () => {
                   <Route path="/responsable/surveillance" element={<Navigate to="/responsable/pilotage?tab=alertes" replace />} />
                   <Route path="/responsable/transactions" element={<TransactionsResp userName={userName} onLogout={handleLogout} />} />
                   <Route path="/responsable/historique" element={<Navigate to="/responsable/transactions" replace />} />
+                  <Route path="/responsable/fournisseurs" element={<FournisseursResp userName={userName} onLogout={handleLogout} />} />
                   <Route path="/responsable/chatbot" element={<ChatbotResp userName={userName} onLogout={handleLogout} />} />
                   <Route path="/responsable/chat" element={<ChatResp userName={userName} onLogout={handleLogout} />} />
                   <Route path="/responsable/parametres" element={<ParametresResp userName={userName} onLogout={handleLogout} />} />
@@ -390,6 +383,9 @@ const App = () => {
                   <Route path="/admin" element={<AdminDashboard userName={userName} onLogout={handleLogout} />} />
                   <Route path="/admin/utilisateurs" element={<AdminUsers userName={userName} onLogout={handleLogout} />} />
                   <Route path="/admin/ia" element={<AdminIA userName={userName} onLogout={handleLogout} />} />
+                  <Route path="/admin/sessions" element={<AdminSessions userName={userName} onLogout={handleLogout} />} />
+                  <Route path="/admin/rbac" element={<AdminRbac userName={userName} onLogout={handleLogout} />} />
+                  <Route path="/admin/securite" element={<AdminSecurity userName={userName} onLogout={handleLogout} />} />
                   <Route path="/admin/parametres" element={<AdminSettings userName={userName} onLogout={handleLogout} />} />
                   <Route path="/" element={<Navigate to="/admin" replace />} />
                 </>

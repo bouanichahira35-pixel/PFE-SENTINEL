@@ -119,6 +119,33 @@
   font-size: 12px;
 }
 
+.user-cell {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.user-avatar {
+  width: 36px;
+  height: 36px;
+  border-radius: 999px;
+  object-fit: cover;
+  border: 1px solid #e2e8f0;
+  background: #f8fafc;
+}
+
+.user-name {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.user-sub {
+  font-size: 11px;
+  color: #64748b;
+  font-weight: 700;
+}
+
 .status-pill {
   display: inline-flex;
   align-items: center;
@@ -149,3 +176,150 @@
   padding: 20px 10px;
 }
 
+.create-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+  margin-top: 10px;
+  margin-bottom: 10px;
+}
+
+.create-grid label {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-weight: 900;
+  font-size: 12px;
+  color: #0f172a;
+}
+
+.create-grid input,
+.create-grid select {
+  border: 1px solid #e7ebf3;
+  border-radius: 12px;
+  padding: 10px 12px;
+  background: #fff;
+}
+
+.helper-text {
+  font-size: 11px;
+  color: #64748b;
+  font-weight: 700;
+}
+
+.pwd-hint {
+  font-size: 12px;
+  font-weight: 700;
+  color: rgba(15, 23, 42, 0.6);
+}
+
+.pwd-hint.ok {
+  color: #0f7a3a;
+}
+
+.pwd-hint.bad {
+  color: #b42318;
+}
+
+.pwd-row {
+  margin-top: 6px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.pwd-code {
+  display: inline-block;
+  padding: 6px 10px;
+  border: 1px dashed rgba(124, 58, 237, 0.35);
+  border-radius: 10px;
+  background: rgba(124, 58, 237, 0.06);
+  color: #4c1d95;
+  font-weight: 900;
+  font-size: 12px;
+  max-width: 220px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.role-edit {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.profile-edit {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.profile-edit select {
+  border: 1px solid #e7ebf3;
+  border-radius: 12px;
+  padding: 8px 10px;
+  background: #fff;
+  font-weight: 900;
+  font-size: 12px;
+  min-width: 210px;
+}
+
+.service-edit {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.service-edit input {
+  border: 1px solid #e7ebf3;
+  border-radius: 12px;
+  padding: 8px 10px;
+  background: #fff;
+  font-weight: 900;
+  font-size: 12px;
+  min-width: 210px;
+}
+
+.muted {
+  color: #94a3b8;
+  font-weight: 800;
+  font-size: 12px;
+}
+
+.role-edit select {
+  border: 1px solid #e7ebf3;
+  border-radius: 12px;
+  padding: 8px 10px;
+  background: #fff;
+  font-weight: 900;
+  font-size: 12px;
+}
+
+.icon-btn {
+  border: 1px solid #e7ebf3;
+  background: #fff;
+  border-radius: 12px;
+  padding: 8px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+}
+
+.icon-btn:disabled {
+  opacity: 0.65;
+  cursor: not-allowed;
+}
+
+@media (max-width: 960px) {
+  .create-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 620px) {
+  .create-grid {
+    grid-template-columns: 1fr;
+  }
+}

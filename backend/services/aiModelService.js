@@ -269,6 +269,50 @@ function buildAssistantToolDeclarations() {
   ];
 }
 
+function normalizeText(value) {
+  return String(value || '')
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-z0-9\s-]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function extractKeywords(query, maxTokens = 4) {
+  const stop = new Set(['pourquoi', 'alerte', 'risque', 'resume', 'resumer', 'resumez', 'critique', 'critiques', 'produit', 'article']);
+  const tokens = normalizeText(query)
+    .split(' ')
+    .map((t) => t.trim())
+    .filter((t) => t.length >= 3 && !stop.has(t));
+  return Array.from(new Set(tokens)).slice(0, maxTokens);
+}
+
+async function findProductSnapshotByQuestion(question) {
+  const keywords = extractKeywords(question, 4);
+  if (!keywords.length) return null;
+
+  const or = keywords.map((kw) => ({
+    name: { $regex: kw, $options: 'i' },
+  }));
+  or.push(...keywords.map((kw) => ({ code_product: { $regex: kw, $options: 'i' } })));
+
+  const product = await Product.findOne({
+    validation_status: 'approved',
+    $or: or,
+  })
+    .select('name code_product quantity_current seuil_minimum status family emplacement')
+    .lean();
+
+  if (!product) return null;
+  const alert = await AIAlert.findOne({ product: product._id })
+    .sort({ detected_at: -1, createdAt: -1 })
+    .select('alert_type risk_level message detected_at createdAt status')
+    .lean();
+
+  return { product, alert };
+}
+
 async function executeAssistantTool(name, args = {}) {
   const toolName = String(name || '').trim();
   const safeArgs = args && typeof args === 'object' ? args : {};
@@ -390,9 +434,24 @@ async function runGeminiAgent({ question, history, system_instruction, mode, con
   const tools = [{ functionDeclarations: toolDeclarations }];
   const toolConfig = { includeServerSideToolInvocations: true };
 
+  const normalizedQuestion = String(question || '').toLowerCase();
+  const wantsFiveLines =
+    (normalizedQuestion.includes('resume') || normalizedQuestion.includes('résume') || normalizedQuestion.includes('resum'))
+    && (normalizedQuestion.includes('5') || normalizedQuestion.includes('cinq') || normalizedQuestion.includes('5 lignes'));
+  const wantsWhy =
+    normalizedQuestion.includes('pourquoi')
+    || normalizedQuestion.includes('raison')
+    || normalizedQuestion.includes('alerte')
+    || normalizedQuestion.includes('risque');
+
   const modeInstruction = mode === 'report'
     ? 'MODE=REPORT. Produis un mini-rapport markdown structure, concret, avec sections et puces.'
-    : 'MODE=CHAT. Reponds de maniere naturelle, concise, utile, sans style robotique.';
+    : [
+      'MODE=CHAT. Reponds de maniere conversationnelle, concise et utile.',
+      'Regle prioritaire: repondre EXACTEMENT a la question (pas de mini-rapport generique).',
+      wantsFiveLines ? 'Contrainte: exactement 5 lignes.' : null,
+      wantsWhy ? 'Si c’est une question "pourquoi", reponds SPECIFIQUEMENT sur le produit/alerte demande(e) avec 4-6 puces max.' : null,
+    ].filter(Boolean).join(' ');
 
   const prompt = `${modeInstruction}\n\n${buildAssistantContextText(context)}\n\nQuestion utilisateur:\n${question}`;
 
@@ -1515,9 +1574,10 @@ async function askResponsableAssistant(options = {}) {
     return lines.length ? lines : ['- Aucun produit critique detecte pour le moment.'];
   };
 
-  const fallbackChatAnswer = (q, ctx) => {
+  const fallbackChatAnswer = async (q, ctx) => {
     const query = String(q || '').toLowerCase();
-    const stockoutTop = topItems(ctx?.stockout_top, 'risk_probability', 5);
+    const stockoutAll = Array.isArray(ctx?.stockout_top) ? ctx.stockout_top : [];
+    const stockoutTop = topItems(stockoutAll, 'risk_probability', 5);
     const anomalyTop = topItems(ctx?.anomaly_top, 'anomaly_score', 5);
     const actionPlan = Array.isArray(ctx?.action_plan) ? ctx.action_plan : [];
     const metrics = ctx && typeof ctx === 'object' && ctx.metrics && typeof ctx.metrics === 'object' ? ctx.metrics : {};
@@ -1545,8 +1605,14 @@ async function askResponsableAssistant(options = {}) {
       const qn = normalize(rawQ);
       if (!qn) return null;
       for (const step of actionPlan) {
-        const name = normalize(step?.product_name);
-        if (name && qn.includes(name)) return step;
+        const candidates = [
+          step?.product_name,
+          step?.name,
+          step?.product,
+          step?.title,
+          step?.code_product,
+        ].map(normalize).filter(Boolean);
+        if (candidates.some((c) => qn.includes(c))) return step;
       }
       return null;
     };
@@ -1554,7 +1620,7 @@ async function askResponsableAssistant(options = {}) {
     const findInStockout = (rawQ) => {
       const qn = normalize(rawQ);
       if (!qn) return null;
-      for (const item of stockoutTop) {
+      for (const item of stockoutAll) {
         const name = normalize(item?.product_name);
         const code = normalize(item?.code_product);
         if ((name && qn.includes(name)) || (code && qn.includes(code))) return item;
@@ -1615,7 +1681,7 @@ async function askResponsableAssistant(options = {}) {
 
     const wantsWhy = queryNorm.includes('pourquoi') || queryNorm.includes('alerte') || queryNorm.includes('risque');
     if (wantsWhy && askedName) {
-      const stockItem = askedStockoutItem || findFocusProduct(q, stockoutTop);
+      const stockItem = askedStockoutItem || findFocusProduct(q, stockoutAll);
       if (stockItem) {
         const name = stockItem?.product_name || stockItem?.code_product || 'Produit';
         const factors = Array.isArray(stockItem?.factors) ? stockItem.factors : [];
@@ -1630,11 +1696,55 @@ async function askResponsableAssistant(options = {}) {
           `- Action: commander ${qty(stockItem?.recommended_order_qty)} unite(s) si besoin.`,
         ].join('\n');
       }
+
+      // If the product is part of the action plan but not present in stockout_top,
+      // we can still explain using the action_plan metadata (why/action/urgency).
+      if (askedPlanItem) {
+        const name = askedPlanItem?.product_name || askedPlanItem?.name || askedPlanItem?.code_product || askedName;
+        const why = askedPlanItem?.why ? String(askedPlanItem.why) : 'Signal combine (stock + tendance).';
+        return [
+          `Pourquoi "${name}" est en alerte:`,
+          `- Raison: ${why}.`,
+          askedPlanItem?.risk_probability !== undefined ? `- Risque estime: ${pct(askedPlanItem.risk_probability)}.` : null,
+          askedPlanItem?.urgency ? `- Urgence: ${String(askedPlanItem.urgency)}.` : null,
+          askedPlanItem?.action ? `- Action: ${String(askedPlanItem.action)}.` : null,
+        ].filter(Boolean).join('\n');
+      }
+
       return [
         `Le produit "${askedName}" apparait dans le plan d'action, mais je n'ai pas assez de details chiffres dans le contexte pour expliquer precisement.`,
         `Action proposee: ${askedPlanItem?.action || 'Verifier et lancer une commande si necessaire'}.`,
         `Conseil: ouvrir la fiche produit (stock actuel, seuil, sorties) puis relancer la question.`,
       ].join('\n');
+    }
+
+    // "Pourquoi X ?" mais X n'est pas dans stockout_top: tente via action_plan (why) + consommation/anomalies.
+    if (wantsWhy && !askedName) {
+      const planItem = findInActionPlan(q);
+      if (planItem) {
+        const name = planItem?.product_name || planItem?.name || planItem?.code_product || 'Produit';
+        const why = planItem?.why ? String(planItem.why) : 'Signal combine (stock + tendance).';
+        return [
+          `Pourquoi "${name}" est prioritaire:`,
+          `- Raison: ${why}.`,
+          planItem?.risk_probability !== undefined ? `- Risque estime: ${pct(planItem.risk_probability)}.` : null,
+          planItem?.action ? `- Action: ${String(planItem.action)}.` : null,
+        ].filter(Boolean).join('\n');
+      }
+
+      const lookup = await findProductSnapshotByQuestion(q);
+      if (lookup?.product) {
+        const p = lookup.product;
+        const a = lookup.alert;
+        return [
+          `Pourquoi "${p.name || p.code_product || 'Produit'}" est en alerte:`,
+          `- Stock/seuil: ${qty(p.quantity_current)} / ${qty(p.seuil_minimum)}.`,
+          a?.message ? `- Signal: ${String(a.message)}` : '- Signal: baisse de stock ou sortie anormale.',
+          `- Statut: ${p.status || '-'}.`,
+          `- Action: verifier stock physique + lancer commande si besoin.`,
+        ].join('\n');
+      }
+      return 'Pour expliquer une alerte, indique le nom exact du produit (ex: "Pourquoi Câble électrique ?").';
     }
 
     const focus = findFocusProduct(q, stockoutTop) || (stockoutTop[0] || null);
@@ -1654,6 +1764,14 @@ async function askResponsableAssistant(options = {}) {
       lines.push(
         `Fiabilite actuelle: Rupture F1=${st?.f1 ?? '-'}, AUC=${st?.auc ?? '-'}; Conso MAE=${co?.mae ?? '-'}, MAPE=${co?.mape ?? '-'}%.`
       );
+    } else if (wantsSummary) {
+      lines.push(`Critiques: ${stockoutTop.length}, Anomalies: ${anomalyTop.length}.`);
+      const top = stockoutTop[0];
+      if (top) {
+        lines.push(`Priorite: ${top.product_name || 'Produit'} (risque ${pct(top.risk_probability)}).`);
+      } else {
+        lines.push('Priorite: aucune urgence forte detectee.');
+      }
     } else if (focus) {
       lines.push(`Produit prioritaire: ${focus.product_name || 'Produit'} (${pct(focus.risk_probability)}).`);
       const factors = Array.isArray(focus.factors) ? focus.factors : [];
@@ -1737,9 +1855,33 @@ async function askResponsableAssistant(options = {}) {
   };
 
   const contextText = buildContextText(context);
+
+  const normalizedQuestion = question.toLowerCase();
+  const wantsFiveLines =
+    (normalizedQuestion.includes('resume') || normalizedQuestion.includes('résume') || normalizedQuestion.includes('resum'))
+    && (normalizedQuestion.includes('5') || normalizedQuestion.includes('cinq') || normalizedQuestion.includes('5 lignes'));
+  const wantsWhy =
+    normalizedQuestion.includes('pourquoi')
+    || normalizedQuestion.includes('raison')
+    || normalizedQuestion.includes('alerte')
+    || normalizedQuestion.includes('risque');
+  const wantsTop =
+    normalizedQuestion.includes('plus critique')
+    || normalizedQuestion.includes('plus critiques')
+    || normalizedQuestion.includes('cette semaine')
+    || normalizedQuestion.includes('top')
+    || normalizedQuestion.includes('priorite')
+    || normalizedQuestion.includes('priorité');
+
   const modeInstruction = mode === 'report'
     ? 'MODE=REPORT. Produis un mini-rapport markdown structure, concret, avec sections et puces.'
-    : 'MODE=CHAT. Reponds de maniere naturelle, concise, utile, sans style robotique.';
+    : [
+      'MODE=CHAT. Reponds de maniere conversationnelle, concise et utile.',
+      'Regle prioritaire: repondre EXACTEMENT a la question de l’utilisateur (ne pas sortir un mini-rapport generique si on te demande "pourquoi").',
+      wantsFiveLines ? 'Contrainte: repondre en exactement 5 lignes, pas plus.' : null,
+      wantsWhy ? 'Si la question est un "pourquoi", explique SPECIFIQUEMENT le produit/alerte demande(e) en 4-6 puces max (cause, indicateurs, action immediate, controle).' : null,
+      wantsTop ? 'Si la question demande les plus critiques, liste 3-5 produits max avec risque + action.' : null,
+    ].filter(Boolean).join(' ');
 
   const prompt = `${modeInstruction}\n\n${contextText}\n\nQuestion utilisateur:\n${question}`;
   const systemInstruction = mode === 'report'
@@ -1750,7 +1892,9 @@ async function askResponsableAssistant(options = {}) {
     : [
       'Tu es un assistant stock conversationnel en francais.',
       'Tu parles de facon naturelle, claire, professionnelle et humaine.',
-      'Toujours: expliquer simplement le pourquoi, puis proposer des actions immediates.',
+      'Toujours: repondre a la question precise avant d’ajouter des recommandations.',
+      'Si l’utilisateur pose un "pourquoi" sur un produit, reponds SPECIFIQUEMENT sur ce produit.',
+      'Si l’utilisateur demande un resume (ex: "en 5 lignes"), respecte strictement la contrainte de longueur.',
       'Ne jamais inventer des donnees absentes du contexte.',
       'Tu as acces a des outils (lecture seule) pour interroger le stock et les alertes. Utilise-les si ca aide a repondre avec des chiffres reels.',
     ].join(' ');
@@ -1786,7 +1930,9 @@ async function askResponsableAssistant(options = {}) {
       e.details = String(err?.message || err).slice(0, 1200);
       throw e;
     }
-    const answer = mode === 'report' ? fallbackReportAnswer(question, context) : fallbackChatAnswer(question, context);
+    const answer = mode === 'report'
+      ? fallbackReportAnswer(question, context)
+      : await fallbackChatAnswer(question, context);
     return { answer, source: 'fallback', mode };
   }
 }

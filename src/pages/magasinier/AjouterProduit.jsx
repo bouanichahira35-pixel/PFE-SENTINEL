@@ -7,6 +7,7 @@ import LoadingSpinner from '../../components/shared/LoadingSpinner';
 import InlineQrScanner from '../../components/shared/InlineQrScanner';
 import { useToast } from '../../components/shared/Toast';
 import { get, post, uploadFile } from '../../services/api';
+import { asNonNegativeInt, isSafeText, sanitizeText } from '../../utils/formGuards';
 import './AjouterProduit.css';
 
 const unites = ['Unite', 'Ramette', 'Boite', 'Carton', 'Kg', 'Litre', 'Metre'];
@@ -77,6 +78,7 @@ const AjouterProduit = ({ userName, onLogout }) => {
 
   const [errors, setErrors] = useState({});
   const [fdsFile, setFdsFile] = useState(null);
+  const [productImageFile, setProductImageFile] = useState(null);
 
   const verifyQrCodeUniqueness = useCallback(async (value) => {
     const qr = String(value || '').trim();
@@ -204,13 +206,22 @@ const AjouterProduit = ({ userName, onLogout }) => {
 
   const validateForm = useCallback(() => {
     const newErrors = {};
-    if (!formData.qrCode.trim()) newErrors.qrCode = 'QR Code requis';
-    if (!formData.nom.trim()) newErrors.nom = 'Nom requis';
-    if (formData.nom.trim().length > 0 && formData.nom.trim().length < 3) newErrors.nom = 'Le nom doit contenir au moins 3 caracteres';
+    if (!String(formData.qrCode || '').trim()) newErrors.qrCode = 'QR Code requis';
+    if (!isSafeText(formData.qrCode, { min: 3, max: 220 })) newErrors.qrCode = 'QR Code invalide (3-220, sans < >)';
+
+    if (!isSafeText(formData.nom, { min: 3, max: 80 })) {
+      newErrors.nom = 'Nom requis (3-80, sans < >)';
+    }
     if (!formData.categorie) newErrors.categorie = 'Categorie requise';
     if (!formData.famille) newErrors.categorie = 'Categorie invalide pour la famille metier';
-    if (!formData.seuilMinimum || parseInt(formData.seuilMinimum) < 0) {
-      newErrors.seuilMinimum = 'Seuil minimum valide requis';
+    const seuilMin = asNonNegativeInt(formData.seuilMinimum, { min: 0, max: 1000000 });
+    if (!Number.isFinite(seuilMin)) newErrors.seuilMinimum = 'Seuil minimum valide requis (0-1 000 000)';
+
+    if (formData.emplacement && !isSafeText(formData.emplacement, { min: 0, max: 80 })) {
+      newErrors.emplacement = 'Emplacement trop long (max 80, sans < >)';
+    }
+    if (formData.description && !isSafeText(formData.description, { min: 0, max: 600 })) {
+      newErrors.description = 'Description trop longue (max 600, sans < >)';
     }
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
@@ -238,22 +249,28 @@ const AjouterProduit = ({ userName, onLogout }) => {
         };
       }
 
+      let productImageUrl = '';
+      if (productImageFile) {
+        const uploadedImage = await uploadFile('/files/upload', productImageFile);
+        productImageUrl = String(uploadedImage?.file_url || '');
+      }
+
       const payload = { 
-        name: formData.nom.trim(), 
+        name: sanitizeText(formData.nom, { maxLen: 80 }), 
         category_proposal: formData.categorie, 
         family: formData.famille, 
-        description: formData.description, 
-        seuil_minimum: Number(formData.seuilMinimum), 
-        stock_initial_year: Number(formData.stockInitial || 0), 
-        quantity_current: Number(formData.stockInitial || 0), 
-        qr_code_value: formData.qrCode,
-        emplacement: formData.emplacement,
-        chemical_class: formData.chemicalClass,
-        physical_state: formData.physicalState,
-        gas_pressure: formData.gasPressure,
-        gas_purity: formData.gasPurity,
+        description: sanitizeText(formData.description, { maxLen: 600 }) || undefined, 
+        seuil_minimum: Number(asNonNegativeInt(formData.seuilMinimum, { min: 0, max: 1000000 })), 
+        stock_initial_year: Number(asNonNegativeInt(formData.stockInitial || 0, { min: 0, max: 1000000000 })), 
+        quantity_current: Number(asNonNegativeInt(formData.stockInitial || 0, { min: 0, max: 1000000000 })), 
+        qr_code_value: sanitizeText(formData.qrCode, { maxLen: 220 }),
+        emplacement: sanitizeText(formData.emplacement, { maxLen: 80 }) || undefined,
+        chemical_class: sanitizeText(formData.chemicalClass, { maxLen: 40 }) || undefined,
+        physical_state: sanitizeText(formData.physicalState, { maxLen: 40 }) || undefined,
+        gas_pressure: sanitizeText(formData.gasPressure, { maxLen: 40 }) || undefined,
+        gas_purity: sanitizeText(formData.gasPurity, { maxLen: 40 }) || undefined,
         fds_attachment: fdsAttachment, 
-        validation_status: 'pending', 
+        image_product: productImageUrl || undefined,
       }; 
 
       await post('/products', payload);
@@ -275,6 +292,7 @@ const AjouterProduit = ({ userName, onLogout }) => {
         description: '',
       });
       setFdsFile(null);
+      setProductImageFile(null);
       setScanTarget('');
       setShowAdvancedFields(false);
       navigate('/magasinier');
@@ -283,7 +301,7 @@ const AjouterProduit = ({ userName, onLogout }) => {
     } finally {
       setIsSubmitting(false);
     }
-  }, [duplicateProduct, fdsFile, formData, navigate, toast, validateForm]);
+  }, [duplicateProduct, fdsFile, formData, navigate, productImageFile, toast, validateForm]);
 
   return (
     <div className="app-layout">
@@ -365,6 +383,7 @@ const AjouterProduit = ({ userName, onLogout }) => {
                         id="qrCode"
                         ref={qrInputRef}
                         type="text"
+                        maxLength={180}
                         value={formData.qrCode}
                         onChange={(e) => {
                           setFormData({ ...formData, qrCode: e.target.value });
@@ -435,6 +454,7 @@ const AjouterProduit = ({ userName, onLogout }) => {
                     <input
                       id="nom"
                       type="text"
+                      maxLength={100}
                       value={formData.nom}
                       onChange={(e) => handleNomChange(e.target.value)}
                       placeholder="Ex: Cable HDMI 2m"
@@ -453,6 +473,22 @@ const AjouterProduit = ({ userName, onLogout }) => {
                         </button>
                       </div>
                     )}
+                  </div>
+                </div>
+
+                <div className="form-section">
+                  <h3>Visuel</h3>
+                  <div className="form-group">
+                    <label htmlFor="productImageFile">Photo du produit (optionnel)</label>
+                    <input
+                      id="productImageFile"
+                      type="file"
+                      accept=".png,.jpg,.jpeg,.webp"
+                      onChange={(e) => setProductImageFile(e.target.files?.[0] || null)}
+                    />
+                    <span className="input-hint">
+                      Photo reelle pour aider les demandeurs (recommande).
+                    </span>
                   </div>
                 </div>
 
@@ -520,6 +556,8 @@ const AjouterProduit = ({ userName, onLogout }) => {
                           id="stockInitial"
                           type="number"
                           min="0"
+                          max="1000000000"
+                          step="1"
                           value={formData.stockInitial}
                           onChange={(e) => setFormData({ ...formData, stockInitial: e.target.value })}
                           placeholder="Ex: 100"
@@ -530,6 +568,7 @@ const AjouterProduit = ({ userName, onLogout }) => {
                         <input
                           id="emplacement"
                           type="text"
+                          maxLength={120}
                           value={formData.emplacement}
                           onChange={(e) => setFormData({ ...formData, emplacement: e.target.value })}
                           placeholder="Ex: Rayon A - Etagere 3"
@@ -546,6 +585,8 @@ const AjouterProduit = ({ userName, onLogout }) => {
                       id="seuilMinimum"
                       type="number"
                       min="0"
+                      max="1000000000"
+                      step="1"
                       value={formData.seuilMinimum}
                       onChange={(e) => setFormData({ ...formData, seuilMinimum: e.target.value })}
                       placeholder="Ex: 10"
@@ -567,6 +608,7 @@ const AjouterProduit = ({ userName, onLogout }) => {
                         <input
                           id="chemicalClass"
                           type="text"
+                          maxLength={80}
                           value={formData.chemicalClass}
                           onChange={(e) => setFormData({ ...formData, chemicalClass: e.target.value })}
                           placeholder="Ex: Acide"
@@ -577,6 +619,7 @@ const AjouterProduit = ({ userName, onLogout }) => {
                         <input
                           id="physicalState"
                           type="text"
+                          maxLength={80}
                           value={formData.physicalState}
                           onChange={(e) => setFormData({ ...formData, physicalState: e.target.value })}
                           placeholder="Ex: Liquide"
@@ -604,6 +647,7 @@ const AjouterProduit = ({ userName, onLogout }) => {
                         <input
                           id="gasPressure"
                           type="text"
+                          maxLength={80}
                           value={formData.gasPressure}
                           onChange={(e) => setFormData({ ...formData, gasPressure: e.target.value })}
                           placeholder="Ex: 200 bar"
@@ -614,6 +658,7 @@ const AjouterProduit = ({ userName, onLogout }) => {
                         <input
                           id="gasPurity"
                           type="text"
+                          maxLength={80}
                           value={formData.gasPurity}
                           onChange={(e) => setFormData({ ...formData, gasPurity: e.target.value })}
                           placeholder="Ex: 99.99%"
@@ -630,6 +675,7 @@ const AjouterProduit = ({ userName, onLogout }) => {
                       <label htmlFor="description">Description (optionnel)</label>
                       <textarea
                         id="description"
+                        maxLength={600}
                         value={formData.description}
                         onChange={(e) => setFormData({ ...formData, description: e.target.value })}
                         placeholder="Description du produit, specifications..."

@@ -2,6 +2,8 @@ const { Queue, Worker } = require('bullmq');
 const IORedis = require('ioredis');
 const { sendMailOrThrow, isMailConfigured } = require('./mailerService');
 const { logSecurityEvent } = require('./securityAuditService');
+const User = require('../models/User');
+const Notification = require('../models/Notification');
 
 const MAIL_QUEUE_NAME = process.env.MAIL_QUEUE_NAME || 'mail_notifications';
 const MAIL_QUEUE_ENABLED = String(process.env.MAIL_QUEUE_ENABLED || 'true') === 'true';
@@ -79,6 +81,29 @@ async function initMailQueue() {
         subject: job?.data?.subject || null,
       },
     });
+
+    // Notify admins in-app (best-effort): helps the IT admin react quickly to mail outages.
+    try {
+      const admins = await User.find({ role: 'admin', status: 'active' })
+        .select('_id')
+        .limit(20)
+        .lean();
+      if (admins.length) {
+        await Notification.insertMany(admins.map((a) => ({
+          user: a._id,
+          title: 'Incident email (queue)',
+          message: [
+            `Echec envoi email: ${job?.data?.to || '-'}`,
+            `Type: ${job?.data?.kind || 'generic'}`,
+            `Raison: ${err?.message || 'failed'}`,
+          ].join('\n'),
+          type: 'warning',
+          is_read: false,
+        })));
+      }
+    } catch {
+      // ignore notify errors
+    }
   });
 
   queueReady = true;
@@ -128,4 +153,3 @@ module.exports = {
   enqueueMail,
   getMailQueueHealth,
 };
-

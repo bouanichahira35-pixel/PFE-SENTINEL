@@ -12,6 +12,38 @@
   margin-bottom: 0.85rem;
 }
 
+.tx-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.7rem;
+  border: 1px solid #e2e8f0;
+  background: #f8fafc;
+  border-radius: 0.95rem;
+  padding: 0.8rem 1rem;
+  margin-bottom: 0.85rem;
+}
+
+.tx-banner-info {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.55rem;
+  font-weight: 900;
+  color: #0f172a;
+}
+
+.tx-banner-sub {
+  font-size: 0.75rem;
+  font-weight: 700;
+  color: #64748b;
+}
+
+.tx-btn.secondary {
+  border: 1px solid #e2e8f0;
+  background: #fff;
+  color: #0f172a;
+}
+
 .tx-filter {
   display: inline-flex;
   align-items: center;

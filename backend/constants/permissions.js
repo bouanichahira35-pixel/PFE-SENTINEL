@@ -26,6 +26,35 @@ const PERMISSIONS = Object.freeze({
   INVENTORY_MANAGE: 'inventory.manage',
 });
 
+// Labels/categories for Admin console (RBAC UI).
+const PERMISSION_META = Object.freeze({
+  [PERMISSIONS.PRODUCT_READ]: { label: 'Lire produits', area: 'produits' },
+  [PERMISSIONS.PRODUCT_CREATE]: { label: 'Créer produits', area: 'produits' },
+  [PERMISSIONS.PRODUCT_UPDATE]: { label: 'Modifier produits', area: 'produits' },
+  [PERMISSIONS.PRODUCT_VALIDATE]: { label: 'Valider produits', area: 'produits' },
+  [PERMISSIONS.PRODUCT_DELETE]: { label: 'Supprimer produits', area: 'produits' },
+  [PERMISSIONS.CATEGORY_MANAGE]: { label: 'Gérer catégories', area: 'catalogue' },
+  [PERMISSIONS.STOCK_ENTRY_CREATE]: { label: 'Créer entrées stock', area: 'stock' },
+  [PERMISSIONS.STOCK_EXIT_CREATE]: { label: 'Créer sorties stock', area: 'stock' },
+  [PERMISSIONS.STOCK_ENTRY_UPDATE]: { label: 'Modifier entrées stock', area: 'stock' },
+  [PERMISSIONS.STOCK_EXIT_UPDATE]: { label: 'Modifier sorties stock', area: 'stock' },
+  [PERMISSIONS.STOCK_ENTRY_CANCEL]: { label: 'Annuler entrées stock', area: 'stock' },
+  [PERMISSIONS.STOCK_EXIT_CANCEL]: { label: 'Annuler sorties stock', area: 'stock' },
+  [PERMISSIONS.ATTACHMENT_UPLOAD]: { label: 'Importer fichiers', area: 'fichiers' },
+  [PERMISSIONS.REQUEST_CREATE]: { label: 'Créer demandes', area: 'demandes' },
+  [PERMISSIONS.REQUEST_READ_OWN]: { label: 'Lire ses demandes', area: 'demandes' },
+  [PERMISSIONS.REQUEST_READ_ALL]: { label: 'Lire toutes demandes', area: 'demandes' },
+  [PERMISSIONS.REQUEST_VALIDATE]: { label: 'Valider/Rejeter demandes', area: 'demandes' },
+  [PERMISSIONS.SUPPLIER_MANAGE]: { label: 'Gérer fournisseurs', area: 'fournisseurs' },
+  [PERMISSIONS.PURCHASE_ORDER_MANAGE]: { label: 'Gérer commandes fournisseurs', area: 'fournisseurs' },
+  [PERMISSIONS.HISTORY_READ]: { label: 'Consulter historique', area: 'audit' },
+  [PERMISSIONS.SECURITY_AUDIT_READ]: { label: 'Consulter audit sécurité', area: 'admin_it' },
+  [PERMISSIONS.USER_MANAGE]: { label: 'Gérer utilisateurs', area: 'admin_it' },
+  [PERMISSIONS.SESSION_MONITOR]: { label: 'Surveiller sessions', area: 'admin_it' },
+  [PERMISSIONS.SESSION_REVOKE]: { label: 'Révoquer sessions', area: 'admin_it' },
+  [PERMISSIONS.INVENTORY_MANAGE]: { label: 'Gérer inventaires', area: 'inventaire' },
+});
+
 const ROLE_PERMISSIONS = Object.freeze({
   demandeur: new Set([
     PERMISSIONS.PRODUCT_READ,
@@ -68,40 +97,17 @@ const ROLE_PERMISSIONS = Object.freeze({
     PERMISSIONS.REQUEST_READ_ALL,
     PERMISSIONS.REQUEST_VALIDATE,
     PERMISSIONS.HISTORY_READ,
-    PERMISSIONS.SECURITY_AUDIT_READ,
-    PERMISSIONS.USER_MANAGE,
-    PERMISSIONS.SESSION_MONITOR,
-    PERMISSIONS.SESSION_REVOKE,
     PERMISSIONS.SUPPLIER_MANAGE,
     PERMISSIONS.PURCHASE_ORDER_MANAGE,
     PERMISSIONS.INVENTORY_MANAGE,
   ]),
   admin: new Set([
-    // Admin (informatique) : gouvernance + supervision + gestion des acteurs.
-    // Par simplicité, on lui donne l'ensemble des permissions du responsable.
-    PERMISSIONS.PRODUCT_READ,
-    PERMISSIONS.PRODUCT_CREATE,
-    PERMISSIONS.PRODUCT_UPDATE,
-    PERMISSIONS.PRODUCT_VALIDATE,
-    PERMISSIONS.PRODUCT_DELETE,
-    PERMISSIONS.CATEGORY_MANAGE,
-    PERMISSIONS.STOCK_ENTRY_CREATE,
-    PERMISSIONS.STOCK_EXIT_CREATE,
-    PERMISSIONS.STOCK_ENTRY_UPDATE,
-    PERMISSIONS.STOCK_EXIT_UPDATE,
-    PERMISSIONS.STOCK_ENTRY_CANCEL,
-    PERMISSIONS.STOCK_EXIT_CANCEL,
-    PERMISSIONS.ATTACHMENT_UPLOAD,
-    PERMISSIONS.REQUEST_READ_ALL,
-    PERMISSIONS.REQUEST_VALIDATE,
-    PERMISSIONS.HISTORY_READ,
+    // Admin (informatique) : role purement technique.
+    // Il ne doit pas intervenir dans les flux metier (stock/produits/demandes).
     PERMISSIONS.SECURITY_AUDIT_READ,
     PERMISSIONS.USER_MANAGE,
     PERMISSIONS.SESSION_MONITOR,
     PERMISSIONS.SESSION_REVOKE,
-    PERMISSIONS.SUPPLIER_MANAGE,
-    PERMISSIONS.PURCHASE_ORDER_MANAGE,
-    PERMISSIONS.INVENTORY_MANAGE,
   ]),
 });
 
@@ -114,4 +120,5 @@ module.exports = {
   PERMISSIONS,
   ROLE_PERMISSIONS,
   hasPermission,
+  PERMISSION_META,
 };

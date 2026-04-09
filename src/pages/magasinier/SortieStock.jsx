@@ -22,6 +22,7 @@ import LoadingSpinner from '../../components/shared/LoadingSpinner';
 import InlineQrScanner from '../../components/shared/InlineQrScanner';
 import { useToast } from '../../components/shared/Toast';
 import { get, patch, post, uploadFile } from '../../services/api';
+import { asPositiveInt, isSafeText, sanitizeText } from '../../utils/formGuards';
 import './EntreeStock.css';
 
 const SortieStock = ({ userName, onLogout }) => {
@@ -362,16 +363,17 @@ const SortieStock = ({ userName, onLogout }) => {
 
     if (!productInfo) newErrors.product = 'Produit requis';
 
-    if (!formData.quantite || Number.parseInt(formData.quantite, 10) < 1) {
+    const qty = asPositiveInt(formData.quantite, { min: 1, max: 1000000000 });
+    if (!Number.isFinite(qty)) {
       newErrors.quantite = 'Quantite valide requise';
     }
 
-    if (!hasInternalBond && !formData.directionLaboratoire.trim()) {
-      newErrors.directionLaboratoire = 'Direction / laboratoire requis';
+    if (!hasInternalBond && !isSafeText(formData.directionLaboratoire, { min: 2, max: 80 })) {
+      newErrors.directionLaboratoire = 'Direction / laboratoire requis (2-80, sans < >)';
     }
 
-    if (!hasInternalBond && !formData.beneficiaire.trim()) {
-      newErrors.beneficiaire = 'Beneficiaire requis';
+    if (!hasInternalBond && !isSafeText(formData.beneficiaire, { min: 2, max: 80 })) {
+      newErrors.beneficiaire = 'Beneficiaire requis (2-80, sans < >)';
     }
 
     if (hasInternalBond && bondResolution?.already_used) {
@@ -384,6 +386,10 @@ const SortieStock = ({ userName, onLogout }) => {
       && String(formData.lotQrCode).trim() !== String(nextFifoLot.qr_code_value).trim()
     ) {
       newErrors.lotQrCode = 'Le QR scanne ne correspond pas au premier lot FIFO';
+    }
+
+    if (formData.commentaire && !isSafeText(formData.commentaire, { min: 0, max: 600 })) {
+      newErrors.commentaire = 'Commentaire trop long (max 600, sans < >)';
     }
 
     setErrors(newErrors);
@@ -431,18 +437,18 @@ const SortieStock = ({ userName, onLogout }) => {
 
       const createdExit = await post('/stock/exits', {
         product: productInfo.id,
-        quantity: Number(formData.quantite),
+        quantity: Number(asPositiveInt(formData.quantite, { min: 1, max: 1000000000 })),
         submission_duration_ms: Math.max(0, Date.now() - formOpenedAtRef.current),
         date_exit: formData.dateSortie,
-        withdrawal_paper_number: formData.numeroBonPrelevementPapier || undefined,
-        direction_laboratory: formData.directionLaboratoire,
-        beneficiary: formData.beneficiaire,
-        scanned_lot_qr: formData.lotQrCode || undefined,
+        withdrawal_paper_number: sanitizeText(formData.numeroBonPrelevementPapier, { maxLen: 60 }) || undefined,
+        direction_laboratory: sanitizeText(formData.directionLaboratoire, { maxLen: 80 }) || undefined,
+        beneficiary: sanitizeText(formData.beneficiaire, { maxLen: 80 }) || undefined,
+        scanned_lot_qr: sanitizeText(formData.lotQrCode, { maxLen: 220 }) || undefined,
         internal_bond_token: internalBondQr || undefined,
         exit_mode: internalBondQr ? 'internal_bond' : (formData.lotQrCode ? 'fifo_qr' : 'manual'),
         demandeur: demandeInfo?.demandeurId || undefined,
         request: demandeInfo?.id || undefined,
-        note: formData.commentaire || undefined,
+        note: sanitizeText(formData.commentaire, { maxLen: 600 }) || undefined,
         attachments,
       });
 
@@ -450,7 +456,7 @@ const SortieStock = ({ userName, onLogout }) => {
         try {
           await patch(`/requests/${demandeInfo.id}/serve`, {
             stock_exit_id: createdExit?._id,
-            note: formData.commentaire || undefined,
+            note: sanitizeText(formData.commentaire, { maxLen: 600 }) || undefined,
           });
         } catch {
           toast.warning("Sortie creee, mais la demande n'a pas ete cloturee automatiquement");
@@ -518,6 +524,7 @@ const SortieStock = ({ userName, onLogout }) => {
                         <input
                           id="codeBarres"
                           type="text"
+                          maxLength={80}
                           value={formData.codeBarres}
                           onChange={(e) => setFormData({ ...formData, codeBarres: e.target.value })}
                           placeholder="Scanner ou saisir le code"
@@ -580,6 +587,7 @@ const SortieStock = ({ userName, onLogout }) => {
                       <input
                         id="numeroBonPrelevementPapier"
                         type="text"
+                        maxLength={80}
                         value={formData.numeroBonPrelevementPapier}
                         onChange={(e) => setFormData({ ...formData, numeroBonPrelevementPapier: e.target.value })}
                         placeholder="Ex: BP-CHIM-2026-001"
@@ -593,6 +601,7 @@ const SortieStock = ({ userName, onLogout }) => {
                       <input
                         id="lotQrCode"
                         type="text"
+                        maxLength={180}
                         value={formData.lotQrCode}
                         onChange={(e) => setFormData({ ...formData, lotQrCode: e.target.value })}
                         placeholder="Scanner le QR du premier lot"
@@ -642,6 +651,7 @@ const SortieStock = ({ userName, onLogout }) => {
                         <input
                           id="internalBondQr"
                           type="text"
+                          maxLength={4000}
                           value={formData.internalBondQr}
                           onChange={(e) => {
                             const value = e.target.value;
@@ -729,6 +739,7 @@ const SortieStock = ({ userName, onLogout }) => {
                         type="number"
                         min="1"
                         max={productInfo?.quantite || 9999}
+                        step="1"
                         value={formData.quantite}
                         onChange={(e) => setFormData({ ...formData, quantite: e.target.value })}
                         placeholder="0"
@@ -755,6 +766,7 @@ const SortieStock = ({ userName, onLogout }) => {
                       <input
                         id="directionLaboratoire"
                         type="text"
+                        maxLength={80}
                         value={formData.directionLaboratoire}
                         onChange={(e) => setFormData({ ...formData, directionLaboratoire: e.target.value })}
                         placeholder="Ex: DSP"
@@ -777,6 +789,7 @@ const SortieStock = ({ userName, onLogout }) => {
                     <input
                       id="beneficiaire"
                       type="text"
+                      maxLength={80}
                       value={formData.beneficiaire}
                       onChange={(e) => setFormData({ ...formData, beneficiaire: e.target.value })}
                       placeholder="Nom de la personne"
@@ -794,6 +807,7 @@ const SortieStock = ({ userName, onLogout }) => {
                     <label htmlFor="commentaire">Commentaire (optionnel)</label>
                     <textarea
                       id="commentaire"
+                      maxLength={600}
                       value={formData.commentaire}
                       onChange={(e) => setFormData({ ...formData, commentaire: e.target.value })}
                       placeholder="Informations supplementaires..."

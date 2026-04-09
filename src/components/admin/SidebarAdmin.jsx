@@ -3,6 +3,9 @@ import {
   LayoutDashboard,
   Users,
   Bot,
+  Monitor,
+  Shield,
+  ShieldAlert,
   Settings,
   ChevronLeft,
   ChevronRight,
@@ -29,13 +32,19 @@ const SidebarAdmin = ({ collapsed, onToggle, onLogout, userName }) => {
       dashboard: 'Console',
       users: 'Utilisateurs',
       ia: 'Supervision IA',
-      settings: 'Parametres',
-      logout: 'Deconnexion',
+      sessions: 'Sessions',
+      rbac: 'Rôles & permissions',
+      security: 'Sécurité',
+      settings: 'Paramètres',
+      logout: 'Déconnexion',
     },
     en: {
       dashboard: 'Console',
       users: 'Users',
       ia: 'AI Supervision',
+      sessions: 'Sessions',
+      rbac: 'Roles & permissions',
+      security: 'Security',
       settings: 'Settings',
       logout: 'Logout',
     },
@@ -43,8 +52,11 @@ const SidebarAdmin = ({ collapsed, onToggle, onLogout, userName }) => {
       dashboard: 'Console',
       users: 'Utilisateurs',
       ia: 'Supervision IA',
-      settings: 'Parametres',
-      logout: 'Deconnexion',
+      sessions: 'Sessions',
+      rbac: 'Rôles & permissions',
+      security: 'Sécurité',
+      settings: 'Paramètres',
+      logout: 'Déconnexion',
     },
   }[language] || {};
 
@@ -52,6 +64,9 @@ const SidebarAdmin = ({ collapsed, onToggle, onLogout, userName }) => {
     { icon: LayoutDashboard, label: labels.dashboard, path: '/admin' },
     { icon: Users, label: labels.users, path: '/admin/utilisateurs' },
     { icon: Bot, label: labels.ia, path: '/admin/ia' },
+    { icon: Monitor, label: labels.sessions, path: '/admin/sessions' },
+    { icon: Shield, label: labels.rbac, path: '/admin/rbac' },
+    { icon: ShieldAlert, label: labels.security || 'Sécurité', path: '/admin/securite' },
     { icon: Settings, label: labels.settings, path: '/admin/parametres' },
   ];
 
@@ -107,4 +122,3 @@ const SidebarAdmin = ({ collapsed, onToggle, onLogout, userName }) => {
 };
 
 export default SidebarAdmin;
-

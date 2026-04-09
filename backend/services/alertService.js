@@ -3,6 +3,7 @@ const Notification = require('../models/Notification');
 const AIAlert = require('../models/AIAlert');
 const StockLot = require('../models/StockLot');
 const Product = require('../models/Product');
+const History = require('../models/History');
 const { enqueueMail } = require('./mailQueueService');
 const { getUserPreferences, canSendNotificationEmail } = require('./userPreferencesService');
 const { logSecurityEvent } = require('./securityAuditService');
@@ -192,7 +193,95 @@ async function rebuildAiAlerts({ max_products = 300 } = {}) {
   return { ok: true, scanned_products: scanned, created_alerts: createdCount };
 }
 
+async function buildHistoryAnomalyAlerts({
+  window_days = 90,
+  max_total = 25,
+  min_samples = 5,
+} = {}) {
+  const since = new Date(Date.now() - Math.max(1, Number(window_days || 90)) * 24 * 60 * 60 * 1000);
+  const events = await History.find({
+    action_type: 'exit',
+    product: { $ne: null },
+    quantity: { $gt: 0 },
+    date_action: { $gte: since },
+  })
+    .select('product quantity date_action')
+    .sort({ date_action: -1 })
+    .lean();
+
+  const eventsByProduct = new Map();
+  for (const e of events) {
+    const pid = String(e.product || '');
+    if (!pid) continue;
+    if (!eventsByProduct.has(pid)) eventsByProduct.set(pid, []);
+    eventsByProduct.get(pid).push(e);
+  }
+
+  let createdCount = 0;
+  let scanned = 0;
+  const candidates = [];
+
+  for (const [productId, rows] of eventsByProduct.entries()) {
+    scanned += 1;
+    if (rows.length < min_samples) continue;
+    const values = rows.map((x) => Number(x.quantity || 0));
+    const mean = values.reduce((a, b) => a + b, 0) / values.length;
+    const variance = values.reduce((acc, v) => acc + ((v - mean) ** 2), 0) / values.length;
+    const std = Math.sqrt(variance);
+    if (!Number.isFinite(std) || std === 0) continue;
+    const threshold = mean + (2 * std);
+
+    const anomaly = rows.find((x) => Number(x.quantity || 0) > threshold);
+    if (!anomaly) continue;
+    candidates.push({
+      productId,
+      quantity: Number(anomaly.quantity || 0),
+      date_action: anomaly.date_action,
+      threshold: Number(threshold.toFixed(2)),
+      mean: Number(mean.toFixed(2)),
+      std: Number(std.toFixed(2)),
+    });
+  }
+
+  const limited = candidates
+    .sort((a, b) => new Date(b.date_action || 0) - new Date(a.date_action || 0))
+    .slice(0, Math.max(1, Number(max_total || 25)));
+
+  for (const row of limited) {
+    const product = await Product.findById(row.productId).select('name').lean();
+    const productName = product?.name || 'Produit';
+    const riskLevel = row.quantity > row.threshold * 1.5 ? 'high' : 'medium';
+    const message = `${productName}: sortie anormale detectee (${row.quantity} u), seuil statistique ${row.threshold}.`;
+
+    const result = await createAiAlertIfMissing({
+      productId: row.productId,
+      alert_type: 'anomaly',
+      risk_level: riskLevel,
+      message,
+    });
+    if (result.created) {
+      createdCount += 1;
+      await createNotificationsForStockTeams(
+        {
+          title: 'Anomalie de sortie detectee',
+          message,
+          type: riskLevel === 'high' ? 'alert' : 'warning',
+        }
+      );
+    }
+  }
+
+  return {
+    ok: true,
+    scanned_products: scanned,
+    total_candidates: limited.length,
+    created_alerts: createdCount,
+  };
+}
+
 module.exports = {
   evaluateProductAlerts,
   rebuildAiAlerts,
+  createAiAlertIfMissing,
+  buildHistoryAnomalyAlerts,
 };

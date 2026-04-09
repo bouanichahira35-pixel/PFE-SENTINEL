@@ -7,6 +7,7 @@ import ProtectedPage from '../../components/shared/ProtectedPage';
 import LoadingSpinner from '../../components/shared/LoadingSpinner';
 import { useToast } from '../../components/shared/Toast';
 import { get, patch, post } from '../../services/api';
+import { normalizeRequestStatus } from '../../utils/requestStatus';
 import './InboxMag.css';
 
 function priorityPill(priority) {
@@ -23,6 +24,10 @@ const InboxMag = ({ userName, onLogout }) => {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(() => (typeof window !== 'undefined' ? window.innerWidth <= 768 : false));
   const [isLoading, setIsLoading] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [incidentModalOpen, setIncidentModalOpen] = useState(false);
+  const [incidentTarget, setIncidentTarget] = useState(null);
+  const [incidentSeverity, setIncidentSeverity] = useState('warning');
+  const [incidentMessage, setIncidentMessage] = useState('');
 
   const [inbox, setInbox] = useState(() => ({
     decisions: [],
@@ -74,7 +79,7 @@ const InboxMag = ({ userName, onLogout }) => {
           demandeur: reqItem.demandeur,
           direction: reqItem.direction_laboratory,
           beneficiaire: reqItem.demandeur,
-          statut: reqItem.status,
+          statut: normalizeRequestStatus(reqItem.status),
         },
       },
     });
@@ -109,6 +114,37 @@ const InboxMag = ({ userName, onLogout }) => {
       setIsSubmitting(false);
     }
   }, [loadInbox, toast]);
+
+  const openIncidentModal = useCallback((po) => {
+    if (!po?.id) return;
+    setIncidentTarget(po);
+    setIncidentSeverity('warning');
+    setIncidentMessage('');
+    setIncidentModalOpen(true);
+  }, []);
+
+  const submitIncident = useCallback(async () => {
+    if (!incidentTarget?.id) return;
+    if (!String(incidentMessage || '').trim()) {
+      toast.error('Message obligatoire');
+      return;
+    }
+    setIsSubmitting(true);
+    try {
+      await post(`/purchase-orders/${encodeURIComponent(incidentTarget.id)}/incidents`, {
+        severity: incidentSeverity,
+        message: incidentMessage,
+      });
+      toast.success('Litige signale au responsable');
+      setIncidentModalOpen(false);
+      setIncidentTarget(null);
+      await loadInbox();
+    } catch (err) {
+      toast.error(err.message || 'Echec creation litige');
+    } finally {
+      setIsSubmitting(false);
+    }
+  }, [incidentMessage, incidentSeverity, incidentTarget, loadInbox, toast]);
 
   const markDecisionDone = useCallback(async (decisionId) => {
     const did = String(decisionId || '').trim();
@@ -290,12 +326,56 @@ const InboxMag = ({ userName, onLogout }) => {
                             <button className="inboxmag-btn ok" type="button" onClick={() => receivePurchaseOrder(po.id)} disabled={isSubmitting}>
                               <Truck size={15} /> Receptionner
                             </button>
+                            <button className="inboxmag-btn" type="button" onClick={() => openIncidentModal(po)} disabled={isSubmitting}>
+                              <AlertTriangle size={15} /> Signaler litige
+                            </button>
                           </div>
                         </div>
                       ))}
                     </div>
                   )}
                 </section>
+              </div>
+            )}
+
+            {incidentModalOpen && (
+              <div className="inboxmag-modal-backdrop" role="dialog" aria-modal="true">
+                <div className="inboxmag-modal">
+                  <div className="inboxmag-modal-title">
+                    <strong>Litige / Non-conformite</strong>
+                    <span className="inboxmag-muted">
+                      {(incidentTarget?.supplier_name || incidentTarget?.supplier_name === '' ? incidentTarget.supplier_name : incidentTarget?.supplierName) || ''}
+                      {incidentTarget?.id ? ` • PO-${String(incidentTarget.id).slice(-6).toUpperCase()}` : ''}
+                    </span>
+                  </div>
+                  <div className="inboxmag-modal-grid">
+                    <label className="inboxmag-field">
+                      <span>Gravite</span>
+                      <select value={incidentSeverity} onChange={(e) => setIncidentSeverity(e.target.value)}>
+                        <option value="info">Info</option>
+                        <option value="warning">Warning</option>
+                        <option value="critical">Critique</option>
+                      </select>
+                    </label>
+                    <label className="inboxmag-field" style={{ gridColumn: '1 / -1' }}>
+                      <span>Message</span>
+                      <textarea
+                        rows="4"
+                        value={incidentMessage}
+                        onChange={(e) => setIncidentMessage(e.target.value)}
+                        placeholder="Ex: colis endommage / quantite non conforme / produit manquant..."
+                      />
+                    </label>
+                  </div>
+                  <div className="inboxmag-modal-actions">
+                    <button className="inboxmag-btn" type="button" onClick={() => setIncidentModalOpen(false)} disabled={isSubmitting}>
+                      Annuler
+                    </button>
+                    <button className="inboxmag-btn primary" type="button" onClick={submitIncident} disabled={isSubmitting}>
+                      Envoyer au responsable
+                    </button>
+                  </div>
+                </div>
               </div>
             )}
           </main>

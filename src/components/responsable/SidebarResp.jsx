@@ -2,9 +2,9 @@ import { Link, useLocation } from 'react-router-dom';
 import {
   LayoutDashboard,
   ShieldAlert,
-  Activity,
   History,
   ClipboardCheck,
+  Truck,
   Bot,
   MessageCircle,
   Settings,
@@ -32,7 +32,6 @@ const SidebarResp = ({ collapsed, onToggle, onLogout, userName }) => {
     fr: {
       dashboard: 'Dashboard',
       pilotage: 'Pilotage',
-      flux: 'Flux',
       inventaires: 'Inventaires',
       transactions: 'Transactions',
       chatbot: 'Assistant IA',
@@ -43,7 +42,6 @@ const SidebarResp = ({ collapsed, onToggle, onLogout, userName }) => {
     en: {
       dashboard: 'Dashboard',
       pilotage: 'Control Center',
-      flux: 'Feed',
       inventaires: 'Inventory',
       transactions: 'Transactions',
       chatbot: 'AI Assistant',
@@ -54,7 +52,6 @@ const SidebarResp = ({ collapsed, onToggle, onLogout, userName }) => {
     ar: {
       dashboard: 'Dashboard',
       pilotage: 'Pilotage',
-      flux: 'Flux',
       inventaires: 'Inventaires',
       transactions: 'Transactions',
       chatbot: 'Assistant IA',
@@ -67,9 +64,9 @@ const SidebarResp = ({ collapsed, onToggle, onLogout, userName }) => {
   const menuItems = [
     { icon: LayoutDashboard, label: labels.dashboard, path: '/responsable' },
     { icon: ShieldAlert, label: labels.pilotage, path: '/responsable/pilotage' },
-    { icon: Activity, label: labels.flux || 'Flux', path: '/responsable/flux' },
     { icon: ClipboardCheck, label: labels.inventaires || 'Inventaires', path: '/responsable/inventaires' },
     { icon: History, label: labels.transactions, path: '/responsable/transactions' },
+    { icon: Truck, label: ({ fr: 'Fournisseurs', en: 'Suppliers', ar: 'Fournisseurs' }[language] || 'Fournisseurs'), path: '/responsable/fournisseurs' },
     { icon: Bot, label: labels.chatbot, path: '/responsable/chatbot' },
     { icon: MessageCircle, label: labels.chat, path: '/responsable/chat' },
     { icon: Settings, label: labels.parametres, path: '/responsable/parametres' },

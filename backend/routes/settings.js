@@ -6,6 +6,7 @@ const Product = require('../models/Product');
 const History = require('../models/History');
 const requireAuth = require('../middlewares/requireAuth'); 
 const { enqueueMail } = require('../services/mailQueueService'); 
+const { isSafeText, normalizeEmail, isValidEmail, normalizePhone, isValidPhone } = require('../utils/validation');
 
 const BCRYPT_SALT_ROUNDS = Number(process.env.BCRYPT_SALT_ROUNDS || 12);
 const USER_PREFS_DEFAULT = Object.freeze({
@@ -69,7 +70,7 @@ router.use(requireAuth);
 
 router.get('/me', async (req, res) => {
   try {
-    const user = await User.findById(req.user.id).select('username email telephone role image_profile status').lean();
+    const user = await User.findById(req.user.id).select('username email telephone role image_profile status service_direction demandeur_profile').lean();
     if (!user) return res.status(404).json({ error: 'Utilisateur introuvable' });
 
     const preferences = await getUserPreferences(req.user.id);
@@ -86,21 +87,29 @@ router.patch('/me/profile', async (req, res) => {
 
     if (req.body.username !== undefined) { 
       const username = String(req.body.username || '').trim(); 
-      if (!username) return res.status(400).json({ error: 'username invalide' }); 
+      if (!username || !isSafeText(username, { min: 2, max: 60 })) return res.status(400).json({ error: 'username invalide' }); 
       user.username = username; 
     } 
     if (req.body.email !== undefined) { 
-      const email = String(req.body.email || '').trim().toLowerCase(); 
-      // Keep existing email if front sends an empty value. 
-      if (email) user.email = email; 
+      const email = normalizeEmail(req.body.email);
+      // Keep existing email if front sends an empty value.
+      if (email) {
+        if (!isValidEmail(email)) return res.status(400).json({ error: 'email invalide' });
+        user.email = email;
+      }
     } 
     if (req.body.telephone !== undefined) { 
-      const telephone = String(req.body.telephone || '').trim(); 
-      // Keep existing phone if front sends an empty value. 
-      if (telephone) user.telephone = telephone; 
+      const telephone = normalizePhone(req.body.telephone);
+      // Keep existing phone if front sends an empty value.
+      if (telephone) {
+        if (!isValidPhone(telephone)) return res.status(400).json({ error: 'telephone invalide' });
+        user.telephone = telephone;
+      }
     } 
     if (req.body.image_profile !== undefined) { 
-      user.image_profile = req.body.image_profile ? String(req.body.image_profile).trim() : undefined; 
+      const next = req.body.image_profile ? String(req.body.image_profile).trim() : '';
+      if (next && !isSafeText(next, { min: 0, max: 400 })) return res.status(400).json({ error: 'image_profile invalide' });
+      user.image_profile = next || undefined;
     } 
 
     await user.save();
@@ -114,6 +123,8 @@ router.patch('/me/profile', async (req, res) => {
         role: user.role,
         image_profile: user.image_profile || null,
         status: user.status,
+        service_direction: user.service_direction || '',
+        demandeur_profile: user.demandeur_profile || 'bureautique',
       },
     });
   } catch (err) {
@@ -222,7 +233,7 @@ router.get('/stock-rules/impact', async (req, res) => {
     if (req.user.role !== 'responsable') return res.status(403).json({ error: 'Acces refuse' });
     const cfg = await getAppSettingValue('stock_rules_config', STOCK_RULES_DEFAULT);
 
-    const approvedFilter = { validation_status: 'approved' };
+    const approvedFilter = { lifecycle_status: 'active' };
     const [totalApproved, noThresholdCount, ruptureCount] = await Promise.all([
       Product.countDocuments(approvedFilter),
       Product.countDocuments({ ...approvedFilter, seuil_minimum: 0 }),
@@ -280,7 +291,7 @@ router.post('/stock-rules/apply-default-threshold', async (req, res) => {
       return res.status(400).json({ error: 'seuilAlerte invalide' });
     }
 
-    const filter = { validation_status: 'approved', seuil_minimum: 0 };
+    const filter = { lifecycle_status: 'active', seuil_minimum: 0 };
     const r = await Product.updateMany(filter, { $set: { seuil_minimum: seuil } });
 
     await History.create({
@@ -326,7 +337,10 @@ router.patch('/stock-rules/config', async (req, res) => {
 
 router.get('/ai/config', async (req, res) => {
   try {
-    if (req.user.role !== 'admin') return res.status(403).json({ error: 'Acces refuse' });
+    // Read-only can be exposed to Responsable for transparency.
+    if (req.user.role !== 'admin' && req.user.role !== 'responsable') {
+      return res.status(403).json({ error: 'Acces refuse' });
+    }
     const value = await getAppSettingValue('ai_config', AI_SETTINGS_DEFAULT);
     return res.json({ value });
   } catch (err) {
@@ -336,7 +350,7 @@ router.get('/ai/config', async (req, res) => {
 
 router.patch('/ai/config', async (req, res) => {
   try {
-    if (req.user.role !== 'admin') return res.status(403).json({ error: 'Acces refuse' });
+    if (req.user.role !== 'admin' && req.user.role !== 'responsable') return res.status(403).json({ error: 'Acces refuse' });
 
     const current = await getAppSettingValue('ai_config', AI_SETTINGS_DEFAULT);
 

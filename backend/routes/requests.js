@@ -1,6 +1,7 @@
 const router = require('express').Router();
 const Request = require('../models/Request');
 const Product = require('../models/Product');
+const Category = require('../models/Category');
 const StockExit = require('../models/StockExit');
 const Notification = require('../models/Notification');
 const User = require('../models/User');
@@ -14,19 +15,9 @@ const { logSecurityEvent } = require('../services/securityAuditService');
 const { enqueueMail } = require('../services/mailQueueService');
 const { getUserPreferences, canSendNotificationEmail } = require('../services/userPreferencesService');
 const { requestStatusTemplate } = require('../services/mailTemplates');
-const { asPositiveNumber, isValidObjectIdLike, asOptionalString } = require('../utils/validation');
+const { asPositiveNumber, isValidObjectIdLike, asOptionalString, isSafeText } = require('../utils/validation');
+const { normalizeRequestStatus, dbStatusFilter, LEGACY_REQUEST_STATUS_MAP } = require('../utils/requestStatus');
 const SAFE_USER_FIELDS = 'username email role status telephone';
-
-const LEGACY_STATUS_MAP = Object.freeze({
-  accepted: 'validated',
-  refused: 'rejected',
-});
-
-function normalizeRequestStatus(status) {
-  const key = String(status || '').trim().toLowerCase();
-  if (!key) return 'pending';
-  return LEGACY_STATUS_MAP[key] || key;
-}
 
 function statusLabel(status) {
   const st = normalizeRequestStatus(status);
@@ -44,7 +35,7 @@ function statusLabel(status) {
 
 async function canonicalizeLegacyStatusIfNeeded(reqDoc, session) {
   const current = String(reqDoc?.status || '').trim().toLowerCase();
-  const next = LEGACY_STATUS_MAP[current];
+  const next = LEGACY_REQUEST_STATUS_MAP[current];
   if (!next) return;
   reqDoc.status = next;
   if (session) await reqDoc.save({ session });
@@ -252,7 +243,7 @@ router.get('/', requireAuth, async (req, res) => {
 
     const rawStatus = asOptionalString(req.query?.status);
     if (rawStatus && rawStatus !== 'all') {
-      filter.status = normalizeRequestStatus(rawStatus);
+      Object.assign(filter, dbStatusFilter(rawStatus));
     }
 
     const items = await Request.find(filter)
@@ -283,14 +274,14 @@ router.post(
     }
 
     const directionLaboratory = asOptionalString(req.body.direction_laboratory);
-    if (!directionLaboratory) {
-      return res.status(400).json({ error: 'direction_laboratory obligatoire' });
+    if (!directionLaboratory || !isSafeText(directionLaboratory, { min: 2, max: 80 })) {
+      return res.status(400).json({ error: 'direction_laboratory obligatoire (2-80, sans < >)' });
     }
     // Security/business rule: beneficiary is always the demandeur account name.
     const beneficiary = req.user.username;
 
     const productDoc = await Product.findById(req.body.product)
-      .select('_id category validation_status lifecycle_status name code_product')
+      .select('_id category lifecycle_status name code_product')
       .lean();
     if (!productDoc) return res.status(404).json({ error: 'Produit introuvable' });
     if (String(productDoc.lifecycle_status || 'active') !== 'active') {
@@ -299,12 +290,9 @@ router.post(
 
     // Demandeurs: only approved products in allowed categories.
     if (req.user?.role === 'demandeur') {
-      if (String(productDoc.validation_status || '') !== 'approved') {
-        return res.status(409).json({ error: 'Produit non valide' });
-      }
       const profile = String(req.user?.demandeur_profile || 'bureautique');
       const allowedCategories = await Category.find({
-        $or: [{ audiences: { $size: 0 } }, { audiences: profile }],
+        $or: [{ audiences: { $exists: false } }, { audiences: { $size: 0 } }, { audiences: profile }],
       })
         .select('_id')
         .lean();
@@ -319,7 +307,14 @@ router.post(
       quantity_requested: quantityRequested,
       direction_laboratory: directionLaboratory,
       beneficiary,
-      note: asOptionalString(req.body.note),
+      note: (() => {
+        const note = asOptionalString(req.body.note);
+        if (!note) return undefined;
+        if (!isSafeText(note, { min: 0, max: 600 })) {
+          throw new Error('note invalide (max 600, sans < >)');
+        }
+        return note;
+      })(),
       demandeur: req.user.id,
       status: 'pending',
       date_request: new Date(),
@@ -396,7 +391,11 @@ router.patch(
 
       const statusBefore = reqDoc.status;
       reqDoc.status = status;
-      reqDoc.note = asOptionalString(req.body.note) || reqDoc.note;
+      const nextNote = asOptionalString(req.body.note);
+      if (nextNote && !isSafeText(nextNote, { min: 0, max: 600 })) {
+        throw new Error('note invalide (max 600, sans < >)');
+      }
+      reqDoc.note = nextNote || reqDoc.note;
       reqDoc.validated_at = new Date();
       reqDoc.validated_by = req.user.id;
       // Keep legacy fields filled to avoid breaking existing reporting.
@@ -478,7 +477,13 @@ router.patch(
       reqDoc.status = 'preparing';
       reqDoc.prepared_at = new Date();
       reqDoc.prepared_by = req.user.id;
-      reqDoc.note = asOptionalString(req.body.note) || reqDoc.note;
+      {
+        const nextNote = asOptionalString(req.body.note);
+        if (nextNote && !isSafeText(nextNote, { min: 0, max: 600 })) {
+          throw new Error('note invalide (max 600, sans < >)');
+        }
+        reqDoc.note = nextNote || reqDoc.note;
+      }
       // Keep legacy fields
       reqDoc.date_processing = reqDoc.prepared_at;
       reqDoc.processed_by = req.user.id;
@@ -577,7 +582,13 @@ router.patch(
       if (!reqDoc.receipt_token) {
         reqDoc.receipt_token = String(Math.floor(100000 + Math.random() * 900000)); // 6-digit
       }
-      reqDoc.note = asOptionalString(req.body.note) || reqDoc.note;
+      {
+        const nextNote = asOptionalString(req.body.note);
+        if (nextNote && !isSafeText(nextNote, { min: 0, max: 600 })) {
+          throw new Error('note invalide (max 600, sans < >)');
+        }
+        reqDoc.note = nextNote || reqDoc.note;
+      }
       reqDoc.stock_exit = linked._id;
       if (!reqDoc.prepared_at) {
         reqDoc.prepared_at = reqDoc.date_served;
@@ -655,7 +666,13 @@ router.patch(
       reqDoc.status = 'cancelled';
       reqDoc.cancelled_at = new Date();
       reqDoc.cancelled_by = req.user.id;
-      reqDoc.note = asOptionalString(req.body.note) || reqDoc.note;
+      {
+        const nextNote = asOptionalString(req.body.note);
+        if (nextNote && !isSafeText(nextNote, { min: 0, max: 600 })) {
+          throw new Error('note invalide (max 600, sans < >)');
+        }
+        reqDoc.note = nextNote || reqDoc.note;
+      }
 
       await reqDoc.save({ session });
       const historyPayload = {

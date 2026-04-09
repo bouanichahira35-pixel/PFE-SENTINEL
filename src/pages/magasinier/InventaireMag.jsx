@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { ClipboardCheck, Plus, Save, XCircle, CheckCircle2 } from 'lucide-react';
+import { ClipboardCheck, Plus, Save, XCircle, CheckCircle2, Info } from 'lucide-react';
 import SidebarMag from '../../components/magasinier/SidebarMag';
 import HeaderPage from '../../components/shared/HeaderPage';
 import LoadingSpinner from '../../components/shared/LoadingSpinner';
@@ -25,6 +25,7 @@ const InventaireMag = ({ userName, onLogout }) => {
   const [activeSession, setActiveSession] = useState(null);
   const [lines, setLines] = useState([]);
   const [summary, setSummary] = useState(null);
+  const [showHelp, setShowHelp] = useState(false);
 
   const [createTitle, setCreateTitle] = useState('');
   const [productQuery, setProductQuery] = useState('');
@@ -64,7 +65,6 @@ const InventaireMag = ({ userName, onLogout }) => {
     try {
       const items = await get('/products');
       const approved = (items || [])
-        .filter((p) => String(p?.validation_status || '').toLowerCase() === 'approved')
         .map((p) => ({ id: p._id, name: p.name || 'Produit', code: p.code_product || '-', stock: Number(p.quantity_current || 0) }))
         .sort((a, b) => String(a.name).localeCompare(String(b.name)));
       setProducts(approved);
@@ -174,6 +174,45 @@ const InventaireMag = ({ userName, onLogout }) => {
 
         <main className="main-content">
           {isLoading && <LoadingSpinner overlay text="Chargement..." />}
+
+          <section className="inv-help-card">
+            <div className="inv-help-head">
+              <div className="inv-help-title">
+                <Info size={16} />
+                <span>Aide inventaire</span>
+              </div>
+              <button className="inv-help-toggle" type="button" onClick={() => setShowHelp((p) => !p)}>
+                {showHelp ? 'Masquer' : 'Afficher'}
+              </button>
+            </div>
+            {showHelp && (
+              <div className="inv-help-body">
+                <div className="inv-help-block">
+                  <strong>Objectif</strong>
+                  <p>Comparer le stock système au stock réel pour corriger les écarts.</p>
+                </div>
+                <div className="inv-help-block">
+                  <strong>Types d’inventaire</strong>
+                  <ul>
+                    <li><strong>Annuel</strong> : comptage global à une date fixe (souvent fin d’exercice).</li>
+                    <li><strong>Tournant</strong> : comptage régulier par lots de références (sans arrêter l’activité).</li>
+                  </ul>
+                </div>
+                <div className="inv-help-block">
+                  <strong>Étapes terrain (magasinier)</strong>
+                  <ol>
+                    <li>Créer une session, puis sélectionner un produit.</li>
+                    <li>Compter la quantité réelle et l’enregistrer.</li>
+                    <li>Clôturer la session une fois le comptage terminé.</li>
+                  </ol>
+                </div>
+                <div className="inv-help-block">
+                  <strong>Calcul d’écart</strong>
+                  <p><code>Écart = Quantité comptée − Quantité système</code></p>
+                </div>
+              </div>
+            )}
+          </section>
 
           <div className="inv-mag-grid">
             <section className="inv-card">

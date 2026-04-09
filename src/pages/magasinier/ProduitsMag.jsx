@@ -4,12 +4,29 @@ import { Package, Plus, Eye, ArrowDownToLine, ArrowUpFromLine, ChevronLeft, Chev
 import SidebarMag from '../../components/magasinier/SidebarMag';
 import HeaderPage from '../../components/shared/HeaderPage';
 import LoadingSpinner from '../../components/shared/LoadingSpinner';
+import ProtectedImage from '../../components/shared/ProtectedImage';
 import { useToast } from '../../components/shared/Toast';
 import { get } from '../../services/api';
 import { useUiLanguage } from '../../utils/uiLanguage';
 import useIsMobile from '../../hooks/useIsMobile';
 import './ProduitsMag.css';
 const ITEMS_PER_PAGE = 8;
+
+function slugify(value) {
+  return String(value || '')
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/(^-|-$)/g, '');
+}
+
+function resolveProductImage(product) {
+  if (product?.image) return product.image;
+  const categorySlug = slugify(product?.categorie || '');
+  if (categorySlug) return `/catalogue/${categorySlug}.svg`;
+  return '/catalogue/default.svg';
+}
 
 const ProduitsMag = ({ userName, onLogout }) => {
   const lang = useUiLanguage();
@@ -23,6 +40,7 @@ const ProduitsMag = ({ userName, onLogout }) => {
   const [currentPage, setCurrentPage] = useState(1);
   const [isLoading, setIsLoading] = useState(false);
   const [products, setProducts] = useState([]);
+  const [previewImage, setPreviewImage] = useState(null);
   const i18n = {
     fr: {
       title: 'Gestion des Produits',
@@ -134,6 +152,7 @@ const ProduitsMag = ({ userName, onLogout }) => {
         quantite: Number(p.quantity_current || 0),
         seuilMin: Number(p.seuil_minimum || 0),
         validationStatus: p.validation_status || 'pending',
+        image: p.image_product || '',
         unite: p.unite || 'Unite',
       }));
       setProducts(mapped);
@@ -322,9 +341,25 @@ const ProduitsMag = ({ userName, onLogout }) => {
                       return (
                         <div key={product.id} className="mobile-card">
                           <div className="mobile-card-header">
-                            <div>
-                              <h3 className="mobile-card-title">{product.nom}</h3>
-                              <div className="mobile-card-subtitle">{product.code}</div>
+                            <div className="mobile-card-title-wrap">
+                              <button
+                                type="button"
+                                className="thumb-button"
+                                onClick={() => setPreviewImage({ src: resolveProductImage(product), name: product.nom })}
+                                aria-label={`Voir image ${product.nom}`}
+                              >
+                                <ProtectedImage
+                                  filePath={resolveProductImage(product)}
+                                  alt={product.nom}
+                                  className="mobile-product-thumb"
+                                  fallbackText=""
+                                  style={{ width: 36, height: 36, borderRadius: 12, objectFit: 'cover' }}
+                                />
+                              </button>
+                              <div>
+                                <h3 className="mobile-card-title">{product.nom}</h3>
+                                <div className="mobile-card-subtitle">{product.code}</div>
+                              </div>
                             </div>
                             <span className={`status-badge ${status}`}>{statusLabel}</span>
                           </div>
@@ -395,7 +430,20 @@ const ProduitsMag = ({ userName, onLogout }) => {
                         <tr key={product.id} style={{ animationDelay: `${index * 30}ms` }}>
                           <td className="code-cell">{product.code}</td>
                           <td className="product-cell">
-                            <Package size={16} className="product-icon" />
+                            <button
+                              type="button"
+                              className="thumb-button"
+                              onClick={() => setPreviewImage({ src: resolveProductImage(product), name: product.nom })}
+                              aria-label={`Voir image ${product.nom}`}
+                            >
+                              <ProtectedImage
+                                filePath={resolveProductImage(product)}
+                                alt={product.nom}
+                                className="product-thumb"
+                                fallbackText=""
+                                style={{ width: 28, height: 28, borderRadius: 10, objectFit: 'cover' }}
+                              />
+                            </button>
                             {product.nom}
                           </td>
                           <td>
@@ -500,6 +548,28 @@ const ProduitsMag = ({ userName, onLogout }) => {
           </div>
         </main>
       </div>
+      {previewImage && (
+        <div
+          className="img-modal-backdrop"
+          onClick={() => setPreviewImage(null)}
+          role="dialog"
+          aria-modal="true"
+        >
+          <div className="img-modal" onClick={(e) => e.stopPropagation()}>
+            <div className="img-modal-title">{previewImage.name || 'Produit'}</div>
+            <ProtectedImage
+              filePath={previewImage.src}
+              alt={previewImage.name || 'Produit'}
+              className="img-modal-image"
+              fallbackText={previewImage.name || ''}
+              style={{ width: '100%', height: '100%', objectFit: 'contain' }}
+            />
+            <button type="button" className="img-modal-close" onClick={() => setPreviewImage(null)}>
+              Fermer
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

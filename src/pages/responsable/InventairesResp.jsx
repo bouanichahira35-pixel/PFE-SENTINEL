@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { ClipboardCheck, RefreshCw, CheckCircle2, AlertTriangle } from 'lucide-react';
+import { ClipboardCheck, RefreshCw, CheckCircle2, AlertTriangle, Info } from 'lucide-react';
 import SidebarResp from '../../components/responsable/SidebarResp';
 import HeaderPage from '../../components/shared/HeaderPage';
 import ProtectedPage from '../../components/shared/ProtectedPage';
@@ -26,6 +26,7 @@ const InventairesResp = ({ userName, onLogout }) => {
   const [activeSession, setActiveSession] = useState(null);
   const [lines, setLines] = useState([]);
   const [summary, setSummary] = useState(null);
+  const [showHelp, setShowHelp] = useState(false);
 
   const loadSessions = useCallback(async () => {
     setIsLoading(true);
@@ -92,6 +93,41 @@ const InventairesResp = ({ userName, onLogout }) => {
           <HeaderPage userName={userName} title="Inventaires" showSearch={false} onMenuClick={() => setSidebarCollapsed((p) => !p)} />
           <main className="main-content">
             {isLoading && <LoadingSpinner overlay text="Chargement..." />}
+
+            <section className="inv-help-card">
+              <div className="inv-help-head">
+                <div className="inv-help-title">
+                  <Info size={16} />
+                  <span>Rôle du responsable</span>
+                </div>
+                <button className="inv-help-toggle" type="button" onClick={() => setShowHelp((p) => !p)}>
+                  {showHelp ? 'Masquer' : 'Afficher'}
+                </button>
+              </div>
+              {showHelp && (
+                <div className="inv-help-body">
+                  <div className="inv-help-block">
+                    <strong>Contrôle & validation</strong>
+                    <ol>
+                      <li>Vérifier la session clôturée et les écarts.</li>
+                      <li>Analyser les anomalies (surplus / manquants).</li>
+                      <li>Appliquer l’inventaire pour générer les ajustements.</li>
+                    </ol>
+                  </div>
+                  <div className="inv-help-block">
+                    <strong>Impact métier</strong>
+                    <p>Après application, les stocks sont corrigés et l’historique est mis à jour.</p>
+                  </div>
+                  <div className="inv-help-block">
+                    <strong>Types d’inventaire</strong>
+                    <ul>
+                      <li><strong>Annuel</strong> : contrôle global à date fixe.</li>
+                      <li><strong>Tournant</strong> : contrôles réguliers par familles de produits.</li>
+                    </ul>
+                  </div>
+                </div>
+              )}
+            </section>
 
             <div className="inv-resp-grid">
               <section className="inv-card">
@@ -192,4 +228,3 @@ const InventairesResp = ({ userName, onLogout }) => {
 };
 
 export default InventairesResp;
-

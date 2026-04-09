@@ -1,0 +1,55 @@
+.admin-sessions-table {
+  width: 100%;
+  overflow: auto;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  background: #fff;
+}
+
+.admin-sessions-table table {
+  width: 100%;
+  border-collapse: collapse;
+  min-width: 980px;
+}
+
+.admin-sessions-table th,
+.admin-sessions-table td {
+  padding: 10px 12px;
+  border-bottom: 1px solid #eef2f7;
+  text-align: left;
+  vertical-align: top;
+}
+
+.admin-sessions-table th {
+  font-size: 12px;
+  color: #334155;
+  font-weight: 900;
+  background: #f8fafc;
+  position: sticky;
+  top: 0;
+  z-index: 1;
+}
+
+.admin-sessions-table .cell-main {
+  font-weight: 950;
+  color: #0f172a;
+}
+
+.admin-sessions-table .cell-sub {
+  font-size: 12px;
+  color: #64748b;
+  margin-top: 2px;
+}
+
+.admin-sessions-table .muted {
+  color: #475569;
+  font-size: 13px;
+}
+
+.admin-sessions-table .empty {
+  text-align: center;
+  padding: 18px 12px;
+  color: #64748b;
+  font-weight: 800;
+}
+

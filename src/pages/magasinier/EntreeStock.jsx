@@ -7,6 +7,7 @@ import LoadingSpinner from '../../components/shared/LoadingSpinner';
 import InlineQrScanner from '../../components/shared/InlineQrScanner';
 import { useToast } from '../../components/shared/Toast';
 import { get, post, uploadFile } from '../../services/api';
+import { asPositiveInt, isSafeText, sanitizeText } from '../../utils/formGuards';
 import './EntreeStock.css';
 
 function parseSupplierDeliveryQr(raw) {
@@ -187,17 +188,21 @@ const EntreeStock = ({ userName, onLogout }) => {
   const validateForm = useCallback(() => {
     const newErrors = {};
     if (!productInfo?.id) newErrors.product = 'Produit requis';
-    if (!formData.quantite || parseInt(formData.quantite, 10) < 1) {
+    const qty = asPositiveInt(formData.quantite, { min: 1, max: 1000000000 });
+    if (!Number.isFinite(qty)) {
       newErrors.quantite = 'Quantite valide requise';
     }
-    if (!formData.provenance.trim()) {
-      newErrors.provenance = 'Fournisseur / provenance requise';
+    if (!isSafeText(formData.provenance, { min: 2, max: 80 })) {
+      newErrors.provenance = 'Fournisseur / provenance requis (2-80, sans < >)';
     }
-    if (!formData.numeroBonLivraison.trim()) {
-      newErrors.numeroBonLivraison = 'Numero bande de livraison requis';
+    if (!isSafeText(formData.numeroBonLivraison, { min: 2, max: 60 })) {
+      newErrors.numeroBonLivraison = 'Numero bande de livraison requis (2-60)';
     }
     if (formData.modeLivraison === 'scan' && !formData.fournisseurQrRaw.trim()) {
       newErrors.modeLivraison = 'Scannez la bande livraison fournisseur';
+    }
+    if (formData.commentaire && !isSafeText(formData.commentaire, { min: 0, max: 600 })) {
+      newErrors.commentaire = 'Commentaire trop long (max 600)';
     }
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
@@ -224,31 +229,33 @@ const EntreeStock = ({ userName, onLogout }) => {
 
       await post('/stock/entries', {
         product: productInfo.id,
-        quantity: Number(formData.quantite),
+        quantity: Number(asPositiveInt(formData.quantite, { min: 1, max: 1000000000 })),
         submission_duration_ms: Math.max(0, Date.now() - formOpenedAtRef.current),
-        supplier: formData.provenance,
-        lot_number: formData.numeroLot,
-        lot_qr_value: formData.lotQrCode || undefined,
+        supplier: sanitizeText(formData.provenance, { maxLen: 80 }),
+        lot_number: sanitizeText(formData.numeroLot, { maxLen: 60 }) || undefined,
+        lot_qr_value: sanitizeText(formData.lotQrCode, { maxLen: 220 }) || undefined,
         date_entry: formData.dateEntree,
-        purchase_order_number: formData.numeroBonCommande,
-        purchase_voucher_number: formData.numeroBonAchat,
-        delivery_note_number: formData.numeroBonLivraison,
-        supplier_doc_qr_value: formData.modeLivraison === 'scan' ? formData.fournisseurQrRaw || formData.numeroBonLivraison : undefined,
+        purchase_order_number: sanitizeText(formData.numeroBonCommande, { maxLen: 60 }) || undefined,
+        purchase_voucher_number: sanitizeText(formData.numeroBonAchat, { maxLen: 60 }) || undefined,
+        delivery_note_number: sanitizeText(formData.numeroBonLivraison, { maxLen: 60 }),
+        supplier_doc_qr_value: formData.modeLivraison === 'scan'
+          ? sanitizeText(formData.fournisseurQrRaw || formData.numeroBonLivraison, { maxLen: 800 })
+          : undefined,
         entry_mode: formData.modeLivraison === 'scan'
           ? 'supplier_qr'
           : formData.modeLivraison === 'manual'
             ? 'manual'
             : 'supplier_number',
         delivery_date: formData.dateLivraison || undefined,
-        service_requester: formData.serviceDemandeur,
-        reference_code: formData.codeBarres,
+        service_requester: sanitizeText(formData.serviceDemandeur, { maxLen: 80 }) || undefined,
+        reference_code: sanitizeText(formData.codeBarres, { maxLen: 80 }) || undefined,
         commercial_name: productInfo.nom,
-        beneficiary: formData.beneficiaire || undefined,
+        beneficiary: sanitizeText(formData.beneficiaire, { maxLen: 80 }) || undefined,
         expiry_date: formData.datePeremption || undefined,
-        chemical_status: formData.statutChimique || undefined,
-        dangerous_product_attestation: formData.attestationProduitDangereux || undefined,
-        contract_number: formData.numeroContratGaz || undefined,
-        observation: formData.commentaire,
+        chemical_status: sanitizeText(formData.statutChimique, { maxLen: 40 }) || undefined,
+        dangerous_product_attestation: sanitizeText(formData.attestationProduitDangereux, { maxLen: 80 }) || undefined,
+        contract_number: sanitizeText(formData.numeroContratGaz, { maxLen: 60 }) || undefined,
+        observation: sanitizeText(formData.commentaire, { maxLen: 600 }) || undefined,
         attachments,
       });
 
@@ -307,6 +314,7 @@ const EntreeStock = ({ userName, onLogout }) => {
                         <input
                           id="codeBarres"
                           type="text"
+                          maxLength={80}
                           value={formData.codeBarres}
                           onChange={(e) => setFormData({ ...formData, codeBarres: e.target.value })}
                           placeholder="Scanner ou saisir le code"
@@ -349,6 +357,8 @@ const EntreeStock = ({ userName, onLogout }) => {
                         id="quantite"
                         type="number"
                         min="1"
+                        max="1000000000"
+                        step="1"
                         value={formData.quantite}
                         onChange={(e) => setFormData({ ...formData, quantite: e.target.value })}
                         placeholder="0"
@@ -361,6 +371,7 @@ const EntreeStock = ({ userName, onLogout }) => {
                       <input
                         id="numeroLot"
                         type="text"
+                        maxLength={80}
                         value={formData.numeroLot}
                         onChange={(e) => setFormData({ ...formData, numeroLot: e.target.value })}
                         placeholder="LOT-2026-001"
@@ -371,6 +382,7 @@ const EntreeStock = ({ userName, onLogout }) => {
                       <input
                         id="lotQrCode"
                         type="text"
+                        maxLength={180}
                         value={formData.lotQrCode}
                         onChange={(e) => setFormData({ ...formData, lotQrCode: e.target.value })}
                         placeholder="Scanner le QR du lot"
@@ -412,6 +424,7 @@ const EntreeStock = ({ userName, onLogout }) => {
                         <input
                           id="fournisseurQrRaw"
                           type="text"
+                          maxLength={180}
                           value={formData.fournisseurQrRaw}
                           onChange={(e) => setFormData({ ...formData, fournisseurQrRaw: e.target.value, modeLivraison: 'scan' })}
                           placeholder="Scanner la bande de livraison"
@@ -426,17 +439,18 @@ const EntreeStock = ({ userName, onLogout }) => {
                   <div className="form-row">
                     <div className="form-group">
                       <label htmlFor="numeroBonCommande">Numero bon de commande</label>
-                      <input id="numeroBonCommande" type="text" value={formData.numeroBonCommande} onChange={(e) => setFormData({ ...formData, numeroBonCommande: e.target.value })} />
+                      <input id="numeroBonCommande" type="text" maxLength={80} value={formData.numeroBonCommande} onChange={(e) => setFormData({ ...formData, numeroBonCommande: e.target.value })} />
                     </div>
                     <div className="form-group">
                       <label htmlFor="numeroBonAchat">Numero bon d'achat</label>
-                      <input id="numeroBonAchat" type="text" value={formData.numeroBonAchat} onChange={(e) => setFormData({ ...formData, numeroBonAchat: e.target.value })} />
+                      <input id="numeroBonAchat" type="text" maxLength={80} value={formData.numeroBonAchat} onChange={(e) => setFormData({ ...formData, numeroBonAchat: e.target.value })} />
                     </div>
                     <div className="form-group">
                       <label htmlFor="numeroBonLivraison">Numero bon de livraison</label>
                       <input
                         id="numeroBonLivraison"
                         type="text"
+                        maxLength={80}
                         value={formData.numeroBonLivraison}
                         onChange={(e) => setFormData({ ...formData, numeroBonLivraison: e.target.value })}
                         className={errors.numeroBonLivraison ? 'error' : ''}
@@ -492,7 +506,7 @@ const EntreeStock = ({ userName, onLogout }) => {
                     </div>
                     <div className="form-group">
                       <label htmlFor="serviceDemandeur">Service demandeur</label>
-                      <input id="serviceDemandeur" type="text" value={formData.serviceDemandeur} onChange={(e) => setFormData({ ...formData, serviceDemandeur: e.target.value })} />
+                      <input id="serviceDemandeur" type="text" maxLength={80} value={formData.serviceDemandeur} onChange={(e) => setFormData({ ...formData, serviceDemandeur: e.target.value })} />
                     </div>
                     <div className="form-group">
                       <label htmlFor="beneficiaire">Beneficiaire</label>
@@ -553,7 +567,7 @@ const EntreeStock = ({ userName, onLogout }) => {
                   </div>
                   <div className="form-group">
                     <label htmlFor="commentaire">Commentaire (optionnel)</label>
-                    <textarea id="commentaire" value={formData.commentaire} onChange={(e) => setFormData({ ...formData, commentaire: e.target.value })} rows={3} />
+                    <textarea id="commentaire" maxLength={600} value={formData.commentaire} onChange={(e) => setFormData({ ...formData, commentaire: e.target.value })} rows={3} />
                   </div>
                 </div>
 

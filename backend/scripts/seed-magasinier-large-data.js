@@ -333,7 +333,7 @@ async function run() {
     const product = pick(products);
     const demandeur = pick(demandeurs);
     const qty = randomInt(1, 12);
-    const status = pick(['pending', 'accepted', 'served', 'refused']);
+    const status = pick(['pending', 'validated', 'preparing', 'served', 'rejected', 'cancelled']);
     const createdAt = randomPastDate(90);
     const requestId = new mongoose.Types.ObjectId();
 
@@ -346,10 +346,14 @@ async function run() {
       beneficiary: pick(['Equipe A', 'Equipe B', 'Unite C']),
       status,
       date_request: createdAt,
-      date_acceptance: status === 'accepted' || status === 'served' ? createdAt : undefined,
-      date_processing: status === 'accepted' || status === 'served' || status === 'refused' ? createdAt : undefined,
+      validated_at: ['validated', 'preparing', 'served', 'rejected'].includes(status) ? createdAt : undefined,
+      validated_by: ['validated', 'preparing', 'served', 'rejected'].includes(status) ? responsable._id : undefined,
+      prepared_at: ['preparing', 'served'].includes(status) ? createdAt : undefined,
+      prepared_by: ['preparing', 'served'].includes(status) ? magasinier._id : undefined,
+      date_acceptance: ['validated', 'preparing', 'served', 'rejected'].includes(status) ? createdAt : undefined,
+      date_processing: ['validated', 'preparing', 'served', 'rejected'].includes(status) ? createdAt : undefined,
       date_served: status === 'served' ? createdAt : undefined,
-      processed_by: status === 'accepted' || status === 'served' || status === 'refused' ? magasinier._id : undefined,
+      processed_by: ['validated', 'preparing', 'served', 'rejected'].includes(status) ? magasinier._id : undefined,
       served_by: status === 'served' ? magasinier._id : undefined,
       note: `Demande seed ${status}`,
       createdAt,

@@ -12,7 +12,8 @@
 
 ## Demandes
 - Le demandeur cree une demande (`pending`).
-- Magasinier traite: `accepted` ou `refused`.
+- Le responsable statue sur la demande: `validated` (validee) ou `rejected` (rejetee).
+- Le magasinier prepare la demande (`preparing`) puis la sert (`served`) via un bon de prelevement lie a la demande.
 - Une demande `served` doit etre reliee a un `stock_exit` valide.
 
 ## Historique / Audit
@@ -30,4 +31,3 @@
 - Notification in-app pour evenements critiques.
 - Email asynchrone via queue, fallback SMTP direct en cas de queue indisponible.
 - Respect des preferences utilisateur (`notifications.email`, `demandesAlerts`).
-

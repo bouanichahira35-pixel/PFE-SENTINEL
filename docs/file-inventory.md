@@ -2,6 +2,16 @@
 
 Generated: 2026-03-14 23:19:31
 
+## Notes (FR, simple)
+- `node_modules/` = librairies téléchargées (tu n’as presque jamais besoin de lire ça).
+- Cette liste exclut `node_modules/`, `build/`, `.git/`, `__pycache__/` et les fichiers `*.pyc`.
+- Règle simple : le dossier te dit “à quoi sert” le fichier.
+  - `backend/routes/` = endpoints API (`/api/...`)
+  - `backend/models/` = collections MongoDB (l’équivalent de “tables”)
+  - `backend/services/` = logique métier (mail, IA, RBAC, jobs…)
+  - `src/pages/` = écrans de l’interface
+  - `src/components/` = composants réutilisables
+
 ## Counts
 - Total files (including node_modules/build/.git): 56749
 - Project files (excluding node_modules/build/.git/__pycache__/ *.pyc): 355

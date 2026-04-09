@@ -10,6 +10,7 @@ const strictBody = require('../middlewares/strictBody');
 const { getUserPreferences } = require('../services/userPreferencesService');
 const { enqueueMail } = require('../services/mailQueueService');
 const { logSecurityEvent } = require('../services/securityAuditService');
+const { isSafeText } = require('../utils/validation');
 
 const SAFE_USER_FIELDS = '_id username email role status image_profile';
 
@@ -240,6 +241,7 @@ router.post('/messages/:conversationId', strictBody(['message']), async (req, re
     const content = String(req.body?.message || '').trim();
     if (!content) return res.status(400).json({ error: 'message obligatoire' });
     if (content.length > 2000) return res.status(400).json({ error: 'message trop long' });
+    if (!isSafeText(content, { min: 1, max: 2000 })) return res.status(400).json({ error: 'message invalide' });
 
     const conversation = await ChatConversation.findById(req.params.conversationId);
     if (!conversation) return res.status(404).json({ error: 'Conversation introuvable' });

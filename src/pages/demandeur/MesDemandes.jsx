@@ -5,6 +5,7 @@ import HeaderPage from '../../components/shared/HeaderPage';
 import LoadingSpinner from '../../components/shared/LoadingSpinner';
 import { useToast } from '../../components/shared/Toast';
 import { get, patch } from '../../services/api';
+import { normalizeRequestStatus } from '../../utils/requestStatus';
 import './MesDemandes.css';
 
 const MesDemandes = ({ userName, onLogout }) => {
@@ -26,7 +27,7 @@ const MesDemandes = ({ userName, onLogout }) => {
         codeProduit: r.product?.code_product || '-',
         quantite: Number(r.quantity_requested || 0),
         date: r.date_request ? new Date(r.date_request).toLocaleString('fr-FR') : '-',
-        statut: r.status || 'pending',
+        statut: normalizeRequestStatus(r.status),
         receiptToken: r.receipt_token || '',
       }));
 

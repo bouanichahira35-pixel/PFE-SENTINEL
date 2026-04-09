@@ -17,10 +17,19 @@ const StockEntry = require('../models/StockEntry');
 const StockLot = require('../models/StockLot');
 const Sequence = require('../models/Sequence');
 const { runInTransaction } = require('../services/transactionService');
+const { getSupplierEmailPolicy, sendPurchaseOrderEmailToSupplier } = require('../services/purchaseOrderSupplierMailService');
 
-const { asDate, asOptionalString, asPositiveNumber, isValidObjectIdLike } = require('../utils/validation');
+const { asDate, asNonNegativeNumber, asOptionalString, asPositiveNumber, isSafeText, isValidObjectIdLike } = require('../utils/validation');
 
 router.use(requireAuth);
+
+function validateOptionalText(errors, field, value, { min = 0, max = 600 } = {}) {
+  if (value === undefined || value === null) return undefined;
+  const s = String(value).trim();
+  if (s === '') return undefined;
+  if (!isSafeText(s, { min, max })) errors.push(`${field} invalide`);
+  return s;
+}
 
 function computePromisedAt(orderedAt, leadTimeDays) {
   const d = new Date(orderedAt || new Date());
@@ -86,6 +95,23 @@ router.post(
       const dateEntry = asDate(req.body?.date_entry);
       if (dateEntry === null) return res.status(400).json({ error: 'date_entry invalide' });
 
+      const errors = [];
+      const deliveryNoteNumber = validateOptionalText(errors, 'delivery_note_number', req.body?.delivery_note_number, { min: 0, max: 80 });
+      const supplierDocQrValue = validateOptionalText(errors, 'supplier_doc_qr_value', req.body?.supplier_doc_qr_value, { min: 0, max: 180 });
+      const observation = validateOptionalText(errors, 'observation', req.body?.observation, { min: 0, max: 600 });
+      const lotPrefixRaw = validateOptionalText(errors, 'lot_prefix', req.body?.lot_prefix, { min: 0, max: 30 });
+
+      const incomingLines = Array.isArray(req.body?.received_lines) ? req.body.received_lines : [];
+      if (incomingLines.length > 60) errors.push('received_lines trop long');
+      for (const row of incomingLines.slice(0, 60)) {
+        const pid = asOptionalString(row?.product_id);
+        if (pid && !isValidObjectIdLike(pid)) errors.push('received_lines.product_id invalide');
+        const qty = asNonNegativeNumber(row?.quantity);
+        if (row?.quantity !== undefined && Number.isNaN(qty)) errors.push('received_lines.quantity invalide');
+      }
+
+      if (errors.length) return res.status(400).json({ error: 'Validation error', details: errors });
+
       const po = await PurchaseOrder.findById(req.params.id)
         .populate('supplier', 'name status default_lead_time_days')
         .populate('lines.product', '_id name code_product quantity_current seuil_minimum validation_status lifecycle_status')
@@ -96,13 +122,11 @@ router.post(
       const supplierName = po?.supplier?.name || 'Fournisseur';
       const orderedAt = po.ordered_at ? new Date(po.ordered_at) : new Date();
       const receiveAt = dateEntry || new Date();
-      const lotPrefixRaw = asOptionalString(req.body?.lot_prefix);
       const lotPrefix = lotPrefixRaw ? String(lotPrefixRaw).trim().slice(0, 30) : `PO-${String(po._id).slice(-6).toUpperCase()}`;
 
       const lines = Array.isArray(po.lines) ? po.lines : [];
       if (!lines.length) return res.status(400).json({ error: 'Commande sans lignes' });
 
-      const incomingLines = Array.isArray(req.body?.received_lines) ? req.body.received_lines : [];
       const receiptByProductId = new Map();
       for (const row of incomingLines.slice(0, 50)) {
         const pid = asOptionalString(row?.product_id);
@@ -143,9 +167,6 @@ router.post(
           if (String(product.lifecycle_status || 'active') !== 'active') {
             throw new Error(`Produit archive / indisponible (${product.name || 'Produit'}).`);
           }
-          if (product.validation_status !== 'approved') {
-            throw new Error(`Produit non valide. Validation responsable requise (${product.name || 'Produit'}).`);
-          }
 
           const orderedQty = Number(line?.quantity || 0);
           const alreadyReceived = Number(line?.quantity_received || 0);
@@ -169,14 +190,14 @@ router.post(
             quantity: qty,
             unit_price: Number(line?.unit_price || 0),
             purchase_order_number: `PO-${String(po._id).slice(-6).toUpperCase()}`,
-            delivery_note_number: asOptionalString(req.body?.delivery_note_number) || undefined,
-            supplier_doc_qr_value: asOptionalString(req.body?.supplier_doc_qr_value) || undefined,
-            entry_mode: (req.body?.supplier_doc_qr_value ? 'supplier_qr' : (req.body?.delivery_note_number ? 'supplier_number' : 'manual')),
+            delivery_note_number: deliveryNoteNumber || undefined,
+            supplier_doc_qr_value: supplierDocQrValue || undefined,
+            entry_mode: (supplierDocQrValue ? 'supplier_qr' : (deliveryNoteNumber ? 'supplier_number' : 'manual')),
             delivery_date: deliveryDate || orderedAt,
             supplier: supplierName,
             lot_number: lotNumber,
             lot_qr_value: lotNumber,
-            observation: asOptionalString(req.body?.observation) || undefined,
+            observation: observation || undefined,
             date_entry: receiveAt,
             magasinier: req.user.id,
           };
@@ -347,6 +368,7 @@ router.post(
   strictBody(['supplier_id', 'ordered_at', 'promised_at', 'status', 'note', 'lines', 'decision_id']),
   async (req, res) => {
     try {
+      const errors = [];
       const supplierId = asOptionalString(req.body?.supplier_id);
       if (!supplierId || !isValidObjectIdLike(supplierId)) return res.status(400).json({ error: 'supplier_id invalide' });
       const supplier = await Supplier.findById(supplierId).lean();
@@ -361,9 +383,11 @@ router.post(
         if (!productId || !isValidObjectIdLike(productId)) return res.status(400).json({ error: 'product_id invalide' });
         const qty = asPositiveNumber(line?.quantity);
         if (!Number.isFinite(qty)) return res.status(400).json({ error: 'quantity invalide' });
+        const unitPrice = asNonNegativeNumber(line?.unit_price);
+        if (line?.unit_price !== undefined && Number.isNaN(unitPrice)) return res.status(400).json({ error: 'unit_price invalide' });
         const product = await Product.findById(productId).select('_id name').lean();
         if (!product) return res.status(404).json({ error: 'Product not found' });
-        parsedLines.push({ product: product._id, quantity: qty, unit_price: Number(line?.unit_price || 0) });
+        parsedLines.push({ product: product._id, quantity: qty, unit_price: Number(unitPrice || 0) });
       }
 
       const orderedAt = asDate(req.body?.ordered_at) || new Date();
@@ -373,13 +397,19 @@ router.post(
       if (promisedAt === null) return res.status(400).json({ error: 'promised_at invalide' });
       if (!promisedAt) promisedAt = computePromisedAt(orderedAt, supplier.default_lead_time_days);
 
+      const statusRaw = asOptionalString(req.body?.status);
+      const status = statusRaw === 'draft' ? 'draft' : 'ordered';
+      const note = validateOptionalText(errors, 'note', req.body?.note, { min: 0, max: 600 });
+      const decisionIdValue = validateOptionalText(errors, 'decision_id', req.body?.decision_id, { min: 0, max: 160 });
+      if (errors.length) return res.status(400).json({ error: 'Validation error', details: errors });
+
       const created = await PurchaseOrder.create({
         supplier: supplier._id,
-        status: String(req.body?.status || 'ordered') === 'draft' ? 'draft' : 'ordered',
-        decision_id: asOptionalString(req.body?.decision_id) || undefined,
+        status,
+        decision_id: decisionIdValue || undefined,
         ordered_at: orderedAt,
         promised_at: promisedAt,
-        note: asOptionalString(req.body?.note),
+        note,
         created_by: req.user.id,
         lines: parsedLines,
       });
@@ -394,7 +424,6 @@ router.post(
         context: { purchase_order_id: String(created._id), supplier_id: String(supplier._id) },
       });
 
-      const decisionIdValue = asOptionalString(req.body?.decision_id);
       if (decisionIdValue) {
         const firstLine = parsedLines.length ? parsedLines[0] : null;
         const firstProduct = firstLine?.product ? await Product.findById(firstLine.product).select('name').lean() : null;
@@ -445,6 +474,21 @@ router.post(
         }
       }
 
+      // Supplier email (external) - best effort (configurable via admin policy).
+      try {
+        const policy = await getSupplierEmailPolicy();
+        if (created.status === 'ordered' && policy.send_on_create_ordered) {
+          await sendPurchaseOrderEmailToSupplier({
+            purchase_order_id: created._id,
+            triggered_by_user_id: req.user.id,
+            reason: 'create',
+            kind: 'po_ordered_email',
+          });
+        }
+      } catch {
+        // ignore supplier mail errors (they are audited via mail queue if configured)
+      }
+
       return res.status(201).json(created);
     } catch (err) {
       return res.status(400).json({ error: 'Failed to create purchase order', details: err.message });
@@ -458,6 +502,7 @@ router.post(
   strictBody(['product_id', 'quantity', 'supplier_id', 'note', 'decision_id', 'decision_level', 'decision_title', 'decision_kind']),
   async (req, res) => {
     try {
+      const errors = [];
       const productId = asOptionalString(req.body?.product_id);
       const qty = asPositiveNumber(req.body?.quantity);
       if (!productId || !isValidObjectIdLike(productId)) return res.status(400).json({ error: 'product_id invalide' });
@@ -490,10 +535,12 @@ router.post(
       const leadTimeDays = typeof supplier.default_lead_time_days === 'number' ? supplier.default_lead_time_days : 7;
       const promisedAt = computePromisedAt(orderedAt, leadTimeDays);
 
-      const decisionIdValue = asOptionalString(req.body?.decision_id);
-      const decisionTitle = asOptionalString(req.body?.decision_title);
-      const decisionKind = asOptionalString(req.body?.decision_kind);
-      const decisionLevel = asOptionalString(req.body?.decision_level);
+      const decisionIdValue = validateOptionalText(errors, 'decision_id', req.body?.decision_id, { min: 0, max: 160 });
+      const decisionTitle = validateOptionalText(errors, 'decision_title', req.body?.decision_title, { min: 0, max: 120 });
+      const decisionKind = validateOptionalText(errors, 'decision_kind', req.body?.decision_kind, { min: 0, max: 80 });
+      const decisionLevel = validateOptionalText(errors, 'decision_level', req.body?.decision_level, { min: 0, max: 40 });
+      const note = validateOptionalText(errors, 'note', req.body?.note, { min: 0, max: 600 });
+      if (errors.length) return res.status(400).json({ error: 'Validation error', details: errors });
 
       const created = await PurchaseOrder.create({
         supplier: supplier._id,
@@ -501,7 +548,7 @@ router.post(
         decision_id: decisionIdValue || undefined,
         ordered_at: orderedAt,
         promised_at: promisedAt,
-        note: asOptionalString(req.body?.note),
+        note,
         created_by: req.user.id,
         lines: [{ product: product._id, quantity: qty, unit_price: 0 }],
       });
@@ -563,6 +610,21 @@ router.post(
         }
       }
 
+      // Supplier email (external) - best effort (configurable via admin policy).
+      try {
+        const policy = await getSupplierEmailPolicy();
+        if (policy.send_on_create_ordered) {
+          await sendPurchaseOrderEmailToSupplier({
+            purchase_order_id: created._id,
+            triggered_by_user_id: req.user.id,
+            reason: 'quick_create',
+            kind: 'po_ordered_email',
+          });
+        }
+      } catch {
+        // ignore
+      }
+
       return res.status(201).json(created);
     } catch (err) {
       return res.status(400).json({ error: 'Failed to create quick purchase order', details: err.message });
@@ -610,9 +672,156 @@ router.patch(
         },
       });
 
+      // If a draft is promoted to "ordered", optionally send supplier email.
+      try {
+        const policy = await getSupplierEmailPolicy();
+        if (before.status !== 'ordered' && updated.status === 'ordered' && policy.send_on_update_to_ordered) {
+          await sendPurchaseOrderEmailToSupplier({
+            purchase_order_id: updated._id,
+            triggered_by_user_id: req.user.id,
+            reason: 'status_update_to_ordered',
+            kind: 'po_ordered_email',
+          });
+        }
+      } catch {
+        // ignore
+      }
+
       return res.json(updated);
     } catch (err) {
       return res.status(400).json({ error: 'Failed to update purchase order', details: err.message });
+    }
+  }
+);
+
+// POST /api/purchase-orders/:id/notify-supplier
+// Envoie (ou re-envoie) l'email fournisseur pour une commande "ordered".
+router.post(
+  '/:id/notify-supplier',
+  requirePermission(PERMISSIONS.PURCHASE_ORDER_MANAGE),
+  strictBody(['force']),
+  async (req, res) => {
+    try {
+      if (!isValidObjectIdLike(req.params.id)) return res.status(400).json({ error: 'id invalide' });
+      const force = Boolean(req.body?.force);
+      const result = await sendPurchaseOrderEmailToSupplier({
+        purchase_order_id: req.params.id,
+        triggered_by_user_id: req.user.id,
+        reason: 'manual_resend',
+        force,
+        kind: 'po_ordered_email',
+      });
+      return res.json({ ok: true, result });
+    } catch (err) {
+      return res.status(400).json({ error: 'Failed to notify supplier', details: err.message });
+    }
+  }
+);
+
+// POST /api/purchase-orders/:id/incidents
+// Magasinier signale un litige / non-conformite (metier), visible au responsable.
+router.post(
+  '/:id/incidents',
+  requirePermission(PERMISSIONS.PURCHASE_ORDER_MANAGE),
+  strictBody(['severity', 'message']),
+  async (req, res) => {
+    try {
+      if (!isValidObjectIdLike(req.params.id)) return res.status(400).json({ error: 'id invalide' });
+      const severity = String(req.body?.severity || 'warning').trim();
+      if (!['info', 'warning', 'critical'].includes(severity)) return res.status(400).json({ error: 'severity invalide' });
+      const message = String(req.body?.message || '').trim().slice(0, 400);
+      if (!message) return res.status(400).json({ error: 'message obligatoire' });
+
+      const po = await PurchaseOrder.findById(req.params.id).populate('supplier', 'name').lean();
+      if (!po) return res.status(404).json({ error: 'Purchase order not found' });
+
+      const incident = {
+        kind: 'non_conformity',
+        severity,
+        status: 'open',
+        message,
+        created_at: new Date(),
+      };
+
+      await PurchaseOrder.updateOne({ _id: po._id }, { $push: { incidents: incident } });
+
+      await History.create({
+        action_type: 'purchase_order',
+        user: req.user.id,
+        source: 'ui',
+        description: `Litige signale (${severity})`,
+        actor_role: req.user.role,
+        tags: ['purchase_order', 'incident', 'non_conformity', severity],
+        context: { purchase_order_id: String(po._id), supplier_name: po?.supplier?.name || '' },
+      });
+
+      const responsables = await User.find({ role: 'responsable', status: 'active' })
+        .select('_id')
+        .limit(20)
+        .lean();
+      if (responsables.length) {
+        await Notification.insertMany(responsables.map((u) => ({
+          user: u._id,
+          title: severity === 'critical' ? 'Litige critique (commande fournisseur)' : 'Litige signale (commande fournisseur)',
+          message: [
+            `Commande: ${String(po._id).slice(-8).toUpperCase()}`,
+            `Fournisseur: ${po?.supplier?.name || 'Fournisseur'}`,
+            `Message: ${message}`,
+          ].join('\n'),
+          type: severity === 'critical' ? 'alert' : 'warning',
+          is_read: false,
+        })));
+      }
+
+      return res.status(201).json({ ok: true });
+    } catch (err) {
+      return res.status(400).json({ error: 'Failed to create incident', details: err.message });
+    }
+  }
+);
+
+// PATCH /api/purchase-orders/:id/incidents/:incidentId/resolve
+router.patch(
+  '/:id/incidents/:incidentId/resolve',
+  requirePermission(PERMISSIONS.PURCHASE_ORDER_MANAGE),
+  strictBody(['resolution_note']),
+  async (req, res) => {
+    try {
+      if (String(req.user?.role || '').toLowerCase() !== 'responsable') {
+        return res.status(403).json({ error: 'Acces refuse (responsable uniquement)' });
+      }
+      if (!isValidObjectIdLike(req.params.id)) return res.status(400).json({ error: 'id invalide' });
+      if (!isValidObjectIdLike(req.params.incidentId)) return res.status(400).json({ error: 'incidentId invalide' });
+      const note = String(req.body?.resolution_note || '').trim().slice(0, 320);
+
+      const result = await PurchaseOrder.updateOne(
+        { _id: req.params.id },
+        {
+          $set: {
+            'incidents.$[i].status': 'resolved',
+            'incidents.$[i].resolved_at': new Date(),
+            'incidents.$[i].resolved_by': req.user.id,
+            'incidents.$[i].resolution_note': note || undefined,
+          },
+        },
+        { arrayFilters: [{ 'i._id': req.params.incidentId }] }
+      );
+
+      if (!result?.modifiedCount) return res.status(404).json({ error: 'Incident not found' });
+
+      await History.create({
+        action_type: 'purchase_order',
+        user: req.user.id,
+        source: 'ui',
+        description: 'Litige resolu',
+        actor_role: req.user.role,
+        tags: ['purchase_order', 'incident', 'resolve'],
+        context: { purchase_order_id: String(req.params.id), incident_id: String(req.params.incidentId) },
+      });
+
+      return res.json({ ok: true });
+    } catch (err) {
+      return res.status(400).json({ error: 'Failed to resolve incident', details: err.message });
     }
   }
 );

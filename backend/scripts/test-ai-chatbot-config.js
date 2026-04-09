@@ -6,6 +6,19 @@ const axios = require('axios');
 const TEST_PORT = Number(process.env.AI_CHATBOT_TEST_PORT || 5013);
 const API_BASE = `http://127.0.0.1:${TEST_PORT}/api`;
 
+function deriveMongoUriForTest(baseUri, suffix) {
+  const uri = String(baseUri || '').trim();
+  if (!uri) return uri;
+  const parts = uri.split('?');
+  const base = parts[0];
+  const query = parts.length > 1 ? `?${parts.slice(1).join('?')}` : '';
+  const idx = base.lastIndexOf('/');
+  if (idx < 0 || idx === base.length - 1) return uri;
+  const dbName = base.slice(idx + 1);
+  const nextDb = `${dbName}${suffix}`;
+  return `${base.slice(0, idx + 1)}${nextDb}${query}`;
+}
+
 function getTestEnv(name, fallbackForLocal) {
   const value = String(process.env[name] || '').trim();
   if (value) return value;
@@ -63,21 +76,23 @@ async function login(client, creds) {
 }
 
 async function run() {
+  const testDbUri = deriveMongoUriForTest(process.env.MONGODB_URI, `_test_${TEST_PORT}`);
   const seedRun = spawnSync(process.execPath, ['seed-human-users.js'], {
     cwd: process.cwd(),
-    env: process.env,
+    env: { ...process.env, MONGODB_URI: testDbUri },
     stdio: 'ignore',
   });
-  if (seedRun.status !== 0) {
-    throw new Error('Unable to seed human users for ai/chatbot test');
-  }
+  if (seedRun.status !== 0) throw new Error('Unable to seed human users for ai/chatbot test');
 
   const env = {
     ...process.env,
+    MONGODB_URI: testDbUri,
     PORT: String(TEST_PORT),
     AI_AUTO_TRAIN_ON_BOOT: 'false',
     MAIL_QUEUE_ENABLED: 'false',
     GEMINI_API_KEY: '',
+    // Tests run in parallel with local UI sessions; avoid revoking sessions unexpectedly.
+    SINGLE_SESSION_MODE: 'false',
   };
 
   const server = spawn(process.execPath, ['server.js'], {

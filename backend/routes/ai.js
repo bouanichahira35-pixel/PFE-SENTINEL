@@ -26,7 +26,8 @@ const {
   askResponsableAssistant,
   getPythonRuntimeStatus,
 } = require('../services/aiModelService');
-const { rebuildAiAlerts } = require('../services/alertService');
+const { rebuildAiAlerts, buildHistoryAnomalyAlerts } = require('../services/alertService');
+const { normalizeRequestStatus } = require('../utils/requestStatus');
 
 const AI_SETTINGS_DEFAULT = Object.freeze({
   predictionsEnabled: true,
@@ -348,6 +349,37 @@ router.get('/alerts', requireAuth, async (req, res) => {
     return res.json(items);
   } catch (err) {
     return res.status(500).json({ error: 'Failed to fetch AI alerts', details: err.message });
+  }
+});
+
+router.post('/alerts/refresh', requireAuth, strictBody(['window_days', 'max_products', 'max_anomalies']), async (req, res) => {
+  try {
+    if (!ensureResponsable(req, res)) return;
+    const aiConfig = await getAiConfig();
+    if (aiConfig?.alertesAuto === false) {
+      return res.status(409).json({
+        ok: false,
+        error: 'Alertes IA desactivees',
+        details: 'Activez "Alertes automatiques" dans Parametres > Intelligence Artificielle.',
+      });
+    }
+
+    const maxProducts = Math.max(50, Math.min(2000, Number(req.body?.max_products || 400)));
+    const windowDays = Math.max(7, Math.min(365, Number(req.body?.window_days || 90)));
+    const maxAnomalies = Math.max(5, Math.min(60, Number(req.body?.max_anomalies || 25)));
+
+    const [stockSummary, anomalySummary] = await Promise.all([
+      rebuildAiAlerts({ max_products: maxProducts }),
+      buildHistoryAnomalyAlerts({ window_days: windowDays, max_total: maxAnomalies }),
+    ]);
+
+    return res.json({
+      ok: true,
+      stock_alerts: stockSummary,
+      anomaly_alerts: anomalySummary,
+    });
+  } catch (err) {
+    return res.status(500).json({ error: 'Failed to refresh AI alerts', details: err.message });
   }
 });
 
@@ -814,9 +846,11 @@ router.post('/assistant/ask', requireAuth, strictBody(['question', 'history', 'm
       strict_gemini: forceGemini ? true : geminiConfigured,
       mode,
       context: {
-        stockout_top: signals.stockout.slice(0, 5),
-        consumption_top: signals.consumption.slice(0, 5),
-        anomaly_top: signals.anomaly.slice(0, 5),
+        // Keep more items so "Pourquoi <produit X>" works even when X is not in the top 5.
+        // The assistant will still summarize to a few items in its final answer.
+        stockout_top: signals.stockout.slice(0, 30),
+        consumption_top: signals.consumption.slice(0, 30),
+        anomaly_top: signals.anomaly.slice(0, 30),
         action_plan: Array.isArray(signals.copilot?.action_plan) ? signals.copilot.action_plan.slice(0, 5) : [],
         metrics: signals.metrics || {},
       },
@@ -1486,7 +1520,7 @@ router.get('/magasinier-inbox', requireAuth, async (req, res) => {
         .limit(limit)
         .populate('assigned_by', 'username role')
         .lean(),
-      Request.find({ status: { $in: ['validated', 'preparing'] } })
+      Request.find({ status: { $in: ['validated', 'accepted', 'preparing'] } })
         .select('_id status quantity_requested date_request demandeur direction_laboratory note createdAt priority')
         .populate('product', 'name code_product quantity_current seuil_minimum')
         .populate('demandeur', 'username role')
@@ -1532,7 +1566,7 @@ router.get('/magasinier-inbox', requireAuth, async (req, res) => {
       const priority = String(r.priority || 'normal').trim().toLowerCase();
       return {
         id: String(r._id),
-        status: String(r.status || ''),
+        status: normalizeRequestStatus(r.status),
         product: {
           id: String(r.product?._id || ''),
           name: r.product?.name || 'Produit',

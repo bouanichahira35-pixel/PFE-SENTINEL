@@ -1,0 +1,120 @@
+.admin-sec-toolbar {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  margin-bottom: 12px;
+}
+
+.admin-sec-search {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  border: 1px solid #e7ebf3;
+  background: #fff;
+  border-radius: 12px;
+  padding: 10px 12px;
+  min-width: min(520px, 100%);
+}
+
+.admin-sec-search input {
+  border: 0;
+  outline: none;
+  width: 100%;
+  font-weight: 900;
+  color: #0f172a;
+}
+
+.admin-sec-toolbar select {
+  border: 1px solid #e7ebf3;
+  border-radius: 12px;
+  padding: 10px 12px;
+  background: #fff;
+  font-weight: 900;
+  color: #0f172a;
+}
+
+.admin-sec-check {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  border: 1px solid #e7ebf3;
+  background: #fff;
+  border-radius: 12px;
+  padding: 10px 12px;
+  font-weight: 900;
+  color: #0f172a;
+}
+
+.admin-sec-check input {
+  width: 16px;
+  height: 16px;
+}
+
+.admin-sec-table {
+  background: #fff;
+  border: 1px solid #e7ebf3;
+  border-radius: 14px;
+  overflow: hidden;
+  box-shadow: 0 10px 22px rgba(15, 23, 42, 0.06);
+}
+
+.admin-sec-head,
+.admin-sec-row {
+  display: grid;
+  grid-template-columns: 170px 190px 220px 160px 110px 1fr;
+  gap: 10px;
+  padding: 10px 12px;
+  align-items: center;
+}
+
+.admin-sec-head {
+  background: #f8fafc;
+  font-weight: 1000;
+  color: #334155;
+  border-bottom: 1px solid #e7ebf3;
+}
+
+.admin-sec-row {
+  font-weight: 900;
+  color: #0f172a;
+  border-bottom: 1px solid #eef2f8;
+}
+
+.admin-sec-row .details {
+  color: #475569;
+  font-weight: 800;
+}
+
+.admin-sec-row .mono {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+  font-size: 12px;
+  color: #334155;
+}
+
+.admin-sec-row .ok {
+  color: #15803d;
+}
+
+.admin-sec-row .bad {
+  color: #b91c1c;
+}
+
+.admin-sec-empty {
+  padding: 14px;
+  font-weight: 900;
+  color: #64748b;
+}
+
+@media (max-width: 1100px) {
+  .admin-sec-head,
+  .admin-sec-row {
+    grid-template-columns: 160px 180px 1fr;
+  }
+  .admin-sec-head div:nth-child(n + 4),
+  .admin-sec-row div:nth-child(n + 4) {
+    display: none;
+  }
+}
+

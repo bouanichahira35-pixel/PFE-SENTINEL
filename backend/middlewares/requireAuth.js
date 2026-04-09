@@ -106,7 +106,7 @@ async function requireAuth(req, res, next) {
       { $set: { last_activity_at: now } }
     );
 
-    const user = await User.findById(payload.id).select('_id role status username demandeur_profile');
+    const user = await User.findById(payload.id).select('_id role status username demandeur_profile service_direction');
     const normalizedRole = normalizeRole(user?.role);
     const normalizedStatus = normalizeUserStatus(user?.status);
 
@@ -150,6 +150,7 @@ async function requireAuth(req, res, next) {
       username: user.username || payload.username,
       sessionId: payload.sid,
       demandeur_profile: user.demandeur_profile || 'bureautique',
+      service_direction: user.service_direction || '',
     };
     return next();
   } catch (err) {

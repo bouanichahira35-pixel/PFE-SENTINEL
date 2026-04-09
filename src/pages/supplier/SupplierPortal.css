@@ -1,0 +1,132 @@
+.supplier-portal {
+  min-height: 100vh;
+  background: #f6f7fb;
+  padding: 24px;
+}
+
+.supplier-portal-card {
+  max-width: 980px;
+  margin: 0 auto;
+  background: #fff;
+  border: 1px solid rgba(0, 0, 0, 0.06);
+  border-radius: 16px;
+  box-shadow: 0 18px 44px rgba(15, 23, 42, 0.08);
+  overflow: hidden;
+}
+
+.supplier-portal-header {
+  padding: 18px 20px;
+  background: linear-gradient(135deg, #0b4a8a, #1d7ad6);
+  color: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.supplier-portal-title {
+  font-size: 18px;
+  font-weight: 800;
+  letter-spacing: 0.2px;
+}
+
+.supplier-portal-sub {
+  font-size: 13px;
+  opacity: 0.95;
+}
+
+.supplier-portal-body {
+  padding: 16px 20px 22px;
+}
+
+.supplier-portal-empty {
+  padding: 18px;
+  border-radius: 12px;
+  background: #f8fafc;
+  border: 1px dashed rgba(2, 6, 23, 0.16);
+  color: #475569;
+}
+
+.supplier-po {
+  border: 1px solid rgba(2, 6, 23, 0.08);
+  border-radius: 14px;
+  padding: 14px;
+  margin-top: 12px;
+  background: #fff;
+}
+
+.supplier-po-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.supplier-po-ref {
+  font-weight: 700;
+  color: #0f172a;
+}
+
+.supplier-po-badges {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.badge {
+  font-size: 12px;
+  font-weight: 700;
+  padding: 4px 10px;
+  border-radius: 999px;
+  border: 1px solid rgba(2, 6, 23, 0.12);
+  background: #f8fafc;
+  color: #0f172a;
+}
+
+.badge.ok {
+  background: #ecfdf5;
+  border-color: rgba(5, 150, 105, 0.25);
+  color: #065f46;
+}
+
+.badge.warn {
+  background: #fff7ed;
+  border-color: rgba(234, 88, 12, 0.25);
+  color: #9a3412;
+}
+
+.supplier-po-meta {
+  margin-top: 10px;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+  color: #334155;
+  font-size: 13px;
+}
+
+.supplier-po-lines {
+  margin-top: 10px;
+  border-top: 1px dashed rgba(2, 6, 23, 0.14);
+  padding-top: 10px;
+  color: #0f172a;
+  font-size: 13px;
+}
+
+.supplier-po-lines ul {
+  margin: 8px 0 0;
+  padding-left: 18px;
+}
+
+@media (max-width: 760px) {
+  .supplier-portal {
+    padding: 12px;
+  }
+  .supplier-portal-body {
+    padding: 12px;
+  }
+  .supplier-po-meta {
+    grid-template-columns: 1fr;
+  }
+}
+

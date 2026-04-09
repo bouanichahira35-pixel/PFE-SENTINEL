@@ -25,6 +25,7 @@ const {
   asTrimmedString,
   isBlank,
   isValidObjectIdLike,
+  isSafeText,
 } = require('../utils/validation');
 
 function computeStatus(quantity, seuil) {
@@ -43,9 +44,8 @@ function normalizeFamily(value) {
     'produit chimique': 'produit_chimique',
     produit_chimique: 'produit_chimique',
     gaz: 'gaz',
-    // Compat legacy: old "informatique" inputs are remapped to a business family.
-    'consommable informatique': 'consommable_laboratoire',
-    consommable_informatique: 'consommable_laboratoire',
+    'consommable informatique': 'consommable_informatique',
+    consommable_informatique: 'consommable_informatique',
     'consommable laboratoire': 'consommable_laboratoire',
     consommable_laboratoire: 'consommable_laboratoire',
   };
@@ -194,6 +194,37 @@ async function getNextProductCode() {
   return `PRD-${year}-${String(counter.seq).padStart(4, '0')}`;
 }
 
+function isValidProductCode(value) {
+  const raw = String(value || '').trim();
+  if (!raw) return false;
+  const upper = raw.toUpperCase();
+  // Pragmatic code: letters/digits + separators, 3-40 chars.
+  return /^[A-Z0-9][A-Z0-9._-]{2,39}$/.test(upper);
+}
+
+function normalizeProductCode(value) {
+  const raw = String(value || '').trim();
+  return raw ? raw.toUpperCase() : '';
+}
+
+function sanitizeFdsAttachment(value, errors) {
+  if (value === undefined || value === null || value === '') return null;
+  if (typeof value !== 'object') {
+    errors.push('fds_attachment invalide (objet attendu)');
+    return null;
+  }
+  const fileName = asOptionalString(value.file_name);
+  const fileUrl = asOptionalString(value.file_url);
+  if (!fileName || !isSafeText(fileName, { min: 1, max: 140 })) {
+    errors.push('fds_attachment.file_name invalide');
+  }
+  if (!fileUrl || !isSafeText(fileUrl, { min: 1, max: 220 }) || !String(fileUrl).startsWith('/api/files/download/')) {
+    errors.push('fds_attachment.file_url invalide');
+  }
+  if (errors.length) return null;
+  return { file_name: fileName, file_url: fileUrl };
+}
+
 router.get('/', requireAuth, async (req, res) => { 
   try { 
     const filter = {}; 
@@ -215,8 +246,8 @@ router.get('/', requireAuth, async (req, res) => {
     }
   
     if (isDemandeur) {
-      // Demandeurs ne voient que les produits valides + categories autorisees.
-      filter.validation_status = 'approved';
+      // Cahier de charge: un produit cree est utilisable immediatement.
+      // On conserve le filtrage par categories autorisees (audiences) mais on ne bloque plus sur validation_status.
       filter.lifecycle_status = 'active';
       const allowedCategories = await Category.find({
         $or: [{ audiences: { $size: 0 } }, { audiences: demandeurProfile }],
@@ -309,13 +340,32 @@ router.post(
     const errors = []; 
     const family = normalizeFamily(req.body.family); 
     if (!family) { 
-      errors.push('family invalide (economat, produit_chimique, gaz, consommable_laboratoire)'); 
+      errors.push('family invalide (economat, produit_chimique, gaz, consommable_laboratoire, consommable_informatique)'); 
     } 
     const name = asTrimmedString(req.body.name); 
-    if (!name) errors.push('name obligatoire'); 
+    if (!name || !isSafeText(name, { min: 2, max: 140 })) errors.push('name obligatoire (2-140)'); 
     const qrCodeValue = asOptionalString(req.body.qr_code_value); 
-    if (!qrCodeValue) errors.push('qr_code_value obligatoire'); 
- 
+    if (!qrCodeValue || !isSafeText(qrCodeValue, { min: 3, max: 140 })) errors.push('qr_code_value obligatoire (3-140)'); 
+
+    const description = asOptionalString(req.body.description);
+    if (description !== undefined && description !== null && description !== '' && !isSafeText(description, { min: 0, max: 800 })) {
+      errors.push('description invalide (max 800, sans < >)');
+    }
+
+    const unite = asOptionalString(req.body.unite);
+    if (unite && !isSafeText(unite, { min: 1, max: 30 })) errors.push('unite invalide (1-30)');
+    const emplacement = asOptionalString(req.body.emplacement);
+    if (emplacement && !isSafeText(emplacement, { min: 1, max: 60 })) errors.push('emplacement invalide (max 60)');
+
+    const chemicalClass = asOptionalString(req.body.chemical_class);
+    if (chemicalClass && !isSafeText(chemicalClass, { min: 1, max: 80 })) errors.push('chemical_class invalide (max 80)');
+    const physicalState = asOptionalString(req.body.physical_state);
+    if (physicalState && !isSafeText(physicalState, { min: 1, max: 80 })) errors.push('physical_state invalide (max 80)');
+    const gasPressure = asOptionalString(req.body.gas_pressure);
+    if (gasPressure && !isSafeText(gasPressure, { min: 1, max: 60 })) errors.push('gas_pressure invalide (max 60)');
+    const gasPurity = asOptionalString(req.body.gas_purity);
+    if (gasPurity && !isSafeText(gasPurity, { min: 1, max: 60 })) errors.push('gas_purity invalide (max 60)');
+
     if (req.body.category && !isValidObjectIdLike(req.body.category)) { 
       errors.push('category doit etre un ObjectId valide'); 
     } 
@@ -332,6 +382,10 @@ router.post(
     const creatorIsResponsable = req.user.role === 'responsable';
     if (creatorIsResponsable && !req.body.category && isBlank(req.body.category_name)) {
       errors.push('category ou category_name obligatoire (creation responsable)');
+    }
+
+    if (req.body.code_product && !isValidProductCode(req.body.code_product)) {
+      errors.push('code_product invalide (3-40, A-Z 0-9 . _ -)');
     }
  
     if (errors.length > 0) { 
@@ -368,32 +422,37 @@ router.post(
     }
 
     const payload = { 
-      code_product: req.body.code_product || (await getNextProductCode()), 
+      code_product: req.body.code_product ? normalizeProductCode(req.body.code_product) : (await getNextProductCode()), 
       name, 
-      description: asOptionalString(req.body.description), 
+      description, 
       category: category?._id || null, 
       category_proposal: categoryProposal,
       family, 
-      unite: asOptionalString(req.body.unite) || 'Unite',
-      emplacement: asOptionalString(req.body.emplacement), 
+      unite: unite || 'Unite',
+      emplacement, 
       stock_initial_year: stockInitial ?? 0, 
-      chemical_class: asOptionalString(req.body.chemical_class),
-      physical_state: asOptionalString(req.body.physical_state),
-      fds_attachment: req.body.fds_attachment,
-      gas_pressure: asOptionalString(req.body.gas_pressure),
-      gas_purity: asOptionalString(req.body.gas_purity),
+      chemical_class: chemicalClass,
+      physical_state: physicalState,
+      fds_attachment: sanitizeFdsAttachment(req.body.fds_attachment, errors),
+      gas_pressure: gasPressure,
+      gas_purity: gasPurity,
       quantity_current: quantityCurrent ?? 0,
       seuil_minimum: seuilMinimum ?? 0,
       status: computeStatus(quantityCurrent ?? 0, seuilMinimum ?? 0),
       lifecycle_status: 'active',
       qr_code_value: qrCodeValue,
-      image_product: asOptionalString(req.body.image_product),
+      image_product: asOptionalString(req.body.image_product) && isSafeText(req.body.image_product, { min: 0, max: 400 })
+        ? asOptionalString(req.body.image_product)
+        : null,
       created_by: req.user.id, 
-      validation_status: 
-        req.user.role === 'responsable' 
-          ? (req.body.validation_status || 'approved') 
-          : 'pending', 
+      // Cahier de charge: creation -> utilisable immediatement (pas de validation Responsable).
+      validated_by: req.user.id,
+      validation_status: 'approved',
     }; 
+
+    if (errors.length > 0) {
+      return res.status(400).json({ error: 'Validation failed', details: errors });
+    }
 
     const item = await Product.create(payload);
     await History.create({ 
@@ -412,9 +471,6 @@ router.post(
         category: item.category ? String(item.category) : null, 
       }, 
     }); 
-    if (item.validation_status === 'pending') {
-      await notifyResponsablesOnPendingValidation(item, req.user);
-    }
     res.status(201).json(item);
   } catch (err) {
     if (err?.code === 11000 && err?.keyPattern?.qr_code_value) {
@@ -423,86 +479,6 @@ router.post(
     res.status(400).json({ error: 'Failed to create product', details: err.message });
   }
 });
-
-router.patch( 
-  '/:id/validation', 
-  requireAuth, 
-  requirePermission(PERMISSIONS.PRODUCT_VALIDATE), 
-  strictBody(['validation_status', 'category', 'category_name']), 
-  async (req, res) => { 
-    try { 
-      if (!isValidObjectIdLike(req.params.id)) { 
-        return res.status(400).json({ error: 'product id invalide' }); 
-      } 
- 
-      const status = String(req.body?.validation_status || '').trim(); 
-      if (!['approved', 'rejected'].includes(status)) { 
-        return res.status(400).json({ error: 'validation_status doit etre approved ou rejected' }); 
-      } 
- 
-      const product = await Product.findById(req.params.id); 
-      if (!product) return res.status(404).json({ error: 'Product not found' }); 
-      const beforeSnapshot = {
-        validation_status: product.validation_status,
-        category: product.category ? String(product.category) : null,
-      };
-
-      // Si on approuve, la categorie devient obligatoire (le responsable tranche).
-      if (status === 'approved') {
-        let nextCategory = null;
-        if (req.body.category || req.body.category_name) {
-          nextCategory = await getOrCreateCategory({
-            categoryId: req.body.category,
-            categoryName: req.body.category_name,
-            userId: req.user.id,
-          });
-          if (!nextCategory) {
-            return res.status(400).json({ error: 'category invalide' });
-          }
-        } else if (product.category) {
-          nextCategory = await Category.findById(product.category);
-        }
-
-        if (!nextCategory) {
-          return res.status(400).json({
-            error: 'Categorie obligatoire pour valider un produit',
-            details: 'Choisissez une categorie (ou creez-en une) avant validation.',
-          });
-        }
-        product.category = nextCategory._id;
-      }
- 
-      const before = product.validation_status; 
-      product.validation_status = status; 
-      product.validated_by = req.user.id; 
-      await product.save(); 
- 
-      await History.create({ 
-        action_type: 'validation', 
-        user: req.user.id, 
-        product: product._id, 
-        source: 'ui', 
-        description: `Validation produit: ${before} -> ${status}`, 
-        status_before: beforeSnapshot.validation_status,
-        status_after: status,
-        actor_role: req.user.role,
-        tags: ['product', 'validation'],
-        context: {
-          before: beforeSnapshot,
-          after: {
-            validation_status: product.validation_status,
-            category: product.category ? String(product.category) : null,
-          },
-        },
-      }); 
-      await notifyCreatorOnValidationDecision(product, req.user, before, status); 
- 
-      return res.json(product); 
-    } catch (err) { 
-      return res.status(400).json({ error: 'Failed to update validation', details: err.message }); 
-    } 
-  } 
-); 
 
 router.put( 
   '/:id', 
@@ -579,7 +555,6 @@ router.put(
       'gas_purity',
       'qr_code_value',
       'image_product',
-      'validation_status',
       'seuil_minimum',
       'quantity_current',
     ];
@@ -589,7 +564,7 @@ router.put(
 
       if (field === 'name') {
         const value = asTrimmedString(req.body.name);
-        if (!value) errors.push('name ne peut pas etre vide');
+        if (!value || !isSafeText(value, { min: 2, max: 140 })) errors.push('name invalide (2-140)');
         else product.name = value;
         return;
       }
@@ -602,7 +577,51 @@ router.put(
       }
 
       if (field === 'qr_code_value') {
-        product[field] = asOptionalString(req.body[field]);
+        const nextQr = asOptionalString(req.body[field]);
+        if (!nextQr || !isSafeText(nextQr, { min: 3, max: 140 })) errors.push('qr_code_value invalide (3-140)');
+        else product[field] = nextQr;
+        return;
+      }
+
+      if (field === 'description') {
+        const next = asOptionalString(req.body[field]);
+        if (next && !isSafeText(next, { min: 0, max: 800 })) errors.push('description invalide (max 800)');
+        else product[field] = next || '';
+        return;
+      }
+      if (field === 'unite') {
+        const next = asOptionalString(req.body[field]);
+        if (next && !isSafeText(next, { min: 1, max: 30 })) errors.push('unite invalide (1-30)');
+        else product[field] = next || 'Unite';
+        return;
+      }
+      if (field === 'emplacement') {
+        const next = asOptionalString(req.body[field]);
+        if (next && !isSafeText(next, { min: 1, max: 60 })) errors.push('emplacement invalide (max 60)');
+        else product[field] = next || '';
+        return;
+      }
+      if (field === 'chemical_class' || field === 'physical_state') {
+        const next = asOptionalString(req.body[field]);
+        if (next && !isSafeText(next, { min: 1, max: 80 })) errors.push(`${field} invalide (max 80)`);
+        else product[field] = next || '';
+        return;
+      }
+      if (field === 'gas_pressure' || field === 'gas_purity') {
+        const next = asOptionalString(req.body[field]);
+        if (next && !isSafeText(next, { min: 1, max: 60 })) errors.push(`${field} invalide (max 60)`);
+        else product[field] = next || '';
+        return;
+      }
+      if (field === 'fds_attachment') {
+        const next = sanitizeFdsAttachment(req.body[field], errors);
+        product[field] = next;
+        return;
+      }
+      if (field === 'image_product') {
+        const next = asOptionalString(req.body[field]);
+        if (next && !isSafeText(next, { min: 0, max: 400 })) errors.push('image_product invalide (max 400)');
+        else product[field] = next || '';
         return;
       }
 

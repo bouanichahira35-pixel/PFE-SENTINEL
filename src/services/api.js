@@ -2,16 +2,9 @@ function computeDefaultApiBase() {
   const fromEnv = String(process.env.REACT_APP_API_URL || "").trim();
   if (fromEnv) return fromEnv;
 
-  // Default: backend runs on the same machine as the frontend, but on port 5000.
-  // This is required for testing on a phone over LAN (where `localhost` would point to the phone).
-  if (typeof window !== "undefined" && window.location) {
-    const protocol = window.location.protocol || "http:";
-    const host = window.location.hostname || "localhost";
-    const port = String(process.env.REACT_APP_API_PORT || "5000").trim() || "5000";
-    return `${protocol}//${host}:${port}/api`;
-  }
-
-  return "http://localhost:5000/api";
+  // Dev default: use CRA proxy (`package.json#proxy`) so mobile devices on LAN work
+  // without CORS issues (frontend calls same-origin `/api/...`).
+  return "/api";
 }
 
 export const API_BASE = computeDefaultApiBase();

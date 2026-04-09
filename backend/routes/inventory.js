@@ -14,7 +14,7 @@ const Sequence = require('../models/Sequence');
 const History = require('../models/History');
 const { runInTransaction } = require('../services/transactionService');
 
-const { asNonNegativeNumber, asOptionalString, asTrimmedString, isValidObjectIdLike } = require('../utils/validation');
+const { asNonNegativeNumber, asOptionalString, asTrimmedString, isSafeText, isValidObjectIdLike } = require('../utils/validation');
 
 router.use(requireAuth);
 router.use(requirePermission(PERMISSIONS.INVENTORY_MANAGE));
@@ -94,14 +94,16 @@ router.post('/sessions', strictBody(['title', 'notes']), async (req, res) => {
   try {
     if (!ensureRole(req, res, ['magasinier', 'responsable'])) return;
     const title = asTrimmedString(req.body?.title);
-    if (!title) return res.status(400).json({ error: 'title obligatoire' });
+    if (!title || !isSafeText(title, { min: 2, max: 100 })) return res.status(400).json({ error: 'title invalide' });
+    const notes = asOptionalString(req.body?.notes);
+    if (notes !== undefined && !isSafeText(notes, { min: 0, max: 600 })) return res.status(400).json({ error: 'notes invalide' });
 
     const reference = await getNextInventoryReference();
     const created = await InventorySession.create({
       title,
       reference,
       status: 'counting',
-      notes: asOptionalString(req.body?.notes),
+      notes,
       created_by: req.user.id,
       created_at: new Date(),
     });
@@ -194,12 +196,14 @@ router.post('/sessions/:id/count', strictBody(['product_id', 'counted_quantity',
     if (!product) return res.status(404).json({ error: 'Produit introuvable' });
 
     const systemQty = Math.max(0, Math.floor(Number(product.quantity_current || 0)));
+    const note = asOptionalString(req.body?.note);
+    if (note !== undefined && !isSafeText(note, { min: 0, max: 600 })) return res.status(400).json({ error: 'note invalide' });
     const payload = {
       session: session._id,
       product: product._id,
       counted_quantity: Math.max(0, Math.floor(Number(counted || 0))),
       system_quantity_at_count: systemQty,
-      note: asOptionalString(req.body?.note),
+      note,
       counted_by: req.user.id,
       counted_at: new Date(),
     };
@@ -350,4 +354,3 @@ router.post('/sessions/:id/apply', async (req, res) => {
 });
 
 module.exports = router;
-

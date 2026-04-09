@@ -9,14 +9,19 @@ const mongoose = require('./db');
 const logger = require('./utils/logger');
 const requestContext = require('./middlewares/requestContext');
 const idempotencyGuard = require('./middlewares/idempotencyGuard');
+const perfMonitor = require('./middlewares/perfMonitor');
 const { verifyMailer, isMailConfigured } = require('./services/mailerService');
 const { initMailQueue, getMailQueueHealth } = require('./services/mailQueueService');
 const { startAiAutoTrainingJob } = require('./services/aiGovernanceService');
 const { rebuildAiAlerts } = require('./services/alertService');
 const { getQrSecretStatus } = require('./services/qrTokenService');
+const { getSupplierPortalSecretStatus } = require('./services/supplierPortalTokenService');
 const { removeInformatiqueDomain } = require('./services/domainCleanupService');
+const AppSetting = require('./models/AppSetting');
+const { startPurchaseOrderRemindersJob } = require('./services/purchaseOrderReminderJob');
 
 const app = express();
+app.disable('x-powered-by');
 
 const defaultDevOrigins = [
   'http://localhost:3000',
@@ -38,6 +43,24 @@ const configuredOrigins = String(
 
 const allowedOrigins = Array.from(new Set([...configuredOrigins, ...defaultDevOrigins]));
 const isProduction = String(process.env.NODE_ENV || '').toLowerCase() === 'production';
+
+if (isProduction) {
+  const jwtSecret = String(process.env.JWT_SECRET || '').trim();
+  const piiHashSecret = String(process.env.PII_HASH_SECRET || '').trim();
+  const qrSecret = String(process.env.INTERNAL_BOND_QR_SECRET || process.env.QR_TOKEN_SECRET || '').trim();
+
+  const looksLikePlaceholder = (value) => !value || value.toLowerCase().includes('change_me') || value.length < 16;
+
+  if (looksLikePlaceholder(jwtSecret)) {
+    throw new Error('Configuration invalide: JWT_SECRET doit etre un secret fort en production.');
+  }
+  if (looksLikePlaceholder(piiHashSecret)) {
+    throw new Error('Configuration invalide: PII_HASH_SECRET doit etre un secret fort en production.');
+  }
+  if (looksLikePlaceholder(qrSecret)) {
+    throw new Error('Configuration invalide: INTERNAL_BOND_QR_SECRET (ou QR_TOKEN_SECRET) doit etre defini en production.');
+  }
+}
 
 function isLocalDevOrigin(origin) {
   try {
@@ -91,6 +114,7 @@ app.use(cors({
 }));
 app.use(helmet({ crossOriginResourcePolicy: false }));
 app.use(requestContext);
+app.use(perfMonitor);
 app.use(pinoHttp({
   logger,
   genReqId: (req) => req.requestId,
@@ -133,6 +157,20 @@ app.get('/api/health', async (req, res) => {
   const smtp = await verifyMailer();
   const mailQueue = await getMailQueueHealth();
   const qrSecretStatus = getQrSecretStatus();
+  const supplierPortalSecret = getSupplierPortalSecretStatus();
+
+  let maintenance = { enabled: false, message: '' };
+  try {
+    const item = await AppSetting.findOne({ setting_key: 'maintenance_mode' }).lean();
+    if (item?.setting_value && typeof item.setting_value === 'object') {
+      maintenance = {
+        enabled: Boolean(item.setting_value.enabled),
+        message: String(item.setting_value.message || '').slice(0, 220),
+      };
+    }
+  } catch {
+    // best-effort
+  }
 
   const smtpConfigured = isMailConfigured();
   const mongoConnected = readyState === 1;
@@ -141,6 +179,7 @@ app.get('/api/health', async (req, res) => {
   const queueReady = queueEnabled ? Boolean(mailQueue?.ready) : true;
   const qrCritical = isProd ? Boolean(qrSecretStatus.ok) : true;
   const qrWarning = !qrSecretStatus.ok || Boolean(qrSecretStatus.fallback);
+  const supplierPortalWarning = Boolean(supplierPortalSecret?.fallback) || !supplierPortalSecret?.secret;
 
   const criticalIssues = [];
   const warnings = [];
@@ -151,6 +190,7 @@ app.get('/api/health', async (req, res) => {
   if (smtpConfigured && !smtpOk) warnings.push('smtp_unreachable');
   if (queueEnabled && !queueReady) warnings.push('mail_queue_not_ready');
   if (qrWarning) warnings.push('internal_bond_qr_secret_fallback_or_invalid');
+  if (supplierPortalWarning) warnings.push('supplier_portal_secret_fallback_or_missing');
 
   const status = criticalIssues.length > 0 ? 'unhealthy' : (warnings.length > 0 ? 'degraded' : 'ok');
   const statusCode = criticalIssues.length > 0 ? 503 : 200;
@@ -212,7 +252,15 @@ app.get('/api/health', async (req, res) => {
         warning: qrSecretStatus.warning,
         critical: !qrCritical,
       },
+      supplier_portal_secret: {
+        ok: Boolean(supplierPortalSecret?.secret),
+        source: supplierPortalSecret?.source || null,
+        fallback: Boolean(supplierPortalSecret?.fallback),
+        warning: supplierPortalWarning,
+        critical: false,
+      },
     },
+    maintenance,
   });
 });
 
@@ -236,6 +284,8 @@ app.use('/api/users', require('./routes/users'));
 app.use('/api/suppliers', require('./routes/suppliers')); 
 app.use('/api/purchase-orders', require('./routes/purchase-orders')); 
 app.use('/api/inventory', require('./routes/inventory'));
+app.use('/api/admin', require('./routes/admin'));
+app.use('/api/supplier-portal', require('./routes/supplier-portal'));
 
 app.use((err, req, res, next) => {
   if (err?.code === 'LIMIT_FILE_SIZE') {
@@ -281,6 +331,7 @@ initMailQueue()
     await runDomainCleanup();
     startAiAutoTrainingJob();
     await runAiAlertsBoot();
+    startPurchaseOrderRemindersJob();
     app.listen(PORT, () => logger.info({ port: Number(PORT) }, 'API ready'));
   })
   .catch(async (err) => {
@@ -296,6 +347,7 @@ initMailQueue()
     await runDomainCleanup();
     startAiAutoTrainingJob();
     await runAiAlertsBoot();
+    startPurchaseOrderRemindersJob();
     app.listen(PORT, () => logger.info({ port: Number(PORT) }, 'API ready'));
   });
 

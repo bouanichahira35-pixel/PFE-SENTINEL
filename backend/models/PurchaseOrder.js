@@ -25,6 +25,37 @@ const purchaseOrderSchema = new mongoose.Schema(
     note: String,
     created_by: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
     lines: { type: [purchaseOrderLineSchema], default: [] },
+    supplier_ack: {
+      status: { type: String, enum: ['none', 'confirmed', 'delayed'], default: 'none' },
+      eta_date: { type: Date },
+      note: { type: String, trim: true },
+      updated_at: { type: Date },
+    },
+    incidents: {
+      type: [
+        {
+          kind: { type: String, trim: true },
+          severity: { type: String, enum: ['info', 'warning', 'critical'], default: 'warning' },
+          status: { type: String, enum: ['open', 'resolved'], default: 'open' },
+          message: { type: String, trim: true },
+          created_at: { type: Date, default: Date.now },
+          resolved_at: { type: Date },
+          resolved_by: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+          resolution_note: { type: String, trim: true },
+        },
+      ],
+      default: [],
+    },
+    supplier_notifications: {
+      type: [
+        {
+          kind: { type: String, trim: true },
+          sent_at: { type: Date },
+          meta: mongoose.Schema.Types.Mixed,
+        },
+      ],
+      default: [],
+    },
   },
   { timestamps: true }
 );

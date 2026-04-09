@@ -49,6 +49,13 @@ const InlineQrScanner = ({ onDetected, onClose }) => {
           return;
         }
 
+        // On mobile / LAN (http://IP), the browser may block camera access because it is not a secure context.
+        // This avoids a confusing "Failed to fetch / black screen" during demos.
+        if (typeof window !== 'undefined' && window.isSecureContext === false) {
+          toast.error('Scan camera bloque: utilisez HTTPS ou localhost (contexte securise).');
+          return;
+        }
+
         if (window.BarcodeDetector) {
           const detector = new window.BarcodeDetector({ formats: ['qr_code'] });
           detectorRef.current = detector;

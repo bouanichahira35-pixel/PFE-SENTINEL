@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import { Link } from 'react-router-dom';
 import {
   History,
   Download,
@@ -8,6 +9,7 @@ import {
   ArrowUpFromLine,
   User,
   Calendar,
+  MessageSquareText,
 } from 'lucide-react';
 import SidebarResp from '../../components/responsable/SidebarResp';
 import HeaderPage from '../../components/shared/HeaderPage';
@@ -153,6 +155,18 @@ const TransactionsResp = ({ userName, onLogout }) => {
             {isLoading && <LoadingSpinner overlay text="Chargement..." />}
 
             <div className="tx-page">
+              <div className="tx-banner">
+                <div className="tx-banner-info">
+                  <MessageSquareText size={18} />
+                  <div>
+                    <strong>Flux décisionnel</strong>
+                    <div className="tx-banner-sub">Accéder aux discussions et événements (optionnel).</div>
+                  </div>
+                </div>
+                <Link to="/responsable/flux" className="tx-btn secondary">
+                  Ouvrir le flux
+                </Link>
+              </div>
               <div className="tx-toolbar">
                 <div className="tx-filter">
                   <Filter size={16} />

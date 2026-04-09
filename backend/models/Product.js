@@ -12,7 +12,7 @@ const productSchema = new mongoose.Schema(
     category_proposal: { type: String, trim: true },
     family: {
       type: String,
-      enum: ['economat', 'produit_chimique', 'gaz', 'consommable_laboratoire'],
+      enum: ['economat', 'produit_chimique', 'gaz', 'consommable_laboratoire', 'consommable_informatique'],
       required: true,
     },
     unite: { type: String, default: 'Unite', trim: true },
@@ -40,7 +40,9 @@ const productSchema = new mongoose.Schema(
     image_product: String,
     created_by: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
     validated_by: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
-    validation_status: { type: String, enum: ['pending', 'approved', 'rejected'], default: 'pending' },
+    // Cahier de charge: un produit cree par le gestionnaire stock est utilisable immediatement.
+    // On garde le champ pour compat/traçabilité, mais il est desormais "approved" par defaut.
+    validation_status: { type: String, enum: ['pending', 'approved', 'rejected'], default: 'approved' },
   },
   { timestamps: true }
 );

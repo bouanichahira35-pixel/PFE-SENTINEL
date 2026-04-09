@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { User, Lock, Moon, Sun, Camera, Save, Layers, Settings, Users, Bot, Globe, Bell, Eye, EyeOff, Truck, RefreshCw } from 'lucide-react';
+import { User, Lock, Moon, Sun, Camera, Save, Layers, Settings, Globe, Bell, Eye, EyeOff, Truck, RefreshCw, LifeBuoy } from 'lucide-react';
 import SidebarResp from '../../components/responsable/SidebarResp';
 import HeaderPage from '../../components/shared/HeaderPage';
 import useTheme from '../../hooks/useTheme';
@@ -7,6 +7,7 @@ import useProtectedFileUrl from '../../hooks/useProtectedFileUrl';
 import { get, patch, post, uploadFile } from '../../services/api';
 import { useToast } from '../../components/shared/Toast';
 import { setUiLanguage, useUiLanguage } from '../../utils/uiLanguage';
+import { asNonNegativeInt, asPositiveInt, isSafeText, sanitizeText } from '../../utils/formGuards';
 import './ParametresResp.css';
 
 const MAX_AVATAR_SIZE_BYTES = 5 * 1024 * 1024;
@@ -24,9 +25,9 @@ const roleLabel = (role) => {
 };
 
 const DEMANDEUR_PROFILES = [
-  { id: 'bureautique', label: 'Bureautique' },
-  { id: 'menage', label: 'Menage' },
-  { id: 'petrole', label: 'Site petrole' },
+  { id: 'bureautique', label: 'Bureautique (RH / Admin)' },
+  { id: 'menage', label: 'Ménage / Entretien' },
+  { id: 'petrole', label: 'Site pétrole (Externe / Terrain)' },
 ];
 
 function formatTimeFr(value) {
@@ -76,11 +77,11 @@ const ParametresResp = ({ userName, onLogout }) => {
   const [stockRulesImpact, setStockRulesImpact] = useState(null);
   const [stockRulesImpactLoading, setStockRulesImpactLoading] = useState(false);
 
-  const [aiSettings, setAiSettings] = useState({
+  const aiSettings = useMemo(() => ({
     predictionsEnabled: true,
     alertesAuto: true,
     analyseConsommation: true,
-  });
+  }), []);
   const [aiRuntimeLoading, setAiRuntimeLoading] = useState(false);
   const [assistantStatus, setAssistantStatus] = useState(null);
   const [geminiStatus, setGeminiStatus] = useState(null);
@@ -103,7 +104,11 @@ const ParametresResp = ({ userName, onLogout }) => {
   const [suppliersLoading, setSuppliersLoading] = useState(false);
   const [suppliersError, setSuppliersError] = useState('');
   const [suppliers, setSuppliers] = useState([]);
+  const [supplierRanking, setSupplierRanking] = useState([]);
+  const [supplierInsights, setSupplierInsights] = useState(null);
   const [purchaseOrders, setPurchaseOrders] = useState([]);
+  const [supplierNotifyLoadingId, setSupplierNotifyLoadingId] = useState('');
+  const [supplierNotifyTargetId, setSupplierNotifyTargetId] = useState('');
   const [newSupplier, setNewSupplier] = useState({ name: '', email: '', phone: '', default_lead_time_days: 7 });
   const [approvedProducts, setApprovedProducts] = useState([]);
   const [expandedSupplierId, setExpandedSupplierId] = useState('');
@@ -114,6 +119,13 @@ const ParametresResp = ({ userName, onLogout }) => {
   const [supplierLinkDraftById, setSupplierLinkDraftById] = useState(() => ({}));
   const [receivingPoId, setReceivingPoId] = useState('');
   const [receiveDraftByPoId, setReceiveDraftByPoId] = useState(() => ({}));
+  const [supplierAiProductId, setSupplierAiProductId] = useState('');
+  const [supplierAiQty, setSupplierAiQty] = useState('10');
+  const [supplierAiRec, setSupplierAiRec] = useState(null);
+  const [supplierAiLoading, setSupplierAiLoading] = useState(false);
+  const [supplierAiError, setSupplierAiError] = useState('');
+  const [supportDraft, setSupportDraft] = useState({ subject: '', message: '', priority: 'normal' });
+  const [supportSending, setSupportSending] = useState(false);
 
   const tabs = [
     { id: 'profil', label: ({ fr: 'Profil', en: 'Profile', ar: 'الملف الشخصي' }[uiLanguage]), icon: User },
@@ -124,6 +136,7 @@ const ParametresResp = ({ userName, onLogout }) => {
     { id: 'categories', label: ({ fr: 'Categories', en: 'Categories', ar: 'التصنيفات' }[uiLanguage]), icon: Layers },
     { id: 'regles', label: ({ fr: 'Regles Stock', en: 'Stock Rules', ar: 'قواعد المخزون' }[uiLanguage]), icon: Settings },
     { id: 'fournisseurs', label: ({ fr: 'Fournisseurs', en: 'Suppliers', ar: 'Suppliers' }[uiLanguage]), icon: Truck },
+    { id: 'support', label: ({ fr: 'Support IT', en: 'IT Support', ar: 'دعم تقني' }[uiLanguage]), icon: LifeBuoy },
   ];
   const i18n = {
     fr: { title: 'Parametres', loading: 'Chargement...', languageSaved: 'Langue enregistree' },
@@ -216,27 +229,132 @@ const ParametresResp = ({ userName, onLogout }) => {
     setSuppliersLoading(true);
     setSuppliersError('');
     try {
-      const [supRes, poRes, prodRes] = await Promise.all([
+      const [supRes, poRes, prodRes, rankRes, insightsRes] = await Promise.all([
         get('/suppliers').catch(() => ({ suppliers: [] })),
         get('/purchase-orders?limit=40').catch(() => ({ purchase_orders: [] })),
         get('/products').catch(() => []),
+        get('/suppliers/ranking?max=8').catch(() => ({ ranking: [] })),
+        get('/suppliers/insights?max=8&window_days=180').catch(() => null),
       ]);
       setSuppliers(Array.isArray(supRes?.suppliers) ? supRes.suppliers : []);
       setPurchaseOrders(Array.isArray(poRes?.purchase_orders) ? poRes.purchase_orders : []);
+      setSupplierRanking(Array.isArray(rankRes?.ranking) ? rankRes.ranking : []);
+      setSupplierInsights(insightsRes && insightsRes.ok ? insightsRes : null);
       const products = Array.isArray(prodRes) ? prodRes : [];
-      setApprovedProducts(
-        products
-          .filter((p) => String(p?.validation_status || '').toLowerCase() === 'approved')
+      const approved = products
           .map((p) => ({ id: p._id, name: p.name || 'Produit', code: p.code_product || '-' }))
-          .sort((a, b) => String(a.name).localeCompare(String(b.name)))
-      );
+          .sort((a, b) => String(a.name).localeCompare(String(b.name)));
+      setApprovedProducts(approved);
+      setSupplierAiProductId((prev) => prev || approved?.[0]?.id || '');
     } catch (err) {
       setSuppliersError(err.message || 'Erreur chargement fournisseurs');
       setSuppliers([]);
       setPurchaseOrders([]);
+      setSupplierRanking([]);
+      setSupplierInsights(null);
       setApprovedProducts([]);
+      setSupplierAiProductId('');
     } finally {
       setSuppliersLoading(false);
+    }
+  };
+
+  const notifySupplierByEmail = async (supplierRankItem) => {
+    const supplierId = String(supplierRankItem?.supplier_id || '').trim();
+    if (!supplierId) return;
+
+    const supplierName = String(supplierRankItem?.supplier_name || 'Fournisseur').trim();
+    const score = Number(supplierRankItem?.score || 0);
+    const onTime = supplierRankItem?.kpis?.on_time_rate;
+    const avgDelay = supplierRankItem?.kpis?.avg_delay_days;
+
+    const subject = `[SENTINEL] Demande de confirmation - ${supplierName}`;
+    const message = [
+      `Bonjour,`,
+      ``,
+      `Nous vous contactons via SENTINEL (ETAP) afin de confirmer vos informations de service (delais, disponibilites, engagement de livraison) et de synchroniser nos parametres logistiques.`,
+      ``,
+      `Indicateurs internes (reference):`,
+      `- Score de fiabilite: ${Number.isFinite(score) ? score.toFixed(1) : 'N/A'}/100`,
+      `- Taux a l'heure: ${typeof onTime === 'number' ? `${onTime}%` : 'N/A'}`,
+      `- Retard moyen: ${typeof avgDelay === 'number' ? `${avgDelay}j` : 'N/A'}`,
+      ``,
+      `Merci de repondre avec:`,
+      `1) delai moyen de livraison (jours)`, 
+      `2) conditions/contraintes (stock, quantite minimale, etc.)`, 
+      `3) un contact de confirmation (email/tel).`,
+      ``,
+      `Cordialement,`,
+      `Service Approvisionnement / Logistique`,
+    ].join('\n');
+
+    setSupplierNotifyLoadingId(supplierId);
+    try {
+      await post(`/suppliers/${encodeURIComponent(supplierId)}/notify-email`, {
+        kind: 'supplier_profile_sync',
+        subject,
+        message,
+      });
+      toast.success('Email fournisseur en file d\'envoi (OK).');
+    } catch (err) {
+      toast.error(err?.message || 'Echec envoi email fournisseur');
+    } finally {
+      setSupplierNotifyLoadingId('');
+    }
+  };
+
+  const refreshSupplierAiRecommendation = async (productId) => {
+    const pid = String(productId || supplierAiProductId || '').trim();
+    if (!pid) return;
+    setSupplierAiLoading(true);
+    setSupplierAiError('');
+    try {
+      const data = await get(`/suppliers/recommendation?product_id=${encodeURIComponent(pid)}`);
+      setSupplierAiRec(data && data.ok ? data : null);
+    } catch (err) {
+      setSupplierAiRec(null);
+      setSupplierAiError(err.message || 'Recommandation indisponible');
+    } finally {
+      setSupplierAiLoading(false);
+    }
+  };
+
+  const createAiPurchaseOrder = async () => {
+    const pid = String(supplierAiProductId || '').trim();
+    if (!pid) {
+      toast.error('Choisir un produit');
+      return;
+    }
+    const qtyParsed = asPositiveInt(supplierAiQty, { min: 1, max: 1000000000 });
+    if (!Number.isFinite(qtyParsed)) {
+      toast.error('Quantite invalide (>= 1).');
+      return;
+    }
+    const qty = qtyParsed;
+
+    const recommendedSupplierId = supplierAiRec?.recommended?.supplier_id || supplierAiRec?.recommended?.supplierId || '';
+    if (!recommendedSupplierId) {
+      toast.error('Aucun fournisseur recommande (liaison/actifs manquants)');
+      return;
+    }
+
+    setIsSaving(true);
+    try {
+      await post('/purchase-orders/quick', {
+        product_id: pid,
+        quantity: qty,
+        supplier_id: recommendedSupplierId,
+        note: 'Commande creee via recommandation IA (fournisseurs).',
+        decision_kind: 'supplier_ai_recommendation',
+        decision_title: 'Commande IA (fournisseur recommande)',
+        decision_level: 'info',
+      });
+      toast.success('Commande fournisseur creee');
+      await loadSuppliersData();
+    } catch (err) {
+      toast.error(err.message || 'Creation commande echouee');
+    } finally {
+      setIsSaving(false);
     }
   };
 
@@ -333,36 +451,27 @@ const ParametresResp = ({ userName, onLogout }) => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [usersView]);
 
-  const handleToggleBlock = async (u) => {
-    const nextStatus = u.status === 'active' ? 'blocked' : 'active';
-    const isBlocking = nextStatus === 'blocked';
-    const confirmed = window.confirm(
-      isBlocking
-        ? `Confirmer le blocage de ${u.username} ? Toutes ses sessions actives seront deconnectees.`
-        : `Confirmer le deblocage de ${u.username} ?`
-    );
-    if (!confirmed) return;
-
-    const reasonInput = window.prompt(
-      isBlocking
-        ? `Motif du blocage de ${u.username} (minimum 5 caracteres):`
-        : `Motif du deblocage de ${u.username} (minimum 5 caracteres):`
-    );
-    const reason = String(reasonInput || '').trim();
-    if (reason.length < 5) {
-      toast.error('Motif obligatoire (minimum 5 caracteres)');
+  const sendSupportRequest = async () => {
+    const subject = String(supportDraft.subject || '').trim();
+    const message = String(supportDraft.message || '').trim();
+    const priority = String(supportDraft.priority || 'normal').trim().toLowerCase();
+    if (!isSafeText(subject, { min: 3, max: 120 })) {
+      toast.error('Objet invalide (3-120).');
       return;
     }
-
-    setUserActionId(`status-${u._id}`);
+    if (!isSafeText(message, { min: 6, max: 800 })) {
+      toast.error('Message invalide (6-800).');
+      return;
+    }
+    setSupportSending(true);
     try {
-      await patch(`/users/${u._id}/status`, { status: nextStatus, reason });
-      toast.success(nextStatus === 'blocked' ? 'Utilisateur bloque' : 'Utilisateur debloque');
-      await reloadUsers(); 
+      await post('/admin/support-request', { subject, message, priority });
+      toast.success('Demande IT envoyee a l’administration.');
+      setSupportDraft({ subject: '', message: '', priority: 'normal' });
     } catch (e) {
-      toast.error(e.message || 'Erreur');
+      toast.error(e.message || 'Echec envoi support IT');
     } finally {
-      setUserActionId('');
+      setSupportSending(false);
     }
   };
 
@@ -557,34 +666,6 @@ const ParametresResp = ({ userName, onLogout }) => {
     toast.info('Valeurs par defaut chargees. Cliquez sur "Enregistrer les regles".');
   };
 
-  const saveAiSettings = async () => {
-    setIsSaving(true);
-    try {
-      await patch('/settings/ai/config', aiSettings);
-      toast.success('Configuration IA enregistree');
-    } catch (err) {
-      toast.error(err.message || 'Erreur enregistrement IA');
-    } finally {
-      setIsSaving(false);
-    }
-  };
-
-  const enableAiDefaults = async () => {
-    const confirmed = window.confirm("Reinitialiser la configuration IA (valeurs recommandees) ?\n\n- Predictions de rupture: OUI\n- Alertes automatiques: OUI\n- Analyse de consommation: OUI");
-    if (!confirmed) return;
-    const next = { predictionsEnabled: true, alertesAuto: true, analyseConsommation: true };
-    setAiSettings(next);
-    setIsSaving(true);
-    try {
-      await patch('/settings/ai/config', next);
-      toast.success('IA re-activee (valeurs recommandees)');
-    } catch (err) {
-      toast.error(err.message || "Erreur activation IA");
-    } finally {
-      setIsSaving(false);
-    }
-  };
-
   const sendTestEmail = async () => {
     setIsSaving(true);
     try {
@@ -598,11 +679,12 @@ const ParametresResp = ({ userName, onLogout }) => {
   };
 
   const addCategory = async () => {  
-    const name = String(newCategoryName || '').trim(); 
-    if (!name) { 
-      toast.error('Nom categorie obligatoire'); 
+    const nameRaw = String(newCategoryName || '');
+    if (!isSafeText(nameRaw, { min: 2, max: 40 })) {
+      toast.error('Nom categorie obligatoire (2-40, sans < >).');
       return; 
     } 
+    const name = sanitizeText(nameRaw, { maxLen: 40 });
     setIsSaving(true); 
     try { 
       await post('/categories', {
@@ -670,15 +752,30 @@ const ParametresResp = ({ userName, onLogout }) => {
   };
 
   const createSupplier = async () => {
-    const name = String(newSupplier.name || '').trim();
-    if (!name) {
-      toast.error('Nom fournisseur obligatoire');
+    const nameRaw = String(newSupplier.name || '');
+    if (!isSafeText(nameRaw, { min: 2, max: 80 })) {
+      toast.error('Nom fournisseur obligatoire (2-80, sans < >).');
+      return;
+    }
+    const name = sanitizeText(nameRaw, { maxLen: 80 });
+
+    const emailRaw = String(newSupplier.email || '').trim();
+    const phoneRaw = String(newSupplier.phone || '').trim();
+    const isValidEmail = (value) => /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(String(value || '').trim());
+    const normalizePhone = (value) => String(value || '').trim().replace(/[^\d+]/g, '');
+    const normalizedPhone = phoneRaw ? normalizePhone(phoneRaw) : '';
+    if (emailRaw && !isValidEmail(emailRaw)) {
+      toast.error('Email fournisseur invalide.');
+      return;
+    }
+    if (phoneRaw && !/^(\+?\d{6,18})$/.test(normalizedPhone)) {
+      toast.error('Telephone fournisseur invalide (ex: +21698123456).');
       return;
     }
 
-    const lead = Number(newSupplier.default_lead_time_days || 0);
-    if (!Number.isFinite(lead) || lead < 0) {
-      toast.error('Delai par defaut invalide');
+    const lead = asNonNegativeInt(newSupplier.default_lead_time_days, { min: 0, max: 3650 });
+    if (!Number.isFinite(lead)) {
+      toast.error('Delai par defaut invalide (0-3650 jours).');
       return;
     }
 
@@ -686,8 +783,8 @@ const ParametresResp = ({ userName, onLogout }) => {
     try {
       await post('/suppliers', {
         name,
-        email: String(newSupplier.email || '').trim() || undefined,
-        phone: String(newSupplier.phone || '').trim() || undefined,
+        email: emailRaw || undefined,
+        phone: normalizedPhone || undefined,
         default_lead_time_days: Math.floor(lead),
         status: 'active',
       });
@@ -742,12 +839,40 @@ const ParametresResp = ({ userName, onLogout }) => {
       toast.error('Choisissez un produit');
       return;
     }
+
+    const lead = draft.lead_time_days === '' ? undefined : asNonNegativeInt(draft.lead_time_days, { min: 0, max: 3650 });
+    if (draft.lead_time_days !== '' && !Number.isFinite(lead)) {
+      toast.error('Delai invalide (0-3650 jours).');
+      return;
+    }
+    const unitPrice = draft.unit_price === '' ? undefined : Number(draft.unit_price);
+    if (draft.unit_price !== '' && (!Number.isFinite(unitPrice) || unitPrice < 0 || unitPrice > 1000000000)) {
+      toast.error('Prix unitaire invalide.');
+      return;
+    }
+    const skuRaw = String(draft.supplier_sku || '');
+    if (skuRaw && !isSafeText(skuRaw, { min: 0, max: 80 })) {
+      toast.error('SKU fournisseur invalide (max 80, sans < >).');
+      return;
+    }
+    const availabilityRaw = String(draft.availability_status || 'unknown').trim();
+    const availability = ['unknown', 'available', 'limited', 'out_of_stock', 'long_lead_time'].includes(availabilityRaw)
+      ? availabilityRaw
+      : 'unknown';
+    const availabilityNoteRaw = String(draft.availability_note || '');
+    if (availabilityNoteRaw && !isSafeText(availabilityNoteRaw, { min: 0, max: 180 })) {
+      toast.error('Note disponibilite invalide (max 180, sans < >).');
+      return;
+    }
+
     const payload = {
       product_id: draft.product_id,
-      lead_time_days: draft.lead_time_days === '' ? undefined : Number(draft.lead_time_days),
-      unit_price: draft.unit_price === '' ? undefined : Number(draft.unit_price),
+      lead_time_days: lead,
+      unit_price: unitPrice,
       is_primary: Boolean(draft.is_primary),
-      supplier_sku: String(draft.supplier_sku || '').trim() || undefined,
+      supplier_sku: sanitizeText(skuRaw, { maxLen: 80 }) || undefined,
+      availability_status: availability,
+      availability_note: sanitizeText(availabilityNoteRaw, { maxLen: 180 }) || undefined,
     };
     setIsSaving(true);
     try {
@@ -908,15 +1033,15 @@ const ParametresResp = ({ userName, onLogout }) => {
                   </p>
                   <div className="form-group">
                     <label>Nom complet</label>
-                    <input type="text" value={profileData.nom} onChange={(e) => setProfileData({ ...profileData, nom: e.target.value })} />
+                    <input type="text" maxLength={60} value={profileData.nom} onChange={(e) => setProfileData({ ...profileData, nom: e.target.value })} />
                   </div>
                   <div className="form-group">
                     <label>Email</label>
-                    <input type="email" value={profileData.email} onChange={(e) => setProfileData({ ...profileData, email: e.target.value })} />
+                    <input type="email" maxLength={254} value={profileData.email} onChange={(e) => setProfileData({ ...profileData, email: e.target.value })} />
                   </div>
                   <div className="form-group">
                     <label>Telephone</label>
-                    <input type="tel" value={profileData.telephone} onChange={(e) => setProfileData({ ...profileData, telephone: e.target.value })} />
+                    <input type="tel" maxLength={18} value={profileData.telephone} onChange={(e) => setProfileData({ ...profileData, telephone: e.target.value })} />
                   </div>
                   <button className="btn-save resp" type="button" onClick={saveProfile} disabled={isSaving}>
                     <Save size={16} /> Enregistrer
@@ -939,7 +1064,7 @@ const ParametresResp = ({ userName, onLogout }) => {
                   <div className="form-group">
                     <label>Nouveau mot de passe</label>
                     <div className="password-input-wrap">
-                      <input type={showPasswords.next ? 'text' : 'password'} placeholder="Nouveau mot de passe" value={securityData.newPassword} onChange={(e) => setSecurityData({ ...securityData, newPassword: e.target.value })} />
+                      <input type={showPasswords.next ? 'text' : 'password'} placeholder="Nouveau mot de passe" maxLength={64} value={securityData.newPassword} onChange={(e) => setSecurityData({ ...securityData, newPassword: e.target.value })} />
                       <button type="button" className="password-toggle-btn" onClick={() => setShowPasswords((p) => ({ ...p, next: !p.next }))}>
                         {showPasswords.next ? <EyeOff size={16} /> : <Eye size={16} />}
                       </button>
@@ -948,7 +1073,7 @@ const ParametresResp = ({ userName, onLogout }) => {
                   <div className="form-group">
                     <label>Confirmer le mot de passe</label>
                     <div className="password-input-wrap">
-                      <input type={showPasswords.confirm ? 'text' : 'password'} placeholder="Confirmer" value={securityData.confirmPassword} onChange={(e) => setSecurityData({ ...securityData, confirmPassword: e.target.value })} />
+                      <input type={showPasswords.confirm ? 'text' : 'password'} placeholder="Confirmer" maxLength={64} value={securityData.confirmPassword} onChange={(e) => setSecurityData({ ...securityData, confirmPassword: e.target.value })} />
                       <button type="button" className="password-toggle-btn" onClick={() => setShowPasswords((p) => ({ ...p, confirm: !p.confirm }))}>
                         {showPasswords.confirm ? <EyeOff size={16} /> : <Eye size={16} />}
                       </button>
@@ -1073,7 +1198,7 @@ const ParametresResp = ({ userName, onLogout }) => {
                     ))} 
                   </div> 
                   <div className="add-category"> 
-                    <input type="text" placeholder="Nouvelle categorie..." value={newCategoryName} onChange={(e) => setNewCategoryName(e.target.value)} /> 
+                    <input type="text" maxLength={60} placeholder="Nouvelle categorie..." value={newCategoryName} onChange={(e) => setNewCategoryName(e.target.value)} /> 
                     <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10, alignItems: 'center', marginTop: 8 }}>
                       <span style={{ fontSize: 12, color: '#64748b', fontWeight: 800 }}>Audiences:</span>
                       {DEMANDEUR_PROFILES.map((p) => (
@@ -1110,12 +1235,12 @@ const ParametresResp = ({ userName, onLogout }) => {
                   </div> 
                   <div className="form-group">
                     <label>Seuil d'alerte par defaut</label>
-                    <input type="number" value={stockRules.seuilAlerte} onChange={(e) => setStockRules({ ...stockRules, seuilAlerte: e.target.value })} />
+                    <input type="number" min="0" max="1000000000" step="1" value={stockRules.seuilAlerte} onChange={(e) => setStockRules({ ...stockRules, seuilAlerte: e.target.value })} />
                     <span className="input-hint">Quantite minimum avant alerte</span>
                   </div>
                   <div className="form-group">
                     <label>Jours d'inactivite</label>
-                    <input type="number" value={stockRules.joursInactivite} onChange={(e) => setStockRules({ ...stockRules, joursInactivite: e.target.value })} />
+                    <input type="number" min="1" max="3650" step="1" value={stockRules.joursInactivite} onChange={(e) => setStockRules({ ...stockRules, joursInactivite: e.target.value })} />
                     <span className="input-hint">Produit considere inactif apres ce nombre de jours</span>
                   </div>
                   <div className="toggle-item">
@@ -1296,14 +1421,6 @@ const ParametresResp = ({ userName, onLogout }) => {
                             >
                               {userActionId === `revoke-${u._id}` ? '...' : 'Deconnecter'}
                             </button>
-                            <button
-                              className={`btn-user ${u.status === 'active' ? 'danger' : 'success'}`}
-                              type="button"
-                              onClick={() => handleToggleBlock(u)}
-                              disabled={Boolean(userActionId)}
-                            >
-                              {userActionId === `status-${u._id}` ? '...' : u.status === 'active' ? 'Bloquer' : 'Debloquer'}
-                            </button>
                           </div> 
                         </div> 
                       ))} 
@@ -1322,9 +1439,250 @@ const ParametresResp = ({ userName, onLogout }) => {
                       <h2>Fournisseurs</h2>
                       <p className="users-subtitle">Gérer les fournisseurs + voir les commandes récentes</p>
                     </div>
-                    <button className="btn-refresh" type="button" onClick={loadSuppliersData} disabled={suppliersLoading}>
-                      Actualiser
-                    </button>
+	                    <button className="btn-refresh" type="button" onClick={loadSuppliersData} disabled={suppliersLoading}>
+	                      Actualiser
+	                    </button>
+	                  </div>
+
+	                  {supplierInsights?.summary && (
+	                    <div className="users-list" style={{ marginTop: 10 }}>
+	                      <div className="user-item" style={{ alignItems: 'flex-start' }}>
+	                        <div className="user-info" style={{ width: '100%' }}>
+	                          <span className="user-name">Centre d'incidents (Approvisionnement)</span>
+	                          <span className="user-role">
+	                            Fenêtre: {supplierInsights.window_days}j • Fournisseurs actifs: {supplierInsights.summary.active_suppliers} •
+	                            Commandes ouvertes: {supplierInsights.summary.open_orders} • Retards: {supplierInsights.summary.late_open_orders}
+	                          </span>
+
+	                          {Array.isArray(supplierInsights.risk_suppliers) && supplierInsights.risk_suppliers.length > 0 && (
+	                            <div style={{ marginTop: 10 }}>
+	                              <div style={{ fontWeight: 900, color: '#0f172a', marginBottom: 6 }}>Fournisseurs à risque</div>
+	                              <div className="users-list" style={{ marginTop: 10 }}>
+	                                {supplierInsights.risk_suppliers.slice(0, 6).map((x) => {
+	                                  const level = String(x.risk_level || 'faible');
+	                                  const bg = level === 'critique' ? '#fee2e2' : level === 'eleve' ? '#ffedd5' : level === 'moyen' ? '#fef9c3' : '#dcfce7';
+	                                  const fg = level === 'critique' ? '#991b1b' : level === 'eleve' ? '#9a3412' : level === 'moyen' ? '#854d0e' : '#166534';
+	                                  return (
+	                                    <div key={String(x.supplier_id)} className="user-item" style={{ borderStyle: 'dashed' }}>
+	                                      <div className="user-info">
+	                                        <span className="user-name">
+	                                          {x.supplier_name || 'Fournisseur'}
+	                                          <span style={{ marginLeft: 10, padding: '4px 10px', borderRadius: 999, background: bg, color: fg, fontWeight: 900, fontSize: 12 }}>
+	                                            Risque {Number(x.risk_score || 0).toFixed(1)}%
+	                                          </span>
+	                                        </span>
+	                                        <span className="user-role">
+	                                          Fiabilité: {Number(x.score_fiability || 0).toFixed(1)}/100 •
+	                                          Ouvertes: {x.open_orders_count || 0} • Retards: {x.late_open_orders_count || 0}
+	                                          {typeof x.max_days_late === 'number' && x.max_days_late > 0 ? ` • Max: ${Number(x.max_days_late).toFixed(1)}j` : ''}
+	                                        </span>
+	                                        {Array.isArray(x.reasons) && x.reasons.length ? (
+	                                          <span className="user-role" style={{ color: '#334155' }}>
+	                                            {x.reasons.slice(0, 3).join(' • ')}
+	                                          </span>
+	                                        ) : null}
+	                                      </div>
+	                                      <div className="user-actions">
+	                                        <button
+	                                          className="btn-user secondary"
+	                                          type="button"
+	                                          onClick={() => setExpandedSupplierId(String(x.supplier_id))}
+	                                          title="Ouvrir la fiche fournisseur"
+	                                        >
+	                                          Ouvrir
+	                                        </button>
+	                                      </div>
+	                                    </div>
+	                                  );
+	                                })}
+	                              </div>
+	                            </div>
+	                          )}
+
+	                          {Array.isArray(supplierInsights.late_purchase_orders) && supplierInsights.late_purchase_orders.length > 0 && (
+	                            <div style={{ marginTop: 12 }}>
+	                              <div style={{ fontWeight: 900, color: '#0f172a', marginBottom: 6 }}>Retards (commandes ouvertes)</div>
+	                              <div className="users-list" style={{ marginTop: 10 }}>
+	                                {supplierInsights.late_purchase_orders.slice(0, 6).map((po) => (
+	                                  <div key={String(po.po_id)} className="user-item">
+	                                    <div className="user-info">
+	                                      <span className="user-name">
+	                                        {po.supplier_name || 'Fournisseur'} <span className="user-role">PO-{String(po.po_id).slice(-6).toUpperCase()}</span>
+	                                      </span>
+	                                      <span className="user-role">
+	                                        Retard: <strong style={{ color: '#b91c1c' }}>{Number(po.days_late || 0).toFixed(1)}j</strong>
+	                                        • Promis: {po.promised_at ? new Date(po.promised_at).toLocaleDateString('fr-FR') : '-'}
+	                                      </span>
+	                                    </div>
+	                                  </div>
+	                                ))}
+	                              </div>
+	                            </div>
+	                          )}
+	                        </div>
+	                      </div>
+	                    </div>
+	                  )}
+
+	                  {Array.isArray(supplierRanking) && supplierRanking.length > 0 && (
+	                    <div className="users-list" style={{ marginTop: 10 }}>
+	                      <div className="user-item" style={{ alignItems: 'flex-start' }}>
+                        <div className="user-info" style={{ width: '100%' }}>
+                          <span className="user-name">Classement (score de fiabilité)</span>
+                          <span className="user-role">Basé sur les commandes livrées, retards et délais.</span>
+                          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: 10, marginTop: 10 }}>
+                            {supplierRanking.slice(0, 8).map((r) => {
+                              const score = Number(r?.score || 0);
+                              const onTime = r?.kpis?.on_time_rate;
+                              const avgDelay = r?.kpis?.avg_delay_days;
+                              const ackRate = r?.ack_rate;
+                              const avgAck = r?.avg_ack_hours;
+                              const tone = score >= 80 ? '#15803d' : score >= 60 ? '#b45309' : '#b91c1c';
+                              return (
+                                <div key={String(r.supplier_id)} style={{ border: '1px solid #e2e8f0', borderRadius: 12, padding: 10, background: '#f8fafc' }}>
+                                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10 }}>
+                                    <div style={{ fontWeight: 1000, color: '#0f172a' }}>{r.supplier_name}</div>
+                                    <div style={{ fontWeight: 1000, color: tone }}>Score {score.toFixed(1)}</div>
+                                  </div>
+                                  <div style={{ marginTop: 6, display: 'flex', gap: 10, flexWrap: 'wrap', fontSize: 12, fontWeight: 900, color: '#475569' }}>
+                                    <span>À l'heure: {typeof onTime === 'number' ? `${onTime}%` : 'N/A'}</span>
+                                    <span>Retard moy.: {typeof avgDelay === 'number' ? `${avgDelay}j` : 'N/A'}</span>
+                                    <span>ACK ETA: {typeof ackRate === 'number' ? `${ackRate}%` : 'N/A'}</span>
+                                    <span>Délai ACK: {typeof avgAck === 'number' ? `${avgAck}h` : 'N/A'}</span>
+                                  </div>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  <div className="users-list" style={{ marginTop: 10 }}>
+                    <div className="user-item" style={{ alignItems: 'flex-start' }}>
+                      <div className="user-info" style={{ width: '100%' }}>
+                        <span className="user-name">Notification fournisseur (email)</span>
+                        <span className="user-role">Envoyer un message court au fournisseur (coordination, confirmation d'ETA, demande de devis).</span>
+                        <div style={{ display: 'grid', gridTemplateColumns: '1.4fr auto', gap: 10, marginTop: 10, alignItems: 'center' }}>
+                          <select value={supplierNotifyTargetId} onChange={(e) => setSupplierNotifyTargetId(e.target.value)} disabled={isSaving || suppliersLoading}>
+                            <option value="">Choisir un fournisseur...</option>
+                            {(Array.isArray(supplierRanking) ? supplierRanking : []).slice(0, 20).map((r) => (
+                              <option key={String(r.supplier_id)} value={String(r.supplier_id)}>
+                                {r.supplier_name} (score {Number(r?.score || 0).toFixed(1)})
+                              </option>
+                            ))}
+                          </select>
+                          <button
+                            className="btn-user"
+                            type="button"
+                            disabled={
+                              isSaving ||
+                              suppliersLoading ||
+                              !supplierNotifyTargetId ||
+                              supplierNotifyLoadingId === String(supplierNotifyTargetId)
+                            }
+                            onClick={() => {
+                              const r = (Array.isArray(supplierRanking) ? supplierRanking : []).find((x) => String(x?.supplier_id) === String(supplierNotifyTargetId));
+                              if (r) notifySupplierByEmail(r);
+                            }}
+                          >
+                            {supplierNotifyLoadingId === String(supplierNotifyTargetId) ? 'Envoi...' : 'Envoyer email'}
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="user-item" style={{ alignItems: 'flex-start' }}>
+                      <div className="user-info" style={{ width: '100%' }}>
+                        <span className="user-name">IA — Recommandation fournisseur</span>
+                        <span className="user-role">Propose le meilleur fournisseur pour un produit (délai + fiabilité + historique).</span>
+
+                        <div style={{ display: 'grid', gridTemplateColumns: '1.4fr 0.6fr auto auto', gap: 10, marginTop: 10, alignItems: 'center' }}>
+                          <select
+                            value={supplierAiProductId}
+                            onChange={(e) => {
+                              const next = e.target.value;
+                              setSupplierAiProductId(next);
+                              refreshSupplierAiRecommendation(next);
+                            }}
+                            disabled={isSaving || suppliersLoading}
+                          >
+                            {approvedProducts.length === 0 ? (
+                              <option value="">Aucun produit approuvé</option>
+                            ) : null}
+                            {approvedProducts.map((p) => (
+                              <option key={p.id} value={p.id}>{p.name} ({p.code})</option>
+                            ))}
+                          </select>
+                          <input
+                            type="number"
+                            min="1"
+                            max="1000000000"
+                            step="1"
+                            value={supplierAiQty}
+                            onChange={(e) => setSupplierAiQty(e.target.value)}
+                            placeholder="Qté"
+                            disabled={isSaving}
+                          />
+                          <button className="btn-user" type="button" onClick={() => refreshSupplierAiRecommendation()} disabled={supplierAiLoading || isSaving || !supplierAiProductId}>
+                            {supplierAiLoading ? 'Analyse...' : 'Analyser'}
+                          </button>
+                          <button className="btn-user success" type="button" onClick={createAiPurchaseOrder} disabled={isSaving || supplierAiLoading || !supplierAiProductId}>
+                            Créer commande
+                          </button>
+                        </div>
+
+                        {supplierAiError ? (
+                          <div className="user-role" style={{ marginTop: 8, color: '#b91c1c' }}>{supplierAiError}</div>
+                        ) : null}
+
+                        {supplierAiRec?.recommended ? (
+                          <div style={{ marginTop: 10, padding: 10, borderRadius: 12, border: '1px solid #e2e8f0', background: '#f8fafc' }}>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10, flexWrap: 'wrap' }}>
+                              <div style={{ fontWeight: 1000, color: '#0f172a' }}>
+                                Recommandé: {supplierAiRec.recommended.supplier_name || 'Fournisseur'}
+                              </div>
+                              <div style={{ fontWeight: 1000, color: '#15803d' }}>
+                                Score {Number(supplierAiRec.recommended.score || 0).toFixed(1)} / 100
+                              </div>
+                            </div>
+                            <div style={{ marginTop: 6, fontSize: 12, fontWeight: 900, color: '#475569' }}>
+                              Délai estimé: {supplierAiRec.recommended.lead_time_days ?? '-'}j
+                              {supplierAiRec.recommended.is_primary ? ' • Fournisseur principal' : ''}
+                            </div>
+                            {Array.isArray(supplierAiRec.recommended.reasons) && supplierAiRec.recommended.reasons.length > 0 ? (
+                              <div style={{ marginTop: 8, fontSize: 12, color: '#334155', fontWeight: 900 }}>
+                                Raisons: {supplierAiRec.recommended.reasons.slice(0, 4).join(' • ')}
+                              </div>
+                            ) : null}
+                          </div>
+                        ) : (
+                          <div className="user-role" style={{ marginTop: 10 }}>
+                            Choisissez un produit puis cliquez sur <strong>Analyser</strong>.
+                          </div>
+                        )}
+
+                        {Array.isArray(supplierAiRec?.candidates) && supplierAiRec.candidates.length > 1 ? (
+                          <div style={{ marginTop: 10 }}>
+                            <div style={{ fontWeight: 1000, color: '#0f172a', marginBottom: 6 }}>Alternatives</div>
+                            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: 10 }}>
+                              {supplierAiRec.candidates.slice(0, 4).map((c) => (
+                                <div key={String(c.supplier_id)} style={{ border: '1px solid #e2e8f0', borderRadius: 12, padding: 10, background: '#fff' }}>
+                                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10 }}>
+                                    <div style={{ fontWeight: 1000, color: '#0f172a' }}>{c.supplier_name}</div>
+                                    <div style={{ fontWeight: 1000, color: '#334155' }}>{Number(c.score || 0).toFixed(1)}</div>
+                                  </div>
+                                  <div style={{ marginTop: 6, fontSize: 12, fontWeight: 900, color: '#64748b' }}>
+                                    {Array.isArray(c.reasons) ? c.reasons.slice(0, 2).join(' • ') : ''}
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        ) : null}
+                      </div>
+                    </div>
                   </div>
 
                   <div className="users-list" style={{ marginTop: 10 }}>
@@ -1446,6 +1804,24 @@ const ParametresResp = ({ userName, onLogout }) => {
                                             Principal
                                           </label>
                                         </div>
+                                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginTop: 10 }}>
+                                          <select
+                                            value={supplierLinkDraftById[s._id]?.availability_status || 'unknown'}
+                                            onChange={(e) => setSupplierLinkDraftById((p) => ({ ...p, [s._id]: { ...(p[s._id] || {}), availability_status: e.target.value } }))}
+                                          >
+                                            <option value="unknown">Disponibilite: inconnue</option>
+                                            <option value="available">Disponible</option>
+                                            <option value="limited">Limitee</option>
+                                            <option value="out_of_stock">Rupture</option>
+                                            <option value="long_lead_time">Delai long</option>
+                                          </select>
+                                          <input
+                                            maxLength={180}
+                                            value={supplierLinkDraftById[s._id]?.availability_note ?? ''}
+                                            onChange={(e) => setSupplierLinkDraftById((p) => ({ ...p, [s._id]: { ...(p[s._id] || {}), availability_note: e.target.value } }))}
+                                            placeholder="Note disponibilite (optionnel)"
+                                          />
+                                        </div>
                                         <div style={{ display: 'grid', gridTemplateColumns: '1fr auto', gap: 10, marginTop: 10 }}>
                                           <input
                                             value={supplierLinkDraftById[s._id]?.supplier_sku ?? ''}
@@ -1472,6 +1848,8 @@ const ParametresResp = ({ userName, onLogout }) => {
                                               <span className="user-name">{lnk.product?.name || 'Produit'} <span className="user-role">{lnk.product?.code_product || ''}</span></span>
                                               <span className="user-role">
                                                 Delai: {lnk.lead_time_days ?? '-'}j • Prix: {lnk.unit_price ?? '-'} • {lnk.is_primary ? 'Principal' : 'Secondaire'}
+                                                <br />
+                                                Dispo: {String(lnk.availability_status || 'unknown') === 'available' ? 'Disponible' : String(lnk.availability_status || 'unknown') === 'limited' ? 'Limitee' : String(lnk.availability_status || 'unknown') === 'out_of_stock' ? 'Rupture' : String(lnk.availability_status || 'unknown') === 'long_lead_time' ? 'Delai long' : 'Inconnue'}{lnk.availability_note ? ` • Note: ${lnk.availability_note}` : ''}
                                               </span>
                                             </div>
                                           </div>
@@ -1511,16 +1889,19 @@ const ParametresResp = ({ userName, onLogout }) => {
                                               <div style={{ marginTop: 10, paddingTop: 10, borderTop: '1px dashed #e2e8f0', width: '100%' }}>
                                                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 10 }}>
                                                   <input
+                                                    maxLength={80}
                                                     value={receiveDraftByPoId[po._id]?.delivery_note_number || ''}
                                                     onChange={(e) => setReceiveDraftByPoId((p) => ({ ...p, [po._id]: { ...(p[po._id] || {}), delivery_note_number: e.target.value } }))}
                                                     placeholder="Bon livraison (optionnel)"
                                                   />
                                                   <input
+                                                    maxLength={180}
                                                     value={receiveDraftByPoId[po._id]?.supplier_doc_qr_value || ''}
                                                     onChange={(e) => setReceiveDraftByPoId((p) => ({ ...p, [po._id]: { ...(p[po._id] || {}), supplier_doc_qr_value: e.target.value } }))}
                                                     placeholder="QR fournisseur (optionnel)"
                                                   />
                                                   <input
+                                                    maxLength={30}
                                                     value={receiveDraftByPoId[po._id]?.lot_prefix || ''}
                                                     onChange={(e) => setReceiveDraftByPoId((p) => ({ ...p, [po._id]: { ...(p[po._id] || {}), lot_prefix: e.target.value } }))}
                                                     placeholder="Prefix lot (optionnel)"
@@ -1537,6 +1918,7 @@ const ParametresResp = ({ userName, onLogout }) => {
                                                         type="number"
                                                         min="0"
                                                         max={l.remaining}
+                                                        step="1"
                                                         value={receiveDraftByPoId[po._id]?.lines?.[idx]?.quantity ?? 0}
                                                         onChange={(e) => {
                                                           const raw = Number(e.target.value);
@@ -1612,16 +1994,19 @@ const ParametresResp = ({ userName, onLogout }) => {
                               <div style={{ marginTop: 10, paddingTop: 10, borderTop: '1px dashed #e2e8f0', width: '100%' }}>
                                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 10 }}>
                                   <input
+                                    maxLength={80}
                                     value={receiveDraftByPoId[po._id]?.delivery_note_number || ''}
                                     onChange={(e) => setReceiveDraftByPoId((p) => ({ ...p, [po._id]: { ...(p[po._id] || {}), delivery_note_number: e.target.value } }))}
                                     placeholder="Bon livraison (optionnel)"
                                   />
                                   <input
+                                    maxLength={180}
                                     value={receiveDraftByPoId[po._id]?.supplier_doc_qr_value || ''}
                                     onChange={(e) => setReceiveDraftByPoId((p) => ({ ...p, [po._id]: { ...(p[po._id] || {}), supplier_doc_qr_value: e.target.value } }))}
                                     placeholder="QR fournisseur (optionnel)"
                                   />
                                   <input
+                                    maxLength={30}
                                     value={receiveDraftByPoId[po._id]?.lot_prefix || ''}
                                     onChange={(e) => setReceiveDraftByPoId((p) => ({ ...p, [po._id]: { ...(p[po._id] || {}), lot_prefix: e.target.value } }))}
                                     placeholder="Prefix lot (optionnel)"
@@ -1638,6 +2023,7 @@ const ParametresResp = ({ userName, onLogout }) => {
                                         type="number"
                                         min="0"
                                         max={l.remaining}
+                                        step="1"
                                         value={receiveDraftByPoId[po._id]?.lines?.[idx]?.quantity ?? 0}
                                         onChange={(e) => {
                                           const raw = Number(e.target.value);
@@ -1666,6 +2052,63 @@ const ParametresResp = ({ userName, onLogout }) => {
                         ))}
                       </div>
                     )}
+                  </div>
+                </div>
+              )}
+
+              {activeTab === 'support' && (
+                <div className="param-section">
+                  <div className="users-header">
+                    <div>
+                      <h2>Support IT</h2>
+                      <p className="users-subtitle">Signaler un incident technique Ã  lâ€™administration (email + notification).</p>
+                    </div>
+                  </div>
+                  <div className="users-list" style={{ marginTop: 10 }}>
+                    <div className="user-item" style={{ alignItems: 'flex-start' }}>
+                      <div className="user-info" style={{ width: '100%' }}>
+                        <div style={{ display: 'grid', gap: 10 }}>
+                          <label style={{ fontWeight: 900, fontSize: 12, color: '#64748b' }}>
+                            Objet
+                            <input
+                              style={{ marginTop: 6, width: '100%', border: '1px solid #e2e8f0', borderRadius: 10, padding: '10px 12px', fontWeight: 800 }}
+                              value={supportDraft.subject}
+                              onChange={(e) => setSupportDraft((p) => ({ ...p, subject: e.target.value }))}
+                              placeholder="Ex: Alertes IA absentes"
+                              maxLength={120}
+                            />
+                          </label>
+                          <label style={{ fontWeight: 900, fontSize: 12, color: '#64748b' }}>
+                            Priorite
+                            <select
+                              style={{ marginTop: 6, width: '100%', border: '1px solid #e2e8f0', borderRadius: 10, padding: '10px 12px', fontWeight: 800 }}
+                              value={supportDraft.priority}
+                              onChange={(e) => setSupportDraft((p) => ({ ...p, priority: e.target.value }))}
+                            >
+                              <option value="normal">Normale</option>
+                              <option value="urgent">Urgente</option>
+                              <option value="critical">Critique</option>
+                            </select>
+                          </label>
+                          <label style={{ fontWeight: 900, fontSize: 12, color: '#64748b' }}>
+                            Message
+                            <textarea
+                              style={{ marginTop: 6, width: '100%', border: '1px solid #e2e8f0', borderRadius: 10, padding: '10px 12px', fontWeight: 800 }}
+                              value={supportDraft.message}
+                              onChange={(e) => setSupportDraft((p) => ({ ...p, message: e.target.value }))}
+                              placeholder="DÃ©cris le problÃ¨me (page, heure, contexte)"
+                              rows={4}
+                              maxLength={800}
+                            />
+                          </label>
+                        </div>
+                        <div style={{ marginTop: 12 }}>
+                          <button className="btn-user primary" type="button" onClick={sendSupportRequest} disabled={supportSending}>
+                            {supportSending ? 'Envoi...' : 'Envoyer au support IT'}
+                          </button>
+                        </div>
+                      </div>
+                    </div>
                   </div>
                 </div>
               )}
@@ -1730,7 +2173,7 @@ const ParametresResp = ({ userName, onLogout }) => {
 
                       {!geminiStatus?.configured ? (
                         <div style={{ marginTop: 10, fontSize: 12, color: '#64748b', fontWeight: 800 }}>
-                          Astuce: connectez-vous en responsable puis configurez <strong>GEMINI_API_KEY</strong> dans <strong>backend/.env</strong> (format AIza...),
+                          Astuce: connectez-vous en administrateur (informatique) puis configurez <strong>GEMINI_API_KEY</strong> dans <strong>backend/.env</strong>,
                           puis redemarrez le backend.
                         </div>
                       ) : null}
@@ -1744,7 +2187,7 @@ const ParametresResp = ({ userName, onLogout }) => {
                         <span className="toggle-desc">Anticiper les ruptures de stock basees sur l'historique</span>
                       </div>
                       <label className="toggle-switch">
-                        <input type="checkbox" checked={aiSettings.predictionsEnabled} onChange={(e) => setAiSettings({ ...aiSettings, predictionsEnabled: e.target.checked })} />
+                        <input type="checkbox" checked={aiSettings.predictionsEnabled} disabled />
                         <span className="toggle-slider"></span>
                       </label>
                     </div>
@@ -1754,7 +2197,7 @@ const ParametresResp = ({ userName, onLogout }) => {
                         <span className="toggle-desc">Generer des alertes IA automatiquement</span>
                       </div>
                       <label className="toggle-switch">
-                        <input type="checkbox" checked={aiSettings.alertesAuto} onChange={(e) => setAiSettings({ ...aiSettings, alertesAuto: e.target.checked })} />
+                        <input type="checkbox" checked={aiSettings.alertesAuto} disabled />
                         <span className="toggle-slider"></span>
                       </label>
                     </div>
@@ -1764,17 +2207,14 @@ const ParametresResp = ({ userName, onLogout }) => {
                         <span className="toggle-desc">Detecter les anomalies de consommation</span>
                       </div>
                       <label className="toggle-switch">
-                        <input type="checkbox" checked={aiSettings.analyseConsommation} onChange={(e) => setAiSettings({ ...aiSettings, analyseConsommation: e.target.checked })} />
+                        <input type="checkbox" checked={aiSettings.analyseConsommation} disabled />
                         <span className="toggle-slider"></span>
                       </label>
                     </div>
                   </div>
-                  <button className="btn-save resp" type="button" onClick={saveAiSettings} disabled={isSaving}>
-                    <Save size={16} /> Enregistrer configuration IA
-                  </button>
-                  <button className="btn-save" type="button" onClick={enableAiDefaults} disabled={isSaving} style={{ marginLeft: 10 }}>
-                    Re-activer IA (recommande)
-                  </button>
+                  <div style={{ marginTop: 10, fontSize: 12, color: '#64748b', fontWeight: 800 }}>
+                    Note: La configuration IA est geree par l'administrateur (informatique). Cette page affiche uniquement l'etat.
+                  </div>
                 </div>
               )}
             </div>

@@ -5,6 +5,7 @@ const User = require('../models/User');
 const { getSupplierEmailPolicy, sendPurchaseOrderEmailToSupplier } = require('./purchaseOrderSupplierMailService');
 const { buildSupplierPortalUrlForSupplier } = require('./supplierPortalTokenService');
 const logger = require('../utils/logger');
+const { isActiveSupplierStatus } = require('./supplierRegistryService');
 
 function hoursToMs(h) {
   const n = Number(h || 0);
@@ -67,7 +68,7 @@ async function runPurchaseOrderRemindersOnce() {
   for (const po of candidates || []) {
     const supplier = po.supplier;
 
-    if (!supplier || supplier.status !== 'active') continue;
+    if (!supplier || !isActiveSupplierStatus(supplier.status)) continue;
     if (!supplier.email) continue;
 
     // ETA confirmation reminder (supplier responsiveness) - before delivery reminders.

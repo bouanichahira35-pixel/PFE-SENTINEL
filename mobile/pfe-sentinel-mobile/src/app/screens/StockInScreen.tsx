@@ -1,0 +1,62 @@
+import React, { useMemo, useState } from 'react';
+import { Text, View, StyleSheet } from 'react-native';
+import { Screen } from '../../ui/Screen';
+import { Input } from '../../ui/Input';
+import { Button } from '../../ui/Button';
+import { colors } from '../../ui/theme';
+import { DeviceInfo } from '../../core/device/deviceInfo';
+import { OutboxRepo } from '../../core/db/outboxRepo';
+import { randomUUID } from 'expo-crypto';
+import { SettingsStore } from '../../core/settings/settingsStore';
+
+export function StockInScreen(props: { productId: string; onBack: () => void }) {
+  const [qty, setQty] = useState('1');
+  const [note, setNote] = useState('');
+  const [msg, setMsg] = useState('');
+  const [saving, setSaving] = useState(false);
+
+  const quantity = useMemo(() => Number(qty), [qty]);
+
+  const save = async () => {
+    setMsg('');
+    setSaving(true);
+    try {
+      if (!Number.isFinite(quantity) || quantity <= 0) throw new Error('Quantité invalide');
+      const meta = await DeviceInfo.getEventMeta();
+      const site = await SettingsStore.getActiveSite();
+      const payload = {
+        site,
+        productId: props.productId,
+        quantity,
+        note: note.trim() || undefined,
+        meta,
+      };
+      const id = randomUUID();
+      await OutboxRepo.enqueue({ id, type: 'stock_entry_create', payload });
+      setMsg('Ajouté à l’outbox');
+    } catch (e: any) {
+      setMsg(e?.message || 'Erreur');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <Screen title="Entrée stock" onBack={props.onBack}>
+      <View style={styles.card}>
+        <Text style={styles.meta}>Produit: {props.productId.slice(-6)}</Text>
+        <Input label="Quantité" value={qty} onChangeText={setQty} keyboardType="numeric" />
+        <Input label="Note (optionnel)" value={note} onChangeText={setNote} placeholder="..." />
+        {msg ? <Text style={[styles.msg, { color: msg.includes('outbox') ? colors.ok : colors.danger }]}>{msg}</Text> : null}
+        <Button title="Enregistrer (offline)" onPress={save} loading={saving} />
+      </View>
+    </Screen>
+  );
+}
+
+const styles = StyleSheet.create({
+  card: { borderWidth: 1, borderColor: colors.border, backgroundColor: colors.card, borderRadius: 14, padding: 12 },
+  meta: { color: colors.muted, marginBottom: 8 },
+  msg: { marginBottom: 10, fontWeight: '800' },
+});
+

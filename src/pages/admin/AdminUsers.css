@@ -323,3 +323,24 @@
     grid-template-columns: 1fr;
   }
 }
+
+@media (max-width: 768px) {
+  .users-toolbar {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .filters,
+  .filters label,
+  .filters select {
+    width: 100%;
+  }
+
+  .users-stats {
+    grid-template-columns: 1fr;
+  }
+
+  .users-table {
+    min-width: 760px;
+  }
+}

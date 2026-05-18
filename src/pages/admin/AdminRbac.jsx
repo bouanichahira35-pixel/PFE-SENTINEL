@@ -5,6 +5,7 @@ import HeaderPage from '../../components/shared/HeaderPage';
 import LoadingSpinner from '../../components/shared/LoadingSpinner';
 import { get, patch } from '../../services/api';
 import { useToast } from '../../components/shared/Toast';
+import './AdminDashboard.css';
 import './AdminRbac.css';
 
 function groupByArea(permissionMeta, permissions) {

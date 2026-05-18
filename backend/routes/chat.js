@@ -20,6 +20,19 @@ function getCounterpartRole(role) {
   return null;
 }
 
+function joinUrl(baseUrl, path) {
+  if (!baseUrl) return '';
+  const base = String(baseUrl).replace(/\/+$/, '');
+  const p = String(path || '').startsWith('/') ? String(path || '') : `/${path || ''}`;
+  return `${base}${p}`;
+}
+
+function getChatPathForRole(role) {
+  if (role === 'magasinier') return '/magasinier/chat';
+  if (role === 'responsable') return '/responsable/chat';
+  return '/login';
+}
+
 async function ensureDirectConversation(userA, userB) {
   let conv = await ChatConversation.findOne({
     type: 'direct',
@@ -40,7 +53,6 @@ async function notifyConversationRecipientsByMail({ sender, recipients, content,
   if (!Array.isArray(recipients) || recipients.length === 0) return;
 
   const appUrl = process.env.APP_BASE_URL || process.env.FRONTEND_URL || '';
-  const chatUrl = appUrl ? `${appUrl}/magasinier/chat` : '';
   const senderName = sender?.username || 'Responsable';
   const dateLabel = new Date().toLocaleString('fr-FR');
   const shortMessage = String(content || '').slice(0, 400);
@@ -54,6 +66,7 @@ async function notifyConversationRecipientsByMail({ sender, recipients, content,
 
       const senderRole = String(sender?.role || '').toLowerCase();
       const recipientRole = String(recipient?.role || '').toLowerCase();
+      const chatUrl = joinUrl(appUrl, getChatPathForRole(recipientRole));
       const subject =
         senderRole === 'responsable'
           ? `Nouveau message du responsable (${senderName})`

@@ -5,6 +5,7 @@ import HeaderPage from '../../components/shared/HeaderPage';
 import LoadingSpinner from '../../components/shared/LoadingSpinner';
 import { get } from '../../services/api';
 import { useToast } from '../../components/shared/Toast';
+import './AdminDashboard.css';
 import './AdminSecurity.css';
 
 function safeStr(value) {

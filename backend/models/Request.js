@@ -3,6 +3,8 @@ const { normalizeRequestStatus } = require('../utils/requestStatus');
 
 const requestSchema = new mongoose.Schema(
   {
+    // External dataset import id (ex: REQ-000001). Optional and sparse-unique to keep imports idempotent.
+    external_request_id: { type: String, trim: true, index: true, unique: true, sparse: true },
     demandeur: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
     product: { type: mongoose.Schema.Types.ObjectId, ref: 'Product', required: true },
     quantity_requested: { type: Number, required: true },

@@ -237,6 +237,9 @@ const AjouterProduit = ({ userName, onLogout }) => {
       toast.error('Ce QR code existe deja. Utilisez un QR code unique.');
       return;
     }
+    if (formData.famille === 'produit_chimique' && !fdsFile) {
+      toast.warning("Attention : ce produit chimique n'a pas encore de FDS.");
+    }
 
     setIsSubmitting(true);
     try {
@@ -634,6 +637,7 @@ const AjouterProduit = ({ userName, onLogout }) => {
                         accept=".pdf,.png,.jpg,.jpeg,.webp,.txt,.doc,.docx"
                         onChange={(e) => setFdsFile(e.target.files?.[0] || null)}
                       />
+                      <span className="input-hint">Pour un produit chimique, la fiche FDS est recommandee.</span>
                     </div>
                   </div>
                 )}

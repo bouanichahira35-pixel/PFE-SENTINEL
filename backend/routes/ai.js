@@ -28,6 +28,7 @@ const {
 } = require('../services/aiModelService');
 const { rebuildAiAlerts, buildHistoryAnomalyAlerts } = require('../services/alertService');
 const { normalizeRequestStatus } = require('../utils/requestStatus');
+const { supplierStatusQuery, SUPPLIER_STATUS } = require('../services/supplierRegistryService');
 
 const AI_SETTINGS_DEFAULT = Object.freeze({
   predictionsEnabled: true,
@@ -1188,7 +1189,7 @@ router.get('/decision-inbox', requireAuth, async (req, res) => {
 
     // Supplier risk signals (simple + explainable KPIs).
     try {
-      const suppliersActive = await Supplier.find({ status: 'active' })
+      const suppliersActive = await Supplier.find({ status: supplierStatusQuery(SUPPLIER_STATUS.ACTIF) })
         .select('_id name default_lead_time_days status')
         .sort({ createdAt: -1 })
         .limit(50)

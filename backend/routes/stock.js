@@ -8,6 +8,7 @@ const Product = require('../models/Product');
 const Request = require('../models/Request');
 const History = require('../models/History');
 const Sequence = require('../models/Sequence');
+const { Inventory } = require('../models/Inventory');
 const requireAuth = require('../middlewares/requireAuth');
 const requirePermission = require('../middlewares/requirePermission');
 const strictBody = require('../middlewares/strictBody');
@@ -28,6 +29,29 @@ const {
 const { normalizeRequestStatus } = require('../utils/requestStatus');
 const SAFE_USER_FIELDS = 'username email role status telephone';
 
+const ACTIVE_INVENTORY_STATUSES = ['A_FAIRE', 'EN_COURS', 'A_VALIDER', 'A_RECOMPTER'];
+
+async function ensureStockMovementNotBlocked(req, res) {
+  try {
+    const locked = await Inventory.findOne({
+      movement_blocked: true,
+      status: { $in: ACTIVE_INVENTORY_STATUSES },
+    })
+      .select('_id reference type_inventaire date_lancement')
+      .lean();
+
+    if (!locked) return true;
+    res.status(409).json({
+      error: 'Mouvements stock bloqués par inventaire',
+      details: `Inventaire ${locked.reference} (${locked.type_inventaire}) en cours`,
+    });
+    return false;
+  } catch {
+    // Fail-open: stock operations must remain available if inventory lock query fails.
+    return true;
+  }
+}
+
 function parsePeriod(fromRaw, toRaw) {
   const now = new Date();
   const from = fromRaw ? new Date(fromRaw) : new Date(now.getFullYear(), now.getMonth(), 1);
@@ -35,6 +59,41 @@ function parsePeriod(fromRaw, toRaw) {
   if (Number.isNaN(from.getTime()) || Number.isNaN(to.getTime())) return null;
   return { from, to };
 }
+
+// GET /api/stock/lots/expiring?days=30
+// Small helper endpoint for dashboards (Responsable/Magasinier).
+router.get('/lots/expiring', requireAuth, async (req, res) => {
+  try {
+    const role = String(req.user?.role || '').toLowerCase();
+    if (!['responsable', 'magasinier', 'admin'].includes(role)) {
+      return res.status(403).json({ error: 'Acces refuse' });
+    }
+
+    const daysRaw = Number.parseInt(String(req.query?.days || '30'), 10);
+    const days = Number.isFinite(daysRaw) ? Math.max(1, Math.min(365, daysRaw)) : 30;
+
+    const now = new Date();
+    const end = new Date(now.getTime() + days * 24 * 60 * 60 * 1000);
+
+    const filter = {
+      status: 'open',
+      quantity_available: { $gt: 0 },
+      expiry_date: { $ne: null, $gte: now, $lte: end },
+    };
+
+    const count = await StockLot.countDocuments(filter);
+    const items = await StockLot.find(filter)
+      .select('_id product lot_number expiry_date quantity_available unit_price')
+      .populate('product', 'name code_product')
+      .sort({ expiry_date: 1 })
+      .limit(12)
+      .lean();
+
+    return res.json({ ok: true, days, count, items });
+  } catch (err) {
+    return res.status(500).json({ error: 'Failed to fetch expiring lots', details: err.message });
+  }
+});
 
 function ensureResponsableRole(req, res) {
   const role = String(req.user?.role || '').toLowerCase();
@@ -257,6 +316,36 @@ function sanitizeExitMode(value) {
   return 'manual';
 }
 
+function sanitizeExitContext(value) {
+  const v = String(value || '').trim().toLowerCase();
+  if (v === 'external') return 'external';
+  return 'internal';
+}
+
+function chooseLotStrategy(lots) {
+  if (!Array.isArray(lots) || lots.length === 0) return 'fifo';
+  const hasExpiry = lots.some((l) => Boolean(l?.expiry_date));
+  return hasExpiry ? 'fefo' : 'fifo';
+}
+
+function sortLotsForStrategy(lots, strategy) {
+  const toTime = (d) => (d ? new Date(d).getTime() : Number.POSITIVE_INFINITY);
+  const s = strategy === 'fefo' ? 'fefo' : 'fifo';
+  return [...(lots || [])].sort((a, b) => {
+    if (s === 'fefo') {
+      const aExp = toTime(a?.expiry_date);
+      const bExp = toTime(b?.expiry_date);
+      if (aExp !== bExp) return aExp - bExp;
+    }
+    const aEntry = toTime(a?.date_entry);
+    const bEntry = toTime(b?.date_entry);
+    if (aEntry !== bEntry) return aEntry - bEntry;
+    const aCreated = toTime(a?.createdAt);
+    const bCreated = toTime(b?.createdAt);
+    return aCreated - bCreated;
+  });
+}
+
 function sanitizeAttachments(input) {
   if (!Array.isArray(input)) return [];
   const out = [];
@@ -329,15 +418,18 @@ router.get('/fifo/next-lot/:productId', requireAuth, async (req, res) => {
     const product = await Product.findById(req.params.productId).select('_id name code_product quantity_current').lean();
     if (!product) return res.status(404).json({ error: 'Produit introuvable' });
 
-    const lot = await StockLot.findOne({
+    const lots = await StockLot.find({
       product: product._id,
       quantity_available: { $gt: 0 },
-    })
-      .sort({ date_entry: 1, createdAt: 1 })
-      .lean();
+    }).lean();
+
+    const strategy = chooseLotStrategy(lots);
+    const sortedLots = sortLotsForStrategy(lots, strategy);
+    const lot = sortedLots.find((l) => Number(l?.quantity_available || 0) > 0) || null;
 
     return res.json({
       ok: true,
+      strategy,
       product: {
         id: product._id,
         name: product.name,
@@ -729,6 +821,7 @@ router.post(
   ]),
   async (req, res) => {
   try {
+    if (!(await ensureStockMovementNotBlocked(req, res))) return;
     const errors = [];
     const quantity = asPositiveNumber(req.body.quantity);
     if (Number.isNaN(quantity) || quantity === undefined) errors.push('quantity must be a positive number');
@@ -1189,6 +1282,11 @@ router.post(
   requirePermission(PERMISSIONS.STOCK_EXIT_CREATE),
   strictBody([
     'withdrawal_paper_number',
+    'exit_context',
+    'external_destination',
+    'external_company',
+    'delivery_note_number',
+    'delivery_note_date',
     'product',
     'quantity',
     'direction_laboratory',
@@ -1205,6 +1303,7 @@ router.post(
   ]),
   async (req, res) => {
   try {
+    if (!(await ensureStockMovementNotBlocked(req, res))) return;
     const errors = [];
     const quantity = asPositiveNumber(req.body.quantity);
     if (Number.isNaN(quantity) || quantity === undefined) errors.push('quantity must be a positive number');
@@ -1221,6 +1320,15 @@ router.post(
     const submissionDurationMs = sanitizeDurationMs(req.body.submission_duration_ms);
     if (Number.isNaN(submissionDurationMs)) errors.push('submission_duration_ms invalide');
 
+    const exitContext = sanitizeExitContext(req.body.exit_context);
+    const isExternalExit = exitContext === 'external';
+    const externalDestination = validateOptionalText(errors, 'external_destination', req.body.external_destination, { min: 0, max: 120 });
+    const externalCompany = validateOptionalText(errors, 'external_company', req.body.external_company, { min: 0, max: 120 });
+    const deliveryNoteNumber = validateOptionalText(errors, 'delivery_note_number', req.body.delivery_note_number, { min: 0, max: 80 });
+    const deliveryNoteDateRaw = asDate(req.body.delivery_note_date);
+    if (deliveryNoteDateRaw === null) errors.push('delivery_note_date invalide');
+    const deliveryNoteDate = deliveryNoteDateRaw || (isExternalExit ? (dateExit || new Date()) : undefined);
+
     const withdrawalPaperNumber = validateOptionalText(errors, 'withdrawal_paper_number', req.body.withdrawal_paper_number, { min: 0, max: 80 });
     const directionLaboratoryRaw = validateOptionalText(errors, 'direction_laboratory', req.body.direction_laboratory, { min: 0, max: 80 });
     const beneficiaryRaw = validateOptionalText(errors, 'beneficiary', req.body.beneficiary, { min: 0, max: 80 });
@@ -1228,6 +1336,15 @@ router.post(
     const scannedLotQrRaw = validateOptionalText(errors, 'scanned_lot_qr', req.body.scanned_lot_qr, { min: 0, max: 180 });
     const internalBondTokenRaw = validateOptionalText(errors, 'internal_bond_token', req.body.internal_bond_token, { min: 0, max: 4000 });
     const attachments = sanitizeAttachments(req.body.attachments);
+
+    if (isExternalExit) {
+      if (!deliveryNoteNumber) {
+        errors.push('Bon de livraison obligatoire pour toute sortie externe vers site petrolier.');
+      }
+      if (!externalDestination) {
+        errors.push('Destination externe obligatoire.');
+      }
+    }
 
     if (errors.length > 0) {
       return res.status(400).json({
@@ -1338,9 +1455,7 @@ router.post(
       const lots = await StockLot.find({
         product: product._id,
         quantity_available: { $gt: 0 },
-      })
-        .sort({ date_entry: 1, createdAt: 1 })
-        .session(session);
+      }).session(session);
 
       const lotsTotal = lots.reduce((sum, lot) => sum + Number(lot.quantity_available || 0), 0);
       if (lotsTotal < quantity && currentStock >= quantity) {
@@ -1360,13 +1475,15 @@ router.post(
             ? await StockLot.create([correctiveLotPayload], { session })
             : [await StockLot.create(correctiveLotPayload)];
           lots.push(correctiveLot);
-          lots.sort((a, b) => new Date(a.date_entry) - new Date(b.date_entry));
         }
       }
 
+      const lotStrategy = chooseLotStrategy(lots);
+      const sortedLots = sortLotsForStrategy(lots, lotStrategy);
+
       if (scannedLotQr) {
-        const firstFifoLot = lots.find((lot) => Number(lot.quantity_available || 0) > 0);
-        if (!firstFifoLot) {
+        const firstLot = sortedLots.find((lot) => Number(lot.quantity_available || 0) > 0);
+        if (!firstLot) {
           await logFifoScanAudit({
             context: 'exit_create',
             status: 'blocked',
@@ -1375,27 +1492,27 @@ router.post(
             user: req.user.id,
             quantity_requested: quantity,
             scanned_qr: scannedLotQr,
-            note: 'Aucun lot ouvert pour FIFO',
+            note: `Aucun lot ouvert pour ${lotStrategy.toUpperCase()}`,
           }, session);
           const fifoErr = new Error('Aucun lot disponible pour FIFO');
           fifoErr.code = ERROR_CODES.FIFO_LOT_INSUFFICIENT;
           throw fifoErr;
         }
-        const expectedQr = String(firstFifoLot.qr_code_value || firstFifoLot.lot_number || '').trim();
+        const expectedQr = String(firstLot.qr_code_value || firstLot.lot_number || '').trim();
         if (expectedQr && expectedQr !== scannedLotQr) {
           await logFifoScanAudit({
             context: 'exit_create',
             status: 'blocked',
             result: 'mismatch',
             product: product._id,
-            stock_lot: firstFifoLot._id,
+            stock_lot: firstLot._id,
             user: req.user.id,
             quantity_requested: quantity,
             scanned_qr: scannedLotQr,
             expected_qr: expectedQr,
-            note: 'QR scanne different du premier lot FIFO',
+            note: `QR scanne different du lot attendu (${lotStrategy.toUpperCase()})`,
           }, session);
-          const fifoScanErr = new Error('Lot scanne invalide: veuillez scanner le premier lot FIFO');
+          const fifoScanErr = new Error('Lot scanne invalide: veuillez scanner le lot attendu');
           fifoScanErr.code = ERROR_CODES.VALIDATION_FAILED;
           throw fifoScanErr;
         }
@@ -1404,12 +1521,12 @@ router.post(
           status: 'accepted',
           result: 'match',
           product: product._id,
-          stock_lot: firstFifoLot._id,
+          stock_lot: firstLot._id,
           user: req.user.id,
           quantity_requested: quantity,
           scanned_qr: scannedLotQr,
           expected_qr: expectedQr,
-          note: 'Scan FIFO valide',
+          note: `Scan ${lotStrategy.toUpperCase()} valide`,
         };
       }
 
@@ -1443,6 +1560,11 @@ router.post(
       const payload = {
         exit_number: await getNextExitNumber(),
         withdrawal_paper_number: withdrawalPaperNumber || asOptionalString(internalBondPayload?.withdrawal_paper_number),
+        exit_context: exitContext,
+        external_destination: isExternalExit ? externalDestination : undefined,
+        external_company: isExternalExit ? externalCompany : undefined,
+        delivery_note_number: isExternalExit ? deliveryNoteNumber : undefined,
+        delivery_note_date: isExternalExit ? deliveryNoteDate : undefined,
         product: req.body.product,
         quantity,
         submission_duration_ms: submissionDurationMs,
@@ -1513,6 +1635,11 @@ router.put(
   requirePermission(PERMISSIONS.STOCK_EXIT_UPDATE),
   strictBody([
     'withdrawal_paper_number',
+    'exit_context',
+    'external_destination',
+    'external_company',
+    'delivery_note_number',
+    'delivery_note_date',
     'quantity',
     'direction_laboratory',
     'beneficiary',

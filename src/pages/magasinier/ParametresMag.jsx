@@ -14,7 +14,7 @@ const ParametresMag = ({ userName, onLogout }) => {
   const toast = useToast();
   const uiLanguage = useUiLanguage();
   const [sidebarCollapsed, setSidebarCollapsed] = useState(() => (typeof window !== 'undefined' ? window.innerWidth <= 768 : false));
-  const { isDarkMode, toggleTheme } = useTheme();
+  const { isDarkMode, setTheme } = useTheme();
   const [activeTab, setActiveTab] = useState('profil');
   const initializedThemeRef = useRef(false);
 
@@ -111,11 +111,9 @@ const ParametresMag = ({ userName, onLogout }) => {
       setLangue(preferences.language || 'fr');
       setUiLanguage(preferences.language || 'fr');
 
-      if (!initializedThemeRef.current) {
-        const darkFromServer = Boolean(preferences.dark_mode);
-        if (darkFromServer !== isDarkMode) toggleTheme();
-        initializedThemeRef.current = true;
-      }
+      // Ne pas forcer le thème à l’ouverture des paramètres.
+      // Le thème est piloté côté UI (header / onglet Apparence).
+      if (!initializedThemeRef.current) initializedThemeRef.current = true;
     } catch (err) {
       toast.error(err.message || 'Erreur chargement parametres');
     } finally {
@@ -215,8 +213,8 @@ const ParametresMag = ({ userName, onLogout }) => {
   };
 
   const setThemeMode = async (dark) => {
-    if (dark !== isDarkMode) toggleTheme();
-    await savePreferences({ dark_mode: dark });
+    setTheme(dark);
+    await savePreferences({ dark_mode: Boolean(dark) });
   };
 
   const setLanguageValue = async (value) => { 

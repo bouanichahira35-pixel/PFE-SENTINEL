@@ -6,6 +6,7 @@ import LoadingSpinner from '../../components/shared/LoadingSpinner';
 import { get, patch } from '../../services/api';
 import { useToast } from '../../components/shared/Toast';
 import { asNonNegativeInt, isSafeText, sanitizeText } from '../../utils/formGuards';
+import './AdminDashboard.css';
 import './AdminSettings.css';
 
 const AdminSettings = ({ userName, onLogout }) => {

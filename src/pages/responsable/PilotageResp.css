@@ -395,6 +395,13 @@
   font-weight: 800;
 }
 
+.pilotage-empty-sub {
+  margin-top: 0.35rem;
+  color: #475569;
+  font-weight: 800;
+  font-size: 0.82rem;
+}
+
 .pilotage-details summary {
   cursor: pointer;
   font-weight: 900;
@@ -494,6 +501,36 @@
   font-weight: 900;
 }
 
+.pilotage-priority {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.16rem 0.52rem;
+  border-radius: 999px;
+  font-size: 0.7rem;
+  font-weight: 900;
+  border: 1px solid #e2e8f0;
+  background: #ffffff;
+  color: #334155;
+}
+
+.pilotage-priority.normal {
+  border-color: rgba(2, 132, 199, 0.20);
+  background: rgba(2, 132, 199, 0.08);
+  color: #075985;
+}
+
+.pilotage-priority.urgent {
+  border-color: rgba(234, 88, 12, 0.25);
+  background: rgba(234, 88, 12, 0.10);
+  color: #9a3412;
+}
+
+.pilotage-priority.late {
+  border-color: rgba(220, 38, 38, 0.25);
+  background: rgba(220, 38, 38, 0.10);
+  color: #991b1b;
+}
+
 .pilotage-pending-date {
   font-size: 0.72rem;
   color: #64748b;
@@ -562,6 +599,56 @@
   margin: 0.65rem 0 0;
   color: #334155;
   font-size: 0.85rem;
+}
+
+.pilotage-pending-meta {
+  margin-top: 0.65rem;
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+  flex-wrap: wrap;
+}
+
+.pilotage-meta {
+  display: inline-flex;
+  align-items: center;
+  border: 1px solid #e2e8f0;
+  border-radius: 999px;
+  padding: 0.22rem 0.55rem;
+  background: #ffffff;
+  color: #334155;
+  font-weight: 900;
+  font-size: 0.78rem;
+}
+
+.pilotage-meta.advice {
+  background: #f8fafc;
+  color: #0f172a;
+}
+
+.pilotage-meta.stock.ok {
+  border-color: rgba(22, 163, 74, 0.25);
+  background: rgba(22, 163, 74, 0.08);
+  color: #166534;
+}
+
+.pilotage-meta.stock.bad {
+  border-color: rgba(220, 38, 38, 0.25);
+  background: rgba(220, 38, 38, 0.08);
+  color: #991b1b;
+}
+
+.pilotage-meta.stock.unknown {
+  border-color: rgba(234, 88, 12, 0.25);
+  background: rgba(234, 88, 12, 0.10);
+  color: #9a3412;
+}
+
+.pilotage-impact {
+  margin-top: 0.45rem;
+  color: #475569;
+  font-weight: 800;
+  font-size: 0.82rem;
 }
 
 .pilotage-pending-actions {

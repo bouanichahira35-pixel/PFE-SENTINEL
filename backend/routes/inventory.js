@@ -7,14 +7,22 @@ const { PERMISSIONS } = require('../constants/permissions');
 
 const InventorySession = require('../models/InventorySession');
 const InventoryCount = require('../models/InventoryCount');
+const { Inventory } = require('../models/Inventory');
+const InventoryLine = require('../models/InventoryLine');
+const Notification = require('../models/Notification');
+const Category = require('../models/Category');
+const Laboratory = require('../models/Laboratory');
+const Location = require('../models/Location');
+const User = require('../models/User');
 const Product = require('../models/Product');
+const SupplierProduct = require('../models/SupplierProduct');
 const StockEntry = require('../models/StockEntry');
 const StockExit = require('../models/StockExit');
 const Sequence = require('../models/Sequence');
 const History = require('../models/History');
 const { runInTransaction } = require('../services/transactionService');
 
-const { asNonNegativeNumber, asOptionalString, asTrimmedString, isSafeText, isValidObjectIdLike } = require('../utils/validation');
+const { asDate, asNonNegativeNumber, asOptionalString, asTrimmedString, isSafeText, isValidObjectIdLike } = require('../utils/validation');
 
 router.use(requireAuth);
 router.use(requirePermission(PERMISSIONS.INVENTORY_MANAGE));
@@ -65,6 +73,1307 @@ function computeProductStatus(quantity, seuilMinimum) {
   if (Number(quantity) <= Number(seuilMinimum || 0)) return 'sous_seuil';
   return 'ok';
 }
+
+const ACTIVE_INVENTORY_STATUSES = ['A_FAIRE', 'EN_COURS', 'A_VALIDER', 'A_RECOMPTER'];
+const INVENTORY_FAMILIES = [
+  { value: 'economat', label: 'Économat' },
+  { value: 'produit_chimique', label: 'Produit chimique' },
+  { value: 'gaz', label: 'Gaz' },
+  { value: 'consommable_laboratoire', label: 'Consommable laboratoire' },
+  { value: 'consommable_informatique', label: 'Consommable informatique' },
+];
+
+const MOTIFS_ECART = [
+  'CASSE',
+  'PERTE',
+  'VOL_SUSPECTE',
+  'ERREUR_RANGEMENT',
+  'ERREUR_SAISIE',
+  'PRODUIT_DEPLACE',
+  'ARTICLE_INTROUVABLE',
+  'ARTICLE_ENDOMMAGE',
+  'AUTRE',
+];
+
+const CRITICAL_FAMILIES = new Set(['gaz', 'produit_chimique']);
+
+function normalizeFamily(value) {
+  if (!value) return null;
+  const key = String(value).trim().toLowerCase();
+  const allowed = new Set(INVENTORY_FAMILIES.map((f) => f.value));
+  return allowed.has(key) ? key : null;
+}
+
+async function listProductsForInventory({ typeInventaire, categorieId, familleId, zoneId }) {
+  const q = {
+    lifecycle_status: 'active',
+    validation_status: 'approved',
+  };
+
+  if (typeInventaire === 'TOURNANT') {
+    if (categorieId) q.category = categorieId;
+    if (familleId) q.family = familleId;
+
+    // Best-effort zone filter: current Product model only has a free-text "emplacement".
+    if (zoneId) {
+      const zone = await Location.findById(zoneId).select('code name').lean();
+      const tokens = [zone?.code, zone?.name].filter(Boolean).map((t) => String(t).trim()).filter(Boolean);
+      if (tokens.length) {
+        q.$or = tokens.map((t) => ({ emplacement: { $regex: t.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), $options: 'i' } }));
+      }
+    }
+  }
+
+  const items = await Product.find(q).select('_id quantity_current emplacement').sort({ name: 1 }).lean();
+  return items;
+}
+
+function computeProgress({ total, counted }) {
+  const t = Math.max(0, Number(total || 0));
+  const c = Math.max(0, Number(counted || 0));
+  const pct = t > 0 ? Math.round((c / t) * 100) : 0;
+  return { total: t, counted: c, pct };
+}
+
+function sanitizeInventoryForMagasinier(inv) {
+  if (!inv) return null;
+  return {
+    _id: inv._id,
+    reference: inv.reference,
+    type_inventaire: inv.type_inventaire,
+    status: inv.status,
+    magasin_id: inv.magasin_id,
+    zone_id: inv.zone_id,
+    famille_id: inv.famille_id,
+    categorie_id: inv.categorie_id,
+    responsable_id: inv.responsable_id,
+    magasinier_id: inv.magasinier_id,
+    date_lancement: inv.date_lancement,
+    date_prevue: inv.date_prevue,
+    commentaire: inv.commentaire || '',
+    createdAt: inv.createdAt,
+    updatedAt: inv.updatedAt,
+  };
+}
+
+function sanitizeInventoryForResponsable(inv) {
+  if (!inv) return null;
+  return inv;
+}
+
+function safeAbsNumber(value) {
+  const n = Number(value || 0);
+  if (!Number.isFinite(n)) return 0;
+  return Math.abs(n);
+}
+
+async function getPrimaryUnitPriceMap(productIds) {
+  const ids = (Array.isArray(productIds) ? productIds : []).filter((x) => x);
+  if (!ids.length) return new Map();
+  const items = await SupplierProduct.find({ product: { $in: ids }, is_primary: true })
+    .select('product unit_price')
+    .lean();
+  const map = new Map();
+  for (const row of items) {
+    const key = String(row.product);
+    const price = Number(row.unit_price || 0);
+    if (!map.has(key)) map.set(key, Number.isFinite(price) ? price : 0);
+  }
+  return map;
+}
+
+// GET /api/inventory/launch/options
+router.get('/launch/options', async (req, res) => {
+  try {
+    if (!ensureRole(req, res, ['responsable'])) return;
+
+    const [magasins, zones, categories, magasiniers] = await Promise.all([
+      Laboratory.find({ active: true }).select('_id code name active').sort({ name: 1 }).lean(),
+      Location.find({ active: true }).select('_id code name active').sort({ name: 1 }).lean(),
+      Category.find({ lifecycle_status: 'active' }).select('_id name parent_family').sort({ name: 1 }).lean(),
+      User.find({ role: 'magasinier', status: 'active' }).select('_id username role status').sort({ username: 1 }).lean(),
+    ]);
+
+    return res.json({
+      ok: true,
+      magasins,
+      zones,
+      categories,
+      familles: INVENTORY_FAMILIES,
+      magasiniers,
+    });
+  } catch (err) {
+    return res.status(500).json({ error: 'Failed to load inventory options', details: err.message });
+  }
+});
+
+// GET /api/inventory/responsable/to-validate
+router.get('/responsable/to-validate', async (req, res) => {
+  try {
+    if (!ensureRole(req, res, ['responsable'])) return;
+
+    const inventories = await Inventory.find({ status: 'A_VALIDER', responsable_id: req.user.id })
+      .sort({ submitted_at: -1, updatedAt: -1 })
+      .limit(120)
+      .populate('magasin_id', 'code name')
+      .populate('zone_id', 'code name')
+      .populate('categorie_id', 'name is_sensitive')
+      .populate('magasinier_id', 'username role')
+      .lean();
+
+    const ids = inventories.map((i) => i._id);
+    const statsAgg = ids.length
+      ? await InventoryLine.aggregate([
+          { $match: { inventory_id: { $in: ids } } },
+          {
+            $addFields: {
+              delta: {
+                $subtract: [
+                  { $ifNull: ['$quantite_comptee', 0] },
+                  { $ifNull: ['$quantite_theorique_initiale', 0] },
+                ],
+              },
+            },
+          },
+          {
+            $lookup: {
+              from: 'supplierproducts',
+              let: { pid: '$product_id' },
+              pipeline: [
+                { $match: { $expr: { $and: [{ $eq: ['$product', '$$pid'] }, { $eq: ['$is_primary', true] }] } } },
+                { $project: { unit_price: 1 } },
+                { $limit: 1 },
+              ],
+              as: 'sp',
+            },
+          },
+          {
+            $addFields: {
+              unit_price: { $ifNull: [{ $first: '$sp.unit_price' }, 0] },
+              abs_value: {
+                $multiply: [{ $abs: '$delta' }, { $ifNull: [{ $first: '$sp.unit_price' }, 0] }],
+              },
+              has_delta: { $ne: ['$delta', 0] },
+            },
+          },
+          {
+            $group: {
+              _id: '$inventory_id',
+              total_articles: { $sum: 1 },
+              deltas_count: { $sum: { $cond: ['$has_delta', 1, 0] } },
+              total_value_abs: { $sum: '$abs_value' },
+            },
+          },
+        ])
+      : [];
+
+    const byId = new Map(statsAgg.map((s) => [String(s._id), s]));
+
+    const items = inventories.map((inv) => {
+      const s = byId.get(String(inv._id)) || { total_articles: 0, deltas_count: 0, total_value_abs: 0 };
+      return {
+        inventory: sanitizeInventoryForResponsable(inv),
+        stats: {
+          total_articles: Number(s.total_articles || 0),
+          deltas_count: Number(s.deltas_count || 0),
+          total_value_abs: Number(s.total_value_abs || 0),
+        },
+      };
+    });
+
+    return res.json({ ok: true, items });
+  } catch (err) {
+    return res.status(500).json({ error: 'Failed to fetch inventories to validate', details: err.message });
+  }
+});
+
+// GET /api/inventory/responsable/inventories/:id/analysis
+router.get('/responsable/inventories/:id/analysis', async (req, res) => {
+  try {
+    if (!ensureRole(req, res, ['responsable'])) return;
+    if (!isValidObjectIdLike(req.params.id)) return res.status(400).json({ error: 'id invalide' });
+
+    const inv = await Inventory.findById(req.params.id)
+      .populate('magasin_id', 'code name')
+      .populate('zone_id', 'code name')
+      .populate('categorie_id', 'name is_sensitive')
+      .populate('magasinier_id', 'username role')
+      .populate('responsable_id', 'username role')
+      .lean();
+
+    if (!inv) return res.status(404).json({ error: 'Inventaire introuvable' });
+    if (String(inv.responsable_id?._id || inv.responsable_id) !== String(req.user.id)) return res.status(403).json({ error: 'Acces refuse' });
+
+    const linesRaw = await InventoryLine.find({ inventory_id: inv._id })
+      .populate('product_id', '_id code_product name unite emplacement family category')
+      .lean();
+
+    const productIds = linesRaw.map((l) => l.product_id?._id).filter(Boolean);
+    const unitPriceMap = await getPrimaryUnitPriceMap(productIds);
+
+    const categoryIds = linesRaw.map((l) => l.product_id?.category).filter((x) => x && isValidObjectIdLike(String(x)));
+    const categories = categoryIds.length
+      ? await Category.find({ _id: { $in: categoryIds } }).select('_id is_sensitive name').lean()
+      : [];
+    const categoryById = new Map(categories.map((c) => [String(c._id), c]));
+
+    const lines = linesRaw.map((l) => {
+      const theo = Math.max(0, Math.floor(Number(l.quantite_theorique_initiale || 0)));
+      const counted = l.quantite_comptee === null || l.quantite_comptee === undefined ? null : Math.max(0, Math.floor(Number(l.quantite_comptee || 0)));
+      const delta = counted === null ? null : (counted - theo);
+      const price = unitPriceMap.get(String(l.product_id?._id || '')) || 0;
+      const value = delta === null ? null : Number((delta * price).toFixed(3));
+      const absValue = value === null ? null : Number((Math.abs(value)).toFixed(3));
+
+      const family = String(l.product_id?.family || '');
+      const cat = l.product_id?.category ? categoryById.get(String(l.product_id.category)) : null;
+      const isCritical = Boolean(cat?.is_sensitive) || CRITICAL_FAMILIES.has(family);
+
+      return {
+        _id: l._id,
+        product: {
+          _id: l.product_id?._id,
+          code_product: l.product_id?.code_product || '-',
+          name: l.product_id?.name || 'Produit',
+          unite: l.product_id?.unite || '',
+          family,
+          category: cat ? { _id: cat._id, name: cat.name || '', is_sensitive: Boolean(cat.is_sensitive) } : null,
+          emplacement: l.emplacement_id || l.product_id?.emplacement || '',
+        },
+        quantite_theorique_initiale: theo,
+        quantite_comptee: counted,
+        ecart: delta,
+        unit_price: price || 0,
+        valeur_ecart: value,
+        valeur_ecart_abs: absValue,
+        criticite: isCritical ? 'critique' : 'normal',
+        observation_magasinier: l.observation_magasinier || '',
+        motif_ecart: l.motif_ecart || '',
+        requires_recount: Boolean(l.requires_recount),
+        recount_count: Number(l.recount_count || 0),
+        last_recount_at: l.last_recount_at || null,
+        observation_responsable: l.observation_responsable || '',
+        is_counted: Boolean(l.is_counted),
+        updatedAt: l.updatedAt,
+      };
+    });
+
+    const total = lines.length;
+    const countedLines = lines.filter((l) => l.quantite_comptee !== null);
+    const okCount = countedLines.filter((l) => Number(l.ecart || 0) === 0).length;
+    const deltaCount = countedLines.filter((l) => Number(l.ecart || 0) !== 0).length;
+    const criticalDelta = countedLines.filter((l) => Number(l.ecart || 0) !== 0 && l.criticite === 'critique').length;
+    const totalAbsValue = countedLines.reduce((acc, l) => acc + safeAbsNumber(l.valeur_ecart || 0), 0);
+    const reliability = total > 0 ? Number(((okCount / total) * 100).toFixed(2)) : 0;
+
+    const summary = {
+      total_articles: total,
+      articles_comptes: countedLines.length,
+      articles_sans_ecart: okCount,
+      articles_avec_ecart: deltaCount,
+      articles_critiques_en_ecart: criticalDelta,
+      valeur_totale_ecarts_abs: Number(totalAbsValue.toFixed(3)),
+      fiabilite_pct: reliability,
+    };
+
+    const sorted = lines.slice().sort((a, b) => (safeAbsNumber(b.valeur_ecart_abs) - safeAbsNumber(a.valeur_ecart_abs)));
+
+    return res.json({ ok: true, inventory: inv, summary, motifs_ecart: MOTIFS_ECART, lines: sorted });
+  } catch (err) {
+    return res.status(500).json({ error: 'Failed to analyze inventory', details: err.message });
+  }
+});
+
+// PATCH /api/inventory/responsable/inventories/:id/lines/:lineId
+router.patch(
+  '/responsable/inventories/:id/lines/:lineId',
+  strictBody(['motif_ecart', 'observation_responsable']),
+  async (req, res) => {
+    try {
+      if (!ensureRole(req, res, ['responsable'])) return;
+      if (!isValidObjectIdLike(req.params.id)) return res.status(400).json({ error: 'id invalide' });
+      if (!isValidObjectIdLike(req.params.lineId)) return res.status(400).json({ error: 'lineId invalide' });
+
+      const inv = await Inventory.findById(req.params.id).select('_id status responsable_id').lean();
+      if (!inv) return res.status(404).json({ error: 'Inventaire introuvable' });
+      if (String(inv.responsable_id) !== String(req.user.id)) return res.status(403).json({ error: 'Acces refuse' });
+      if (!['A_VALIDER', 'A_RECOMPTER'].includes(String(inv.status))) return res.status(409).json({ error: 'Inventaire non modifiable' });
+
+      const line = await InventoryLine.findOne({ _id: req.params.lineId, inventory_id: inv._id });
+      if (!line) return res.status(404).json({ error: 'Ligne introuvable' });
+
+      if (req.body?.motif_ecart !== undefined) {
+        const motif = asOptionalString(req.body?.motif_ecart) || '';
+        if (motif && !MOTIFS_ECART.includes(motif)) return res.status(400).json({ error: 'motif_ecart invalide' });
+        line.motif_ecart = motif;
+      }
+
+      if (req.body?.observation_responsable !== undefined) {
+        const note = asOptionalString(req.body?.observation_responsable) || '';
+        if (note && !isSafeText(note, { min: 0, max: 600 })) return res.status(400).json({ error: 'observation_responsable invalide' });
+        line.observation_responsable = note;
+      }
+
+      await line.save();
+      return res.json({ ok: true });
+    } catch (err) {
+      return res.status(500).json({ error: 'Failed to update line', details: err.message });
+    }
+  }
+);
+
+// POST /api/inventory/responsable/inventories/:id/recount-request
+router.post(
+  '/responsable/inventories/:id/recount-request',
+  strictBody(['motif', 'scope', 'line_ids']),
+  async (req, res) => {
+    try {
+      if (!ensureRole(req, res, ['responsable'])) return;
+      if (!isValidObjectIdLike(req.params.id)) return res.status(400).json({ error: 'id invalide' });
+
+      const motif = asOptionalString(req.body?.motif);
+      if (!motif || !isSafeText(motif, { min: 5, max: 300 })) return res.status(400).json({ error: 'motif obligatoire (min 5)' });
+      const scope = asOptionalString(req.body?.scope) || 'all_deltas';
+      if (!['all_deltas', 'critical_deltas', 'selected'].includes(scope)) return res.status(400).json({ error: 'scope invalide' });
+      const rawLineIds = Array.isArray(req.body?.line_ids) ? req.body.line_ids : [];
+      const selectedLineIds = rawLineIds.map((x) => String(x || '').trim()).filter((x) => isValidObjectIdLike(x));
+
+      const inv = await Inventory.findById(req.params.id);
+      if (!inv) return res.status(404).json({ error: 'Inventaire introuvable' });
+      if (String(inv.responsable_id) !== String(req.user.id)) return res.status(403).json({ error: 'Acces refuse' });
+      if (String(inv.status) !== 'A_VALIDER') return res.status(409).json({ error: 'Inventaire non recomptable (statut requis: A_VALIDER)' });
+
+      const lines = await InventoryLine.find({ inventory_id: inv._id })
+        .populate('product_id', '_id family category')
+        .select('_id product_id quantite_comptee quantite_theorique_initiale ecart')
+        .lean();
+      if (!lines.length) return res.status(409).json({ error: 'Aucune ligne' });
+
+      const categoryIds = lines.map((l) => l.product_id?.category).filter((x) => x && isValidObjectIdLike(String(x)));
+      const categories = categoryIds.length
+        ? await Category.find({ _id: { $in: categoryIds } }).select('_id is_sensitive').lean()
+        : [];
+      const categoryById = new Map(categories.map((c) => [String(c._id), Boolean(c.is_sensitive)]));
+
+      const deltaLines = lines.filter((l) => {
+        const theo = Math.max(0, Math.floor(Number(l.quantite_theorique_initiale || 0)));
+        const counted = Math.max(0, Math.floor(Number(l.quantite_comptee || 0)));
+        const delta = Number.isFinite(Number(l.ecart)) ? Number(l.ecart) : (counted - theo);
+        return delta !== 0;
+      });
+
+      let targets = [];
+      if (scope === 'selected') {
+        const selected = new Set(selectedLineIds);
+        targets = lines.filter((l) => selected.has(String(l._id)));
+      } else if (scope === 'critical_deltas') {
+        targets = deltaLines.filter((l) => {
+          const family = String(l.product_id?.family || '');
+          const catId = l.product_id?.category ? String(l.product_id.category) : '';
+          const isSensitive = catId ? Boolean(categoryById.get(catId)) : false;
+          return isSensitive || CRITICAL_FAMILIES.has(family);
+        });
+      } else {
+        targets = deltaLines;
+      }
+
+      if (!targets.length) {
+        return res.status(409).json({ error: 'Aucune ligne cible pour recomptage' });
+      }
+
+      const targetIds = targets.map((t) => t._id);
+      const now = new Date();
+
+      await runInTransaction(async (mongoSession) => {
+        inv.status = 'A_RECOMPTER';
+        inv.motif_recomptage = motif;
+        inv.recount_requested_at = now;
+        inv.recount_requested_by = req.user.id;
+        await inv.save(mongoSession ? { session: mongoSession } : undefined);
+
+        // Reset recount flags for all, then set for targets only (clear old note).
+        await InventoryLine.updateMany(
+          { inventory_id: inv._id },
+          { $set: { requires_recount: false, observation_responsable: '' } },
+          mongoSession ? { session: mongoSession } : undefined
+        );
+
+        await InventoryLine.updateMany(
+          { inventory_id: inv._id, _id: { $in: targetIds } },
+          { $set: { requires_recount: true, observation_responsable: motif } },
+          mongoSession ? { session: mongoSession } : undefined
+        );
+
+        await History.create(
+          [
+            {
+              action_type: 'inventory',
+              user: req.user.id,
+              source: 'ui',
+              description: 'Le responsable a demandé un recomptage.',
+              actor_role: req.user.role,
+              tags: ['inventory', 'recount', 'RECOUNT_REQUESTED'],
+              status_before: 'A_VALIDER',
+              status_after: 'A_RECOMPTER',
+              context: {
+                event: 'RECOUNT_REQUESTED',
+                inventory_id: String(inv._id),
+                reference: inv.reference,
+                motif,
+                scope,
+                targets_count: targetIds.length,
+              },
+            },
+          ],
+          mongoSession ? { session: mongoSession } : undefined
+        );
+
+        await Notification.create(
+          [
+            {
+              user: inv.magasinier_id,
+              title: 'Recomptage demandé',
+              message: `Le responsable demande un recomptage pour l'inventaire ${inv.reference}. Motif : ${motif}`,
+              type: 'warning',
+              is_read: false,
+              event_type: 'RECOUNT_REQUESTED',
+              inventory_id: inv._id,
+            },
+          ],
+          mongoSession ? { session: mongoSession } : undefined
+        );
+      });
+
+      return res.json({ ok: true, inventory: { id: inv._id, status: inv.status }, targets_count: targetIds.length });
+    } catch (err) {
+      return res.status(400).json({ error: 'Failed to request recount', details: err.message });
+    }
+  }
+);
+
+// POST /api/inventory/responsable/inventories/:id/reject
+router.post(
+  '/responsable/inventories/:id/reject',
+  strictBody(['motif']),
+  async (req, res) => {
+    try {
+      if (!ensureRole(req, res, ['responsable'])) return;
+      if (!isValidObjectIdLike(req.params.id)) return res.status(400).json({ error: 'id invalide' });
+
+      const motif = asOptionalString(req.body?.motif);
+      if (!motif || !isSafeText(motif, { min: 5, max: 400 })) return res.status(400).json({ error: 'motif obligatoire (min 5)' });
+
+      const inv = await Inventory.findById(req.params.id);
+      if (!inv) return res.status(404).json({ error: 'Inventaire introuvable' });
+      if (String(inv.responsable_id) !== String(req.user.id)) return res.status(403).json({ error: 'Acces refuse' });
+      if (String(inv.status) !== 'A_VALIDER') return res.status(409).json({ error: 'Inventaire non rejetable (statut requis: A_VALIDER)' });
+
+      const now = new Date();
+
+      await runInTransaction(async (mongoSession) => {
+        inv.status = 'REJETE';
+        inv.motif_rejet = motif;
+        inv.rejected_at = now;
+        inv.rejected_by = req.user.id;
+        inv.movement_blocked = false;
+        await inv.save(mongoSession ? { session: mongoSession } : undefined);
+
+        await History.create(
+          [
+            {
+              action_type: 'inventory',
+              user: req.user.id,
+              source: 'ui',
+              description: "Le responsable a rejeté l'inventaire.",
+              actor_role: req.user.role,
+              tags: ['inventory', 'reject', 'INVENTORY_REJECTED'],
+              status_before: 'A_VALIDER',
+              status_after: 'REJETE',
+              context: { event: 'INVENTORY_REJECTED', inventory_id: String(inv._id), reference: inv.reference, motif },
+            },
+          ],
+          mongoSession ? { session: mongoSession } : undefined
+        );
+
+        await Notification.create(
+          [
+            {
+              user: inv.magasinier_id,
+              title: 'Inventaire rejeté',
+              message: `Votre inventaire ${inv.reference} a été rejeté. Motif : ${motif}`,
+              type: 'alert',
+              is_read: false,
+              event_type: 'INVENTORY_REJECTED',
+              inventory_id: inv._id,
+            },
+          ],
+          mongoSession ? { session: mongoSession } : undefined
+        );
+      });
+
+      return res.json({ ok: true, inventory: { id: inv._id, status: inv.status } });
+    } catch (err) {
+      return res.status(500).json({ error: 'Failed to reject inventory', details: err.message });
+    }
+  }
+);
+
+// POST /api/inventory/responsable/inventories/:id/validate
+router.post('/responsable/inventories/:id/validate', async (req, res) => {
+  try {
+    if (!ensureRole(req, res, ['responsable'])) return;
+    if (!isValidObjectIdLike(req.params.id)) return res.status(400).json({ error: 'id invalide' });
+
+    const inv = await Inventory.findById(req.params.id);
+    if (!inv) return res.status(404).json({ error: 'Inventaire introuvable' });
+    if (String(inv.responsable_id) !== String(req.user.id)) return res.status(403).json({ error: 'Acces refuse' });
+    if (String(inv.status) !== 'A_VALIDER') return res.status(409).json({ error: 'Inventaire non validable (statut requis: A_VALIDER)' });
+
+    const lines = await InventoryLine.find({ inventory_id: inv._id }).lean();
+    if (!lines.length) return res.status(409).json({ error: 'Aucune ligne' });
+    const anyNull = lines.some((l) => l.quantite_comptee === null || l.quantite_comptee === undefined);
+    if (anyNull) return res.status(409).json({ error: 'Comptage incomplet' });
+
+    const productIds = lines.map((l) => l.product_id).filter(Boolean);
+    const unitPriceMap = await getPrimaryUnitPriceMap(productIds);
+
+    const adjustments = [];
+    const now = new Date();
+
+    await runInTransaction(async (mongoSession) => {
+      const mongoOpts = mongoSession ? { session: mongoSession } : undefined;
+      for (const l of lines) {
+        const product = mongoSession
+          ? await Product.findById(l.product_id).session(mongoSession)
+          : await Product.findById(l.product_id);
+        if (!product) continue;
+
+        const target = Math.max(0, Math.floor(Number(l.quantite_comptee || 0)));
+        const current = Math.max(0, Math.floor(Number(product.quantity_current || 0)));
+        const deltaFromCurrent = target - current;
+
+        // Persist deltas based on theoretical snapshot (audit).
+        const theo = Math.max(0, Math.floor(Number(l.quantite_theorique_initiale || 0)));
+        const deltaTheo = target - theo;
+        const unitPrice = unitPriceMap.get(String(product._id)) || 0;
+        const value = Number.isFinite(unitPrice) ? (deltaTheo * unitPrice) : null;
+
+        await InventoryLine.updateOne(
+          { _id: l._id },
+          { $set: { ecart: deltaTheo, valeur_ecart: value } },
+          mongoOpts
+        );
+
+        if (deltaFromCurrent !== 0) {
+          if (deltaFromCurrent > 0) {
+            const entryNumber = await getNextEntryNumber();
+            const entry = await StockEntry.create(
+              [
+                {
+                  entry_number: entryNumber,
+                  product: product._id,
+                  quantity: deltaFromCurrent,
+                  entry_mode: 'manual',
+                  observation: `Ajustement inventaire ${inv.reference}`,
+                  supplier: 'INVENTAIRE',
+                  date_entry: now,
+                  magasinier: inv.magasinier_id,
+                },
+              ],
+              mongoOpts
+            );
+            adjustments.push({ kind: 'entry', product_id: String(product._id), delta: deltaFromCurrent, doc_number: entry[0].entry_number });
+          } else {
+            const exitQty = Math.abs(deltaFromCurrent);
+            const exitNumber = await getNextExitNumber();
+            const exit = await StockExit.create(
+              [
+                {
+                  exit_number: exitNumber,
+                  product: product._id,
+                  quantity: exitQty,
+                  exit_mode: 'manual',
+                  note: `Ajustement inventaire ${inv.reference}`,
+                  date_exit: now,
+                  magasinier: inv.magasinier_id,
+                },
+              ],
+              mongoOpts
+            );
+            adjustments.push({ kind: 'exit', product_id: String(product._id), delta: -exitQty, doc_number: exit[0].exit_number });
+          }
+        }
+
+        product.quantity_current = target;
+        product.status = computeProductStatus(product.quantity_current, product.seuil_minimum);
+        await product.save(mongoOpts);
+      }
+
+      inv.status = 'VALIDE';
+      inv.validated_at = now;
+      inv.validated_by = req.user.id;
+      inv.movement_blocked = false;
+      await inv.save(mongoOpts);
+
+      await History.create(
+        [
+          {
+            action_type: 'inventory',
+            user: req.user.id,
+            source: 'ui',
+            description: "Le responsable a validé l'inventaire et ajusté le stock.",
+            actor_role: req.user.role,
+            tags: ['inventory', 'validate', 'INVENTORY_VALIDATED'],
+            status_before: 'A_VALIDER',
+            status_after: 'VALIDE',
+            context: {
+              event: 'INVENTORY_VALIDATED',
+              inventory_id: String(inv._id),
+              reference: inv.reference,
+              adjustments_count: adjustments.length,
+            },
+          },
+        ],
+        mongoOpts
+      );
+
+      await Notification.create(
+        [
+          {
+            user: inv.magasinier_id,
+            title: 'Inventaire validé',
+            message: `Votre inventaire ${inv.reference} a été validé par le responsable.`,
+            type: 'info',
+            is_read: false,
+            event_type: 'INVENTORY_VALIDATED',
+            inventory_id: inv._id,
+          },
+        ],
+        mongoOpts
+      );
+    });
+
+    return res.json({ ok: true, inventory: { id: inv._id, reference: inv.reference, status: inv.status }, adjustments });
+  } catch (err) {
+    return res.status(500).json({ error: 'Failed to validate inventory', details: err.message });
+  }
+});
+
+// GET /api/inventory/magasinier/missions
+// Missions for the connected magasinier. Includes progress (counted/total).
+router.get('/magasinier/missions', async (req, res) => {
+  try {
+    if (!ensureRole(req, res, ['magasinier'])) return;
+
+    const q = {
+      magasinier_id: req.user.id,
+      status: { $in: ['A_FAIRE', 'EN_COURS', 'A_RECOMPTER', 'A_VALIDER', 'VALIDE', 'REJETE'] },
+    };
+
+    const items = await Inventory.find(q)
+      .sort({ date_prevue: 1, date_lancement: -1 })
+      .limit(120)
+      .populate('magasin_id', 'code name')
+      .populate('zone_id', 'code name')
+      .populate('categorie_id', 'name')
+      .populate('responsable_id', 'username role')
+      .lean();
+
+    const ids = items.map((i) => i._id);
+    const agg = ids.length
+      ? await InventoryLine.aggregate([
+          { $match: { inventory_id: { $in: ids } } },
+          {
+            $group: {
+              _id: '$inventory_id',
+              total: { $sum: 1 },
+              counted: { $sum: { $cond: ['$is_counted', 1, 0] } },
+            },
+          },
+        ])
+      : [];
+
+    const byInventoryId = new Map(agg.map((a) => [String(a._id), computeProgress({ total: a.total, counted: a.counted })]));
+
+    const missions = items.map((inv) => ({
+      inventory: sanitizeInventoryForMagasinier(inv),
+      progress: byInventoryId.get(String(inv._id)) || computeProgress({ total: 0, counted: 0 }),
+    }));
+
+    return res.json({ ok: true, missions });
+  } catch (err) {
+    return res.status(500).json({ error: 'Failed to fetch missions', details: err.message });
+  }
+});
+
+// GET /api/inventory/magasinier/inventories/:id
+// Counting sheet for magasinier (NO theoretical/system quantities in response).
+router.get('/magasinier/inventories/:id', async (req, res) => {
+  try {
+    if (!ensureRole(req, res, ['magasinier'])) return;
+    if (!isValidObjectIdLike(req.params.id)) return res.status(400).json({ error: 'id invalide' });
+
+    const inv = await Inventory.findById(req.params.id)
+      .populate('magasin_id', 'code name')
+      .populate('zone_id', 'code name')
+      .populate('categorie_id', 'name')
+      .populate('responsable_id', 'username role')
+      .populate('magasinier_id', 'username role')
+      .lean();
+
+    if (!inv) return res.status(404).json({ error: 'Inventaire introuvable' });
+    if (String(inv.magasinier_id?._id || inv.magasinier_id) !== String(req.user.id)) return res.status(403).json({ error: 'Acces refuse' });
+
+    const linesRaw = await InventoryLine.find({ inventory_id: inv._id })
+      .populate('product_id', '_id code_product name unite emplacement qr_code_value')
+      .sort({ is_counted: 1, updatedAt: -1 })
+      .lean();
+
+    const lines = linesRaw.map((l) => ({
+      _id: l._id,
+      product: {
+        _id: l.product_id?._id,
+        code_product: l.product_id?.code_product || '-',
+        name: l.product_id?.name || 'Produit',
+        unite: l.product_id?.unite || '',
+        qr_code_value: l.product_id?.qr_code_value || '',
+        emplacement: l.emplacement_id || l.product_id?.emplacement || '',
+      },
+      quantite_comptee: l.quantite_comptee === null || l.quantite_comptee === undefined ? null : Number(l.quantite_comptee || 0),
+      observation_magasinier: l.observation_magasinier || '',
+      // For recount scenario: allow showing responsable note/motif, not quantities.
+      motif_recompte: l.observation_responsable || '',
+      requires_recount: Boolean(l.requires_recount),
+      is_counted: Boolean(l.is_counted),
+      updatedAt: l.updatedAt,
+    }));
+
+    const total = linesRaw.length;
+    const counted = linesRaw.reduce((acc, l) => acc + (l.is_counted ? 1 : 0), 0);
+
+    return res.json({
+      ok: true,
+      inventory: sanitizeInventoryForMagasinier(inv),
+      progress: computeProgress({ total, counted }),
+      lines,
+    });
+  } catch (err) {
+    return res.status(500).json({ error: 'Failed to fetch inventory sheet', details: err.message });
+  }
+});
+
+// POST /api/inventory/magasinier/inventories/:id/start
+router.post('/magasinier/inventories/:id/start', async (req, res) => {
+  try {
+    if (!ensureRole(req, res, ['magasinier'])) return;
+    if (!isValidObjectIdLike(req.params.id)) return res.status(400).json({ error: 'id invalide' });
+
+    const inv = await Inventory.findById(req.params.id);
+    if (!inv) return res.status(404).json({ error: 'Inventaire introuvable' });
+    if (String(inv.magasinier_id) !== String(req.user.id)) return res.status(403).json({ error: 'Acces refuse' });
+    if (String(inv.status) !== 'A_FAIRE') return res.status(409).json({ error: 'Inventaire non demarrable' });
+
+    inv.status = 'EN_COURS';
+    await inv.save();
+
+    await History.create({
+      action_type: 'inventory',
+      user: req.user.id,
+      source: 'ui',
+      description: "Le magasinier a commencé l'inventaire.",
+      actor_role: req.user.role,
+      tags: ['inventory', 'start', 'INVENTORY_STARTED'],
+      status_before: 'A_FAIRE',
+      status_after: 'EN_COURS',
+      context: { event: 'INVENTORY_STARTED', inventory_id: String(inv._id), reference: inv.reference },
+    });
+
+    return res.json({ ok: true, inventory: inv });
+  } catch (err) {
+    return res.status(500).json({ error: 'Failed to start inventory', details: err.message });
+  }
+});
+
+// POST /api/inventory/magasinier/inventories/:id/save-progress
+router.post('/magasinier/inventories/:id/save-progress', async (req, res) => {
+  try {
+    if (!ensureRole(req, res, ['magasinier'])) return;
+    if (!isValidObjectIdLike(req.params.id)) return res.status(400).json({ error: 'id invalide' });
+
+    const inv = await Inventory.findById(req.params.id).lean();
+    if (!inv) return res.status(404).json({ error: 'Inventaire introuvable' });
+    if (String(inv.magasinier_id) !== String(req.user.id)) return res.status(403).json({ error: 'Acces refuse' });
+    if (String(inv.status) !== 'EN_COURS') return res.status(409).json({ error: 'Progression non sauvegardable' });
+
+    await History.create({
+      action_type: 'inventory',
+      user: req.user.id,
+      source: 'ui',
+      description: 'Le magasinier a sauvegarde la progression.',
+      actor_role: req.user.role,
+      tags: ['inventory', 'progress_saved', 'INVENTORY_PROGRESS_SAVED'],
+      status_before: 'EN_COURS',
+      status_after: 'EN_COURS',
+      context: { event: 'INVENTORY_PROGRESS_SAVED', inventory_id: String(inv._id), reference: inv.reference },
+    });
+
+    return res.json({ ok: true, message: 'Progression sauvegardee' });
+  } catch (err) {
+    return res.status(500).json({ error: 'Failed to save progress', details: err.message });
+  }
+});
+
+// PATCH /api/inventory/magasinier/inventories/:id/lines/:lineId
+router.patch(
+  '/magasinier/inventories/:id/lines/:lineId',
+  strictBody(['quantite_comptee', 'observation_magasinier']),
+  async (req, res) => {
+    try {
+      if (!ensureRole(req, res, ['magasinier'])) return;
+      if (!isValidObjectIdLike(req.params.id)) return res.status(400).json({ error: 'id invalide' });
+      if (!isValidObjectIdLike(req.params.lineId)) return res.status(400).json({ error: 'lineId invalide' });
+
+      const inv = await Inventory.findById(req.params.id).select('_id status magasinier_id recount_requested_at').lean();
+      if (!inv) return res.status(404).json({ error: 'Inventaire introuvable' });
+      if (String(inv.magasinier_id) !== String(req.user.id)) return res.status(403).json({ error: 'Acces refuse' });
+      if (!['EN_COURS', 'A_RECOMPTER'].includes(String(inv.status))) {
+        return res.status(409).json({ error: 'Inventaire non modifiable' });
+      }
+
+      const qty = asNonNegativeNumber(req.body?.quantite_comptee);
+      if (qty === undefined || Number.isNaN(qty)) return res.status(400).json({ error: 'quantite_comptee obligatoire et >= 0' });
+      const countedQty = Math.max(0, Math.floor(Number(qty || 0)));
+
+      const observation = asOptionalString(req.body?.observation_magasinier) || '';
+      if (observation && !isSafeText(observation, { min: 0, max: 600 })) return res.status(400).json({ error: 'observation invalide' });
+      if (countedQty === 0 && !observation) return res.status(400).json({ error: 'Observation obligatoire si quantite_comptee = 0' });
+
+      const line = await InventoryLine.findOne({ _id: req.params.lineId, inventory_id: inv._id });
+      if (!line) return res.status(404).json({ error: 'Ligne introuvable' });
+
+      const isRecountFlow = String(inv.status) === 'A_RECOMPTER';
+      const recountRequestedAt = inv.recount_requested_at ? new Date(inv.recount_requested_at) : null;
+      const needsRecount = Boolean(line.requires_recount);
+      const shouldTrackRecount = isRecountFlow && needsRecount && recountRequestedAt && (!line.last_recount_at || new Date(line.last_recount_at) < recountRequestedAt);
+
+      if (isRecountFlow && needsRecount && !observation) {
+        return res.status(400).json({ error: 'Observation obligatoire pendant un recomptage' });
+      }
+
+      if (shouldTrackRecount) {
+        line.previous_quantite_comptee = line.quantite_comptee === null || line.quantite_comptee === undefined
+          ? null
+          : Math.max(0, Math.floor(Number(line.quantite_comptee || 0)));
+        line.recount_count = Math.max(0, Math.floor(Number(line.recount_count || 0))) + 1;
+        line.last_recount_at = new Date();
+      }
+
+      line.quantite_comptee = countedQty;
+      line.observation_magasinier = observation;
+      line.is_counted = true;
+      await line.save();
+
+      return res.json({
+        ok: true,
+        line: {
+          _id: line._id,
+          inventory_id: line.inventory_id,
+          product_id: line.product_id,
+          quantite_comptee: line.quantite_comptee,
+          observation_magasinier: line.observation_magasinier,
+          is_counted: line.is_counted,
+          updatedAt: line.updatedAt,
+        },
+      });
+    } catch (err) {
+      return res.status(500).json({ error: 'Failed to save line', details: err.message });
+    }
+  }
+);
+
+// POST /api/inventory/magasinier/inventories/:id/add-found
+router.post(
+  '/magasinier/inventories/:id/add-found',
+  strictBody(['product_id', 'quantite_comptee', 'observation_magasinier']),
+  async (req, res) => {
+    try {
+      if (!ensureRole(req, res, ['magasinier'])) return;
+      if (!isValidObjectIdLike(req.params.id)) return res.status(400).json({ error: 'id invalide' });
+
+      const inv = await Inventory.findById(req.params.id).lean();
+      if (!inv) return res.status(404).json({ error: 'Inventaire introuvable' });
+      if (String(inv.magasinier_id) !== String(req.user.id)) return res.status(403).json({ error: 'Acces refuse' });
+      if (String(inv.type_inventaire) !== 'GLOBAL') return res.status(409).json({ error: 'Ajout article reserve a GLOBAL' });
+      if (!['EN_COURS', 'A_RECOMPTER'].includes(String(inv.status))) return res.status(409).json({ error: 'Inventaire non modifiable' });
+
+      const productId = asOptionalString(req.body?.product_id);
+      if (!productId || !isValidObjectIdLike(productId)) return res.status(400).json({ error: 'product_id obligatoire' });
+
+      const qty = asNonNegativeNumber(req.body?.quantite_comptee);
+      if (qty === undefined || Number.isNaN(qty)) return res.status(400).json({ error: 'quantite_comptee obligatoire et >= 0' });
+      const countedQty = Math.max(0, Math.floor(Number(qty || 0)));
+
+      const observation = asOptionalString(req.body?.observation_magasinier) || '';
+      if (!observation) return res.status(400).json({ error: 'Observation obligatoire pour article ajoute' });
+      if (!isSafeText(observation, { min: 2, max: 600 })) return res.status(400).json({ error: 'observation invalide' });
+
+      const exists = await InventoryLine.findOne({ inventory_id: inv._id, product_id: productId }).select('_id').lean();
+      if (exists) return res.status(409).json({ error: 'Article deja present dans la feuille' });
+
+      const product = await Product.findById(productId).select('_id quantity_current emplacement name code_product').lean();
+      if (!product) return res.status(404).json({ error: 'Produit introuvable' });
+
+      const created = await InventoryLine.create({
+        inventory_id: inv._id,
+        product_id: product._id,
+        // Best-effort snapshot: product not present at launch (e.g. created after launch).
+        quantite_theorique_initiale: Math.max(0, Math.floor(Number(product.quantity_current || 0))),
+        quantite_comptee: countedQty,
+        ecart: null,
+        valeur_ecart: null,
+        motif_ecart: 'added_found',
+        observation_magasinier: observation,
+        observation_responsable: '',
+        is_counted: true,
+        emplacement_id: String(product.emplacement || ''),
+        stock_id: '',
+      });
+
+      return res.status(201).json({ ok: true, line_id: created._id });
+    } catch (err) {
+      return res.status(400).json({ error: 'Failed to add found article', details: err.message });
+    }
+  }
+);
+
+// POST /api/inventory/magasinier/inventories/:id/submit
+router.post('/magasinier/inventories/:id/submit', async (req, res) => {
+  try {
+    if (!ensureRole(req, res, ['magasinier'])) return;
+    if (!isValidObjectIdLike(req.params.id)) return res.status(400).json({ error: 'id invalide' });
+
+    const inv = await Inventory.findById(req.params.id);
+    if (!inv) return res.status(404).json({ error: 'Inventaire introuvable' });
+    if (String(inv.magasinier_id) !== String(req.user.id)) return res.status(403).json({ error: 'Acces refuse' });
+    if (!['EN_COURS', 'A_RECOMPTER'].includes(String(inv.status))) return res.status(409).json({ error: 'Inventaire non soumissible' });
+
+    const lines = await InventoryLine.find({ inventory_id: inv._id }).select('_id is_counted quantite_comptee observation_magasinier quantite_theorique_initiale requires_recount last_recount_at').lean();
+    if (!lines.length) return res.status(409).json({ error: 'Aucune ligne' });
+
+    const missing = lines.filter((l) => !l.is_counted);
+    if (missing.length) return res.status(409).json({ error: 'Toutes les lignes ne sont pas comptees', details: `${missing.length} ligne(s) restantes` });
+
+    const invalidObs = lines.filter((l) => Number(l.quantite_comptee || 0) === 0 && !String(l.observation_magasinier || '').trim());
+    if (invalidObs.length) return res.status(400).json({ error: 'Observation obligatoire pour quantite = 0', details: `${invalidObs.length} ligne(s)` });
+
+    const oldStatus = String(inv.status);
+    const submittedAt = new Date();
+
+    if (oldStatus === 'A_RECOMPTER') {
+      const requestedAt = inv.recount_requested_at ? new Date(inv.recount_requested_at) : null;
+      const recountLines = lines.filter((l) => Boolean(l.requires_recount));
+      if (requestedAt && recountLines.length) {
+        const notRecounted = recountLines.filter((l) => !l.last_recount_at || new Date(l.last_recount_at) < requestedAt);
+        if (notRecounted.length) {
+          return res.status(409).json({ error: 'Recomptage incomplet', details: `${notRecounted.length} ligne(s) demandee(s) non recomptées` });
+        }
+      }
+    }
+
+    await runInTransaction(async (mongoSession) => {
+      // Compute deltas in background (not exposed to magasinier).
+      for (const l of lines) {
+        const counted = Math.max(0, Math.floor(Number(l.quantite_comptee || 0)));
+        const theo = Math.max(0, Math.floor(Number(l.quantite_theorique_initiale || 0)));
+        const delta = counted - theo;
+        await InventoryLine.updateOne(
+          { _id: l._id },
+          { $set: { ecart: delta, valeur_ecart: null, requires_recount: false } },
+          mongoSession ? { session: mongoSession } : undefined
+        );
+      }
+
+      inv.status = 'A_VALIDER';
+      inv.submitted_at = submittedAt;
+      await inv.save(mongoSession ? { session: mongoSession } : undefined);
+
+      await History.create(
+        [
+          {
+            action_type: 'inventory',
+            user: req.user.id,
+            source: 'ui',
+            description: "Le magasinier a soumis l'inventaire pour validation.",
+            actor_role: req.user.role,
+            tags: ['inventory', 'submitted', 'INVENTORY_SUBMITTED'],
+            status_before: oldStatus,
+            status_after: 'A_VALIDER',
+            context: { event: 'INVENTORY_SUBMITTED', inventory_id: String(inv._id), reference: inv.reference },
+          },
+        ],
+        mongoSession ? { session: mongoSession } : undefined
+      );
+
+      await Notification.create(
+        [
+          {
+            user: inv.responsable_id,
+            title: oldStatus === 'A_RECOMPTER' ? 'Recomptage terminé' : 'Inventaire en attente de validation',
+            message: oldStatus === 'A_RECOMPTER'
+              ? `Le magasinier a termine le recomptage de l'inventaire ${inv.reference}.`
+              : `Le magasinier a termine le comptage de l'inventaire ${inv.reference}.`,
+            type: 'warning',
+            is_read: false,
+            event_type: oldStatus === 'A_RECOMPTER' ? 'RECOUNT_FINISHED' : 'INVENTORY_TO_VALIDATE',
+            inventory_id: inv._id,
+          },
+        ],
+        mongoSession ? { session: mongoSession } : undefined
+      );
+    });
+
+    return res.json({ ok: true, inventory: { id: inv._id, reference: inv.reference, status: inv.status } });
+  } catch (err) {
+    return res.status(500).json({ error: 'Failed to submit inventory', details: err.message });
+  }
+});
+
+// GET /api/inventory/inventories
+router.get('/inventories', async (req, res) => {
+  try {
+    const mine = String(req.query?.mine || '') === '1';
+    const role = String(req.user?.role || '');
+
+    const q = {};
+    if (role === 'magasinier' && mine) {
+      q.magasinier_id = req.user.id;
+    }
+
+    const status = asOptionalString(req.query?.status);
+    if (status && ACTIVE_INVENTORY_STATUSES.concat(['BROUILLON', 'VALIDE', 'REJETE']).includes(status)) {
+      q.status = status;
+    }
+
+    const items = await Inventory.find(q)
+      .sort({ date_lancement: -1, createdAt: -1 })
+      .limit(120)
+      .populate('responsable_id', 'username role')
+      .populate('magasinier_id', 'username role')
+      .populate('magasin_id', 'code name')
+      .populate('zone_id', 'code name')
+      .populate('categorie_id', 'name')
+      .lean();
+
+    return res.json({ ok: true, inventories: items });
+  } catch (err) {
+    return res.status(500).json({ error: 'Failed to fetch inventories', details: err.message });
+  }
+});
+
+// POST /api/inventory/inventories (launch)
+router.post(
+  '/inventories',
+  strictBody([
+    'type_inventaire',
+    'magasin_id',
+    'zone_id',
+    'famille_id',
+    'categorie_id',
+    'magasinier_id',
+    'date_prevue',
+    'commentaire',
+    'bloquer_mouvements',
+    'notifications_activees',
+  ]),
+  async (req, res) => {
+    try {
+      if (!ensureRole(req, res, ['responsable'])) return;
+
+      const errors = [];
+      const typeInventaire = asOptionalString(req.body?.type_inventaire);
+      if (!typeInventaire || !['GLOBAL', 'TOURNANT'].includes(typeInventaire)) errors.push('type_inventaire obligatoire (GLOBAL/TOURNANT)');
+
+      const magasinId = asOptionalString(req.body?.magasin_id);
+      if (!magasinId || !isValidObjectIdLike(magasinId)) errors.push('magasin_id obligatoire');
+
+      const zoneIdRaw = asOptionalString(req.body?.zone_id);
+      const zoneId = zoneIdRaw && isValidObjectIdLike(zoneIdRaw) ? zoneIdRaw : null;
+
+      const categorieIdRaw = asOptionalString(req.body?.categorie_id);
+      const categorieId = categorieIdRaw && isValidObjectIdLike(categorieIdRaw) ? categorieIdRaw : null;
+
+      const familleIdRaw = asOptionalString(req.body?.famille_id);
+      const familleId = normalizeFamily(familleIdRaw);
+      if (familleIdRaw && !familleId) errors.push('famille_id invalide');
+
+      const magasinierId = asOptionalString(req.body?.magasinier_id);
+      if (!magasinierId || !isValidObjectIdLike(magasinierId)) errors.push('magasinier_id obligatoire');
+
+      const datePrevue = asDate(req.body?.date_prevue);
+      if (datePrevue === undefined) errors.push('date_prevue obligatoire');
+      if (datePrevue === null) errors.push('date_prevue invalide');
+
+      const commentaire = asOptionalString(req.body?.commentaire) || '';
+      if (commentaire && !isSafeText(commentaire, { min: 0, max: 600 })) errors.push('commentaire invalide');
+
+      const bloquerMouvements = Boolean(req.body?.bloquer_mouvements);
+      const notificationsActives = req.body?.notifications_activees !== false;
+
+      if (typeInventaire === 'GLOBAL') {
+        if (familleId || categorieId) errors.push('Pour GLOBAL, ne pas selectionner famille/categorie comme perimetre');
+      }
+
+      if (typeInventaire === 'TOURNANT') {
+        if (!zoneId && !familleId && !categorieId) {
+          errors.push('Pour TOURNANT, choisir au moins zone ou famille ou categorie');
+        }
+      }
+
+      if (errors.length) return res.status(400).json({ error: 'Validation failed', details: errors });
+
+      const magasinier = await User.findById(magasinierId).select('_id role status username').lean();
+      if (!magasinier) return res.status(404).json({ error: 'Magasinier introuvable' });
+      if (String(magasinier.role) !== 'magasinier') return res.status(400).json({ error: 'Utilisateur non magasinier' });
+      if (String(magasinier.status || 'active') !== 'active') return res.status(409).json({ error: 'Magasinier inactif/bloque' });
+
+      const existingActive = await Inventory.findOne({
+        status: { $in: ACTIVE_INVENTORY_STATUSES },
+        magasin_id: magasinId,
+        type_inventaire: typeInventaire,
+        zone_id: zoneId,
+        famille_id: familleId,
+        categorie_id: categorieId,
+      })
+        .select('_id reference status')
+        .lean();
+      if (existingActive) {
+        return res.status(409).json({
+          error: 'Inventaire deja actif sur ce perimetre',
+          details: `Existant: ${existingActive.reference} (${existingActive.status})`,
+        });
+      }
+
+      const reference = await getNextInventoryReference();
+      const dateLancement = new Date();
+      const movementBlocked = Boolean(typeInventaire === 'GLOBAL' && bloquerMouvements);
+
+      const products = await listProductsForInventory({
+        typeInventaire,
+        categorieId,
+        familleId,
+        zoneId,
+      });
+
+      if (!products.length) {
+        return res.status(409).json({ error: 'Aucun article concerne par cet inventaire' });
+      }
+
+      const result = await runInTransaction(async (mongoSession) => {
+        const inventoryDoc = await Inventory.create(
+          [
+            {
+              reference,
+              type_inventaire: typeInventaire,
+              status: 'A_FAIRE',
+              magasin_id: magasinId,
+              zone_id: zoneId,
+              famille_id: familleId,
+              categorie_id: categorieId,
+              responsable_id: req.user.id,
+              magasinier_id: magasinier._id,
+              date_lancement: dateLancement,
+              date_prevue: datePrevue,
+              bloquer_mouvements: bloquerMouvements,
+              notifications_activees: notificationsActives,
+              commentaire,
+              movement_blocked: movementBlocked,
+            },
+          ],
+          mongoSession ? { session: mongoSession } : undefined
+        );
+
+        const inventory = inventoryDoc[0];
+
+        const lines = products.map((p) => ({
+          inventory_id: inventory._id,
+          product_id: p._id,
+          quantite_theorique_initiale: Math.max(0, Math.floor(Number(p.quantity_current || 0))),
+          quantite_comptee: null,
+          ecart: null,
+          valeur_ecart: null,
+          motif_ecart: '',
+          observation_magasinier: '',
+          observation_responsable: '',
+          is_counted: false,
+          emplacement_id: String(p.emplacement || ''),
+          stock_id: '',
+        }));
+
+        await InventoryLine.insertMany(lines, mongoSession ? { session: mongoSession } : undefined);
+
+        await History.create(
+          [
+            {
+              action_type: 'inventory',
+              user: req.user.id,
+              source: 'ui',
+              description: "Le responsable a lance une session d'inventaire.",
+              actor_role: req.user.role,
+              tags: ['inventory', 'launch'],
+              status_before: 'BROUILLON',
+              status_after: 'A_FAIRE',
+              context: {
+                event: 'INVENTORY_LAUNCHED',
+                inventory_id: String(inventory._id),
+                reference,
+                type_inventaire: typeInventaire,
+                magasin_id: String(magasinId),
+                zone_id: zoneId ? String(zoneId) : null,
+                famille_id: familleId,
+                categorie_id: categorieId ? String(categorieId) : null,
+                magasinier_id: String(magasinier._id),
+                lines_count: lines.length,
+                movement_blocked: movementBlocked,
+              },
+            },
+          ],
+          mongoSession ? { session: mongoSession } : undefined
+        );
+
+        let notification = null;
+        if (notificationsActives) {
+          const typeLabel = typeInventaire === 'GLOBAL' ? 'GLOBAL' : 'TOURNANT';
+          notification = await Notification.create(
+            [
+              {
+                user: magasinier._id,
+                title: "Nouvelle mission d'inventaire",
+                message: `Une nouvelle mission d'inventaire ${typeLabel} vous a ete assignee (${reference}).`,
+                type: 'info',
+                is_read: false,
+                event_type: 'NEW_INVENTORY_MISSION',
+                inventory_id: inventory._id,
+              },
+            ],
+            mongoSession ? { session: mongoSession } : undefined
+          );
+          notification = notification?.[0] || null;
+        }
+
+        return { inventory, notification, lines_count: lines.length };
+      });
+
+      return res.status(201).json({
+        ok: true,
+        inventory: result.inventory,
+        lines_count: result.lines_count,
+        notification_created: Boolean(result.notification),
+      });
+    } catch (err) {
+      return res.status(400).json({ error: 'Failed to launch inventory', details: err.message });
+    }
+  }
+);
 
 // GET /api/inventory/sessions
 router.get('/sessions', async (req, res) => {

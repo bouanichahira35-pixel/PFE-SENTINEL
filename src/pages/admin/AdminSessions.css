@@ -53,3 +53,15 @@
   font-weight: 800;
 }
 
+@media (max-width: 768px) {
+  .admin-sessions-table table {
+    min-width: 760px;
+  }
+
+  .admin-sessions-table th,
+  .admin-sessions-table td {
+    padding: 9px 10px;
+    font-size: 12px;
+  }
+}
+

@@ -12,6 +12,8 @@ const purchaseOrderLineSchema = new mongoose.Schema(
 
 const purchaseOrderSchema = new mongoose.Schema(
   {
+    // External dataset import id (ex: PO-00001). Optional and sparse-unique to keep imports idempotent.
+    external_purchase_order_id: { type: String, trim: true, index: true, unique: true, sparse: true },
     supplier: { type: mongoose.Schema.Types.ObjectId, ref: 'Supplier', required: true },
     status: { type: String, enum: ['draft', 'ordered', 'delivered', 'cancelled'], default: 'ordered' },
     decision_id: { type: String, trim: true },

@@ -282,6 +282,51 @@
   color: #059669;
 }
 
+.chem-safety-box {
+  margin: 0 1.5rem 1.25rem;
+  padding: 0.9rem 1rem;
+  border: 1px solid rgba(14, 165, 233, 0.22);
+  background: rgba(14, 165, 233, 0.06);
+  border-radius: 12px;
+  color: var(--color-text-primary);
+}
+
+.chem-safety-title {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  color: #075985;
+}
+
+.chem-safety-lines {
+  margin-top: 0.5rem;
+  display: flex;
+  gap: 1rem;
+  flex-wrap: wrap;
+  font-size: 0.9rem;
+  color: #334155;
+}
+
+.chem-safety-note {
+  margin-top: 0.6rem;
+  padding: 0.55rem 0.7rem;
+  border-radius: 10px;
+  font-size: 0.9rem;
+  font-weight: 600;
+}
+
+.chem-safety-note.ok {
+  background: rgba(5, 150, 105, 0.10);
+  border: 1px solid rgba(5, 150, 105, 0.20);
+  color: #059669;
+}
+
+.chem-safety-note.warn {
+  background: rgba(234, 88, 12, 0.10);
+  border: 1px solid rgba(234, 88, 12, 0.20);
+  color: #9a3412;
+}
+
 .modal-product-photo {
   border: 1px solid rgba(5, 150, 105, 0.22);
   background: rgba(5, 150, 105, 0.08);

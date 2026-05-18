@@ -14,7 +14,8 @@
     "ai:setup-check": "node scripts/ai-setup-check.js",
     "seed:magasinier-large": "node scripts/seed-magasinier-large-data.js",
     "demo:setup": "node scripts/demo-setup.js",
-    "test:auth-recovery": "node scripts/test-auth-recovery-flow.js"
+    "test:auth-recovery": "node scripts/test-auth-recovery-flow.js",
+    "import:realistic-dataset": "node scripts/import-realistic-sentinel-dataset.js"
   },
   "keywords": [],
   "author": "",

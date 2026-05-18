@@ -9,10 +9,22 @@ const SupplierProduct = require('../models/SupplierProduct');
 const PurchaseOrder = require('../models/PurchaseOrder');
 const Product = require('../models/Product');
 const History = require('../models/History');
+const SupplierAlert = require('../models/SupplierAlert');
+const SupplierHistory = require('../models/SupplierHistory');
 const { getSupplierEmailPolicy } = require('../services/purchaseOrderSupplierMailService');
 const { enqueueMail } = require('../services/mailQueueService');
 const { isMailConfigured } = require('../services/mailerService');
 const { logSecurityEvent } = require('../services/securityAuditService');
+const {
+  SUPPLIER_STATUS,
+  RELIABILITY_LEVEL,
+  ALERT_STATUS,
+  normalizeSupplierStatus,
+  normalizeReliabilityLevel,
+  isActiveSupplierStatus,
+  computeSupplierProfileQuality,
+  buildSupplierAlerts,
+} = require('../services/supplierRegistryService');
 
 const {
   asNonNegativeNumber,
@@ -27,6 +39,181 @@ const {
 } = require('../utils/validation');
 
 router.use(requireAuth);
+
+function supplierStatusQuery(value) {
+  const normalized = normalizeSupplierStatus(value);
+  if (!normalized) return null;
+  if (normalized === SUPPLIER_STATUS.ACTIF) return { $in: ['ACTIF', 'active'] };
+  if (normalized === SUPPLIER_STATUS.INACTIF) return { $in: ['INACTIF', 'inactive'] };
+  return normalized;
+}
+
+function toCanonicalSupplierStatus(value) {
+  const normalized = normalizeSupplierStatus(value);
+  return normalized || SUPPLIER_STATUS.ACTIF;
+}
+
+function parsePageLimit(req, { defaultLimit = 20, maxLimit = 100 } = {}) {
+  const page = Math.max(1, Number(req.query?.page || 1));
+  const limit = Math.min(maxLimit, Math.max(1, Number(req.query?.limit || defaultLimit)));
+  const skip = (page - 1) * limit;
+  return { page, limit, skip };
+}
+
+function buildSupplierSearchFilter(qRaw) {
+  const q = String(qRaw || '').trim();
+  if (!q) return null;
+  const email = normalizeEmail(q) || q.toLowerCase();
+  const phone = normalizePhone(q) || q;
+  const safe = q.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const re = new RegExp(safe, 'i');
+  const phoneSafe = String(phone).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const phoneRe = new RegExp(phoneSafe, 'i');
+  const emailSafe = String(email).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const emailRe = new RegExp(emailSafe, 'i');
+  return {
+    $or: [
+      { name: re },
+      { email: emailRe },
+      { phone: phoneRe },
+    ],
+  };
+}
+
+function stripDiacritics(input) {
+  try {
+    return String(input || '').normalize('NFD').replace(/\p{Diacritic}/gu, '');
+  } catch {
+    return String(input || '');
+  }
+}
+
+function normalizeSupplierNameForSimilarity(name) {
+  const base = stripDiacritics(name).toLowerCase();
+  return base.replace(/[^a-z0-9]+/g, ' ').trim().replace(/\s+/g, ' ');
+}
+
+function trigramSet(str) {
+  const s = `  ${String(str || '')}  `;
+  const set = new Set();
+  for (let i = 0; i < s.length - 2; i += 1) set.add(s.slice(i, i + 3));
+  return set;
+}
+
+function trigramSimilarity(a, b) {
+  const sa = trigramSet(a);
+  const sb = trigramSet(b);
+  if (!sa.size || !sb.size) return 0;
+  let inter = 0;
+  for (const t of sa) if (sb.has(t)) inter += 1;
+  return (2 * inter) / (sa.size + sb.size);
+}
+
+async function findPotentialDuplicateSuppliers({ supplierId = null, name, email, phone } = {}) {
+  const ors = [];
+  const nEmail = normalizeEmail(email);
+  const nPhone = normalizePhone(phone);
+  const nName = normalizeSupplierNameForSimilarity(name);
+
+  if (nEmail) ors.push({ email: nEmail });
+  if (nPhone) ors.push({ phone: nPhone });
+  if (nName) {
+    const safe = nName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    ors.push({ name: new RegExp(`^${safe}$`, 'i') });
+  }
+
+  if (!ors.length) return [];
+  const baseFilter = { $or: ors };
+  if (supplierId) baseFilter._id = { $ne: supplierId };
+
+  const candidates = await Supplier.find(baseFilter)
+    .select('_id name email phone status reliability_level updatedAt createdAt')
+    .limit(30)
+    .lean();
+
+  if (!nName) return candidates;
+
+  const fuzzy = [];
+  for (const c of candidates) {
+    const cn = normalizeSupplierNameForSimilarity(c?.name || '');
+    const sim = trigramSimilarity(nName, cn);
+    if (sim >= 0.82) fuzzy.push({ ...c, similarity: Number(sim.toFixed(3)) });
+  }
+  const byId = new Map();
+  for (const c of candidates) byId.set(String(c._id), c);
+  for (const c of fuzzy) byId.set(String(c._id), c);
+  return Array.from(byId.values()).slice(0, 30);
+}
+
+async function upsertSupplierAlertsForSupplier({
+  supplier,
+  userId = null,
+  potential_duplicates = [],
+} = {}) {
+  if (!supplier?._id) return { created: 0, treated: 0, active: [] };
+
+  const { alerts } = buildSupplierAlerts({ supplier, potential_duplicates });
+  const existingOpen = await SupplierAlert.find({
+    supplier: supplier._id,
+    status: { $in: [ALERT_STATUS.NON_TRAITEE, ALERT_STATUS.EN_COURS] },
+  }).lean();
+
+  const openByType = new Map(existingOpen.map((a) => [a.type, a]));
+  const desiredTypes = new Set(alerts.map((a) => a.type));
+
+  const toCreate = alerts.filter((a) => !openByType.has(a.type));
+  const toTreat = existingOpen.filter((a) => !desiredTypes.has(a.type));
+
+  let created = 0;
+  if (toCreate.length) {
+    const payload = toCreate.map((a) => ({
+      supplier: supplier._id,
+      type: a.type,
+      message: a.message,
+      priority: a.priority,
+      status: ALERT_STATUS.NON_TRAITEE,
+      treated_at: null,
+      treated_by: null,
+      dedupe_key: a.dedupe_key || '',
+    }));
+    const inserted = await SupplierAlert.insertMany(payload);
+    created = inserted.length;
+
+    await SupplierHistory.insertMany(inserted.map((ins) => ({
+      supplier: supplier._id,
+      user: userId || null,
+      action: 'MODIFICATION',
+      comment: `Création alerte: ${ins.type}`,
+      new_value: { alert_id: String(ins._id), type: ins.type, priority: ins.priority },
+    }))).catch(() => null);
+  }
+
+  let treated = 0;
+  if (toTreat.length) {
+    const ids = toTreat.map((x) => x._id);
+    const res = await SupplierAlert.updateMany(
+      { _id: { $in: ids } },
+      { $set: { status: ALERT_STATUS.TRAITEE, treated_at: new Date(), treated_by: userId || null } }
+    );
+    treated = Number(res?.modifiedCount || 0);
+
+    await SupplierHistory.insertMany(toTreat.map((a) => ({
+      supplier: supplier._id,
+      user: userId || null,
+      action: 'TRAITEMENT_ALERTE',
+      comment: `Alerte auto-traitée: ${a.type}`,
+      old_value: { alert_id: String(a._id), type: a.type, status: a.status },
+      new_value: { status: ALERT_STATUS.TRAITEE },
+    }))).catch(() => null);
+  }
+
+  const active = await SupplierAlert.find({
+    supplier: supplier._id,
+    status: { $in: [ALERT_STATUS.NON_TRAITEE, ALERT_STATUS.EN_COURS] },
+  }).sort({ createdAt: -1 }).limit(25).lean();
+
+  return { created, treated, active };
+}
 
 function clampDays(value, fallback) {
   const n = asNonNegativeNumber(value);
@@ -143,15 +330,139 @@ function computeSupplierRisk({
   return Number(risk.toFixed(1));
 }
 
+// GET /api/suppliers
+// Listing "référentiel": recherche, filtres, pagination (sans dépendance aux autres modules).
 router.get('/', requirePermission(PERMISSIONS.SUPPLIER_MANAGE), async (req, res) => {
   try {
-    const status = asOptionalString(req.query?.status);
-    const q = {};
-    if (status && ['active', 'inactive'].includes(status)) q.status = status;
-    const items = await Supplier.find(q).sort({ name: 1 }).lean();
-    return res.json({ suppliers: items });
+    const { page, limit, skip } = parsePageLimit(req, { defaultLimit: 20, maxLimit: 100 });
+
+    const filter = {};
+    const statusFilter = asOptionalString(req.query?.status);
+    if (statusFilter && statusFilter !== 'all') {
+      const sq = supplierStatusQuery(statusFilter);
+      if (!sq) return res.status(400).json({ error: 'status invalide' });
+      filter.status = sq;
+    }
+
+    const reliability = asOptionalString(req.query?.reliability);
+    if (reliability && reliability !== 'all') {
+      const rel = normalizeReliabilityLevel(reliability);
+      if (!rel) return res.status(400).json({ error: 'reliability invalide' });
+      filter.reliability_level = rel;
+    }
+
+    const profileState = asOptionalString(req.query?.profile_state);
+    if (profileState && profileState !== 'all') {
+      if (!['complete', 'incomplete', 'a_verifier'].includes(profileState)) {
+        return res.status(400).json({ error: 'profile_state invalide' });
+      }
+      if (profileState === 'a_verifier') {
+        filter.status = supplierStatusQuery(SUPPLIER_STATUS.A_VERIFIER);
+      } else if (profileState === 'incomplete') {
+        filter.$or = [
+          { email: { $in: [null, undefined, ''] } },
+          { phone: { $in: [null, undefined, ''] } },
+          { domain: { $in: [null, undefined, ''] } },
+          { status: { $in: [null, undefined, ''] } },
+        ];
+      } else if (profileState === 'complete') {
+        filter.$and = [
+          { email: { $nin: [null, undefined, ''] } },
+          { phone: { $nin: [null, undefined, ''] } },
+          { domain: { $nin: [null, undefined, ''] } },
+          { status: { $nin: [null, undefined, ''] } },
+        ];
+      }
+    }
+
+    const searchFilter = buildSupplierSearchFilter(req.query?.q);
+    if (searchFilter) filter.$and = [...(filter.$and || []), searchFilter];
+
+    const sortKey = String(req.query?.sort || 'name').trim();
+    const sortDir = String(req.query?.dir || 'asc').trim().toLowerCase() === 'desc' ? -1 : 1;
+    const sort = sortKey === 'updatedAt'
+      ? { updatedAt: sortDir, name: 1 }
+      : { name: sortDir, updatedAt: -1 };
+
+    const [items, total] = await Promise.all([
+      Supplier.find(filter).sort(sort).skip(skip).limit(limit).lean(),
+      Supplier.countDocuments(filter),
+    ]);
+
+    const withQuality = items.map((s) => {
+      const quality = computeSupplierProfileQuality(s);
+      return {
+        ...s,
+        status: toCanonicalSupplierStatus(s.status),
+        profile_state: quality.state,
+        missing_fields: quality.missing_fields,
+      };
+    });
+
+    return res.json({
+      suppliers: withQuality,
+      items: withQuality,
+      page,
+      limit,
+      total,
+      total_pages: Math.max(1, Math.ceil(total / limit)),
+    });
   } catch (err) {
     return res.status(500).json({ error: 'Failed to fetch suppliers', details: err.message });
+  }
+});
+
+// GET /api/suppliers/stats
+router.get('/stats', requirePermission(PERMISSIONS.SUPPLIER_MANAGE), async (req, res) => {
+  try {
+    const [
+      total,
+      active,
+      inactive,
+      suspended,
+      toVerify,
+      incompleteProfiles,
+      openAlerts,
+      watchSuppliers,
+    ] = await Promise.all([
+      Supplier.countDocuments({}),
+      Supplier.countDocuments({ status: supplierStatusQuery(SUPPLIER_STATUS.ACTIF) }),
+      Supplier.countDocuments({ status: supplierStatusQuery(SUPPLIER_STATUS.INACTIF) }),
+      Supplier.countDocuments({ status: supplierStatusQuery(SUPPLIER_STATUS.SUSPENDU) }),
+      Supplier.countDocuments({ status: supplierStatusQuery(SUPPLIER_STATUS.A_VERIFIER) }),
+      Supplier.countDocuments({
+        $or: [
+          { email: { $in: [null, undefined, ''] } },
+          { phone: { $in: [null, undefined, ''] } },
+          { domain: { $in: [null, undefined, ''] } },
+          { status: { $in: [null, undefined, ''] } },
+        ],
+      }),
+      SupplierAlert.countDocuments({ status: ALERT_STATUS.NON_TRAITEE }),
+      Supplier.countDocuments({
+        $or: [
+          { reliability_level: RELIABILITY_LEVEL.A_SURVEILLER },
+          { status: supplierStatusQuery(SUPPLIER_STATUS.A_VERIFIER) },
+        ],
+      }),
+    ]);
+
+    return res.json({
+      ok: true,
+      stats: {
+        total_suppliers: total,
+        active_suppliers: active,
+        inactive_suppliers: inactive,
+        suspended_suppliers: suspended,
+        to_verify_suppliers: toVerify,
+        incomplete_profiles: incompleteProfiles,
+        open_alerts: openAlerts,
+        watch_suppliers: watchSuppliers,
+      },
+      generated_at: new Date().toISOString(),
+    });
+  } catch (err) {
+    return res.status(500).json({ error: 'Failed to compute suppliers stats', details: err.message });
   }
 });
 
@@ -167,7 +478,7 @@ router.get('/insights', requirePermission(PERMISSIONS.SUPPLIER_MANAGE), async (r
     const ackSlaHours = emailPolicy && typeof emailPolicy.ack_sla_hours === 'number' ? emailPolicy.ack_sla_hours : 24;
     const ackSlaMs = Math.max(6, Math.min(168, Math.floor(Number(ackSlaHours || 24)))) * 60 * 60 * 1000;
 
-    const suppliers = await Supplier.find({ status: 'active' })
+    const suppliers = await Supplier.find({ status: supplierStatusQuery(SUPPLIER_STATUS.ACTIF) })
       .select('_id name status default_lead_time_days')
       .sort({ name: 1 })
       .lean();
@@ -333,7 +644,20 @@ router.get('/insights', requirePermission(PERMISSIONS.SUPPLIER_MANAGE), async (r
 router.post(
   '/',
   requirePermission(PERMISSIONS.SUPPLIER_MANAGE),
-  strictBody(['name', 'email', 'phone', 'address', 'default_lead_time_days', 'status']),
+  strictBody([
+    'name',
+    'email',
+    'phone',
+    'address',
+    'domain',
+    'main_contact',
+    'internal_note',
+    'reliability_level',
+    'last_verification_date',
+    'default_lead_time_days',
+    'status',
+    'confirm_duplicate',
+  ]),
   async (req, res) => {
     try {
       const name = asOptionalString(req.body?.name);
@@ -343,11 +667,64 @@ router.post(
       if (Number.isNaN(lead)) return res.status(400).json({ error: 'default_lead_time_days invalide' });
 
       const email = normalizeEmail(req.body?.email);
-      if (email !== undefined && !isValidEmail(email)) return res.status(400).json({ error: 'email invalide' });
+      if (!email) return res.status(400).json({ error: 'email obligatoire' });
+      if (!isValidEmail(email)) return res.status(400).json({ error: 'email invalide' });
       const phone = normalizePhone(req.body?.phone);
-      if (phone !== undefined && !isValidPhone(phone)) return res.status(400).json({ error: 'phone invalide' });
+      if (!phone) return res.status(400).json({ error: 'telephone obligatoire' });
+      if (!isValidPhone(phone)) return res.status(400).json({ error: 'telephone invalide' });
       const address = asOptionalString(req.body?.address);
       if (address !== undefined && !isSafeText(address, { min: 0, max: 240 })) return res.status(400).json({ error: 'address invalide' });
+
+      const domain = asOptionalString(req.body?.domain);
+      if (domain !== undefined && !isSafeText(domain, { min: 0, max: 80 })) return res.status(400).json({ error: 'domain invalide' });
+
+      const mainContact = asOptionalString(req.body?.main_contact);
+      if (mainContact !== undefined && !isSafeText(mainContact, { min: 0, max: 80 })) return res.status(400).json({ error: 'main_contact invalide' });
+
+      const internalNote = asOptionalString(req.body?.internal_note);
+      if (internalNote !== undefined && !isSafeText(internalNote, { min: 0, max: 800 })) return res.status(400).json({ error: 'internal_note invalide' });
+
+      const reliability = req.body?.reliability_level === undefined
+        ? undefined
+        : normalizeReliabilityLevel(req.body?.reliability_level);
+      if (reliability === null) return res.status(400).json({ error: 'reliability_level invalide' });
+
+      let lastVerificationDate = null;
+      if (req.body?.last_verification_date !== undefined && req.body?.last_verification_date !== null && req.body?.last_verification_date !== '') {
+        const d = new Date(req.body.last_verification_date);
+        if (Number.isNaN(d.getTime())) return res.status(400).json({ error: 'last_verification_date invalide' });
+        lastVerificationDate = d;
+      }
+
+      const normalizedStatus = normalizeSupplierStatus(req.body?.status);
+      if (!normalizedStatus) return res.status(400).json({ error: 'status obligatoire/invalide' });
+
+      const nameSafe = name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      const [sameName, sameEmail, samePhone] = await Promise.all([
+        Supplier.findOne({ name: new RegExp(`^${nameSafe}$`, 'i') }).select('_id name').lean(),
+        Supplier.findOne({ email }).select('_id name email').lean(),
+        Supplier.findOne({ phone }).select('_id name phone').lean(),
+      ]);
+      if (sameName) return res.status(409).json({ error: 'Un fournisseur avec ce nom existe déjà.' });
+      if (sameEmail) return res.status(409).json({ error: 'Un fournisseur avec cet email existe déjà.' });
+      if (samePhone) return res.status(409).json({ error: 'Un fournisseur avec ce téléphone existe déjà.' });
+
+      const potentialDuplicates = await findPotentialDuplicateSuppliers({ name, email, phone });
+      const confirmDuplicate = req.body?.confirm_duplicate === true || String(req.body?.confirm_duplicate || '').toLowerCase() === 'true';
+      if (potentialDuplicates.length && !confirmDuplicate) {
+        return res.status(409).json({
+          error: 'Doublon potentiel détecté',
+          code: 'DUPLICATE_WARNING',
+          potential_duplicates: potentialDuplicates.map((d) => ({
+            id: d._id,
+            name: d.name,
+            email: d.email || null,
+            phone: d.phone || null,
+            status: toCanonicalSupplierStatus(d.status),
+            similarity: d.similarity || null,
+          })),
+        });
+      }
 
       const payload = {
         name,
@@ -355,11 +732,32 @@ router.post(
         phone,
         address,
         default_lead_time_days: lead,
-        status: ['active', 'inactive'].includes(String(req.body?.status || 'active')) ? String(req.body.status) : 'active',
+        status: normalizedStatus,
+        domain,
+        main_contact: mainContact,
+        internal_note: internalNote,
+        reliability_level: reliability || RELIABILITY_LEVEL.NON_EVALUE,
+        last_verification_date: lastVerificationDate,
         created_by: req.user.id,
       };
 
       const created = await Supplier.create(payload);
+
+      await SupplierHistory.create({
+        supplier: created._id,
+        user: req.user.id,
+        action: 'CREATION',
+        new_value: {
+          name: created.name,
+          email: created.email || null,
+          phone: created.phone || null,
+          address: created.address || null,
+          domain: created.domain || null,
+          main_contact: created.main_contact || null,
+          status: toCanonicalSupplierStatus(created.status),
+          reliability_level: created.reliability_level || RELIABILITY_LEVEL.NON_EVALUE,
+        },
+      });
 
       await History.create({
         action_type: 'supplier',
@@ -376,6 +774,12 @@ router.post(
         },
       });
 
+      await upsertSupplierAlertsForSupplier({
+        supplier: created,
+        userId: req.user.id,
+        potential_duplicates: potentialDuplicates,
+      }).catch(() => null);
+
       return res.status(201).json(created);
     } catch (err) {
       const msg = String(err?.message || '');
@@ -388,7 +792,20 @@ router.post(
 router.patch(
   '/:id',
   requirePermission(PERMISSIONS.SUPPLIER_MANAGE),
-  strictBody(['name', 'email', 'phone', 'address', 'default_lead_time_days', 'status']),
+  strictBody([
+    'name',
+    'email',
+    'phone',
+    'address',
+    'domain',
+    'main_contact',
+    'internal_note',
+    'reliability_level',
+    'last_verification_date',
+    'default_lead_time_days',
+    'status',
+    'confirm_duplicate',
+  ]),
   async (req, res) => {
     try {
       if (!isValidObjectIdLike(req.params.id)) return res.status(400).json({ error: 'id invalide' });
@@ -400,12 +817,14 @@ router.patch(
       }
       const email = normalizeEmail(req.body?.email);
       if (email !== undefined) {
-        if (email && !isValidEmail(email)) return res.status(400).json({ error: 'email invalide' });
+        if (!email) return res.status(400).json({ error: 'email obligatoire' });
+        if (!isValidEmail(email)) return res.status(400).json({ error: 'email invalide' });
         patch.email = email;
       }
       const phone = normalizePhone(req.body?.phone);
       if (phone !== undefined) {
-        if (phone && !isValidPhone(phone)) return res.status(400).json({ error: 'phone invalide' });
+        if (!phone) return res.status(400).json({ error: 'telephone obligatoire' });
+        if (!isValidPhone(phone)) return res.status(400).json({ error: 'telephone invalide' });
         patch.phone = phone;
       }
       const address = asOptionalString(req.body?.address);
@@ -413,22 +832,112 @@ router.patch(
         if (address && !isSafeText(address, { min: 0, max: 240 })) return res.status(400).json({ error: 'address invalide' });
         patch.address = address;
       }
+
+      const domain = asOptionalString(req.body?.domain);
+      if (domain !== undefined) {
+        if (domain && !isSafeText(domain, { min: 0, max: 80 })) return res.status(400).json({ error: 'domain invalide' });
+        patch.domain = domain;
+      }
+      const mainContact = asOptionalString(req.body?.main_contact);
+      if (mainContact !== undefined) {
+        if (mainContact && !isSafeText(mainContact, { min: 0, max: 80 })) return res.status(400).json({ error: 'main_contact invalide' });
+        patch.main_contact = mainContact;
+      }
+      const internalNote = asOptionalString(req.body?.internal_note);
+      if (internalNote !== undefined) {
+        if (internalNote && !isSafeText(internalNote, { min: 0, max: 800 })) return res.status(400).json({ error: 'internal_note invalide' });
+        patch.internal_note = internalNote;
+      }
+      if (req.body?.reliability_level !== undefined) {
+        const rel = normalizeReliabilityLevel(req.body?.reliability_level);
+        if (!rel) return res.status(400).json({ error: 'reliability_level invalide' });
+        patch.reliability_level = rel;
+      }
+      if (req.body?.last_verification_date !== undefined) {
+        if (req.body?.last_verification_date === null || req.body?.last_verification_date === '') {
+          patch.last_verification_date = null;
+        } else {
+          const d = new Date(req.body.last_verification_date);
+          if (Number.isNaN(d.getTime())) return res.status(400).json({ error: 'last_verification_date invalide' });
+          patch.last_verification_date = d;
+        }
+      }
       if (req.body?.default_lead_time_days !== undefined) {
         const lead = clampDays(req.body.default_lead_time_days, null);
         if (Number.isNaN(lead)) return res.status(400).json({ error: 'default_lead_time_days invalide' });
         patch.default_lead_time_days = lead;
       }
       if (req.body?.status !== undefined) {
-        const st = String(req.body.status || '').trim();
-        if (!['active', 'inactive'].includes(st)) return res.status(400).json({ error: 'status invalide' });
+        const st = normalizeSupplierStatus(req.body.status);
+        if (!st) return res.status(400).json({ error: 'status invalide' });
         patch.status = st;
       }
 
       const before = await Supplier.findById(req.params.id).lean();
       if (!before) return res.status(404).json({ error: 'Supplier not found' });
 
+      const effectiveName = patch.name || before.name;
+      const effectiveEmail = patch.email === undefined ? before.email : patch.email;
+      const effectivePhone = patch.phone === undefined ? before.phone : patch.phone;
+
+      const nameSafe = String(effectiveName || '').replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      const [sameName, sameEmail, samePhone] = await Promise.all([
+        effectiveName
+          ? Supplier.findOne({ _id: { $ne: before._id }, name: new RegExp(`^${nameSafe}$`, 'i') }).select('_id').lean()
+          : null,
+        effectiveEmail
+          ? Supplier.findOne({ _id: { $ne: before._id }, email: normalizeEmail(effectiveEmail) }).select('_id').lean()
+          : null,
+        effectivePhone
+          ? Supplier.findOne({ _id: { $ne: before._id }, phone: normalizePhone(effectivePhone) }).select('_id').lean()
+          : null,
+      ]);
+      if (sameName) return res.status(409).json({ error: 'Un fournisseur avec ce nom existe déjà.' });
+      if (sameEmail) return res.status(409).json({ error: 'Un fournisseur avec cet email existe déjà.' });
+      if (samePhone) return res.status(409).json({ error: 'Un fournisseur avec ce téléphone existe déjà.' });
+
+      const potentialDuplicates = await findPotentialDuplicateSuppliers({
+        supplierId: before._id,
+        name: effectiveName,
+        email: effectiveEmail,
+        phone: effectivePhone,
+      });
+      const confirmDuplicate = req.body?.confirm_duplicate === true || String(req.body?.confirm_duplicate || '').toLowerCase() === 'true';
+      if (potentialDuplicates.length && !confirmDuplicate) {
+        return res.status(409).json({
+          error: 'Doublon potentiel détecté',
+          code: 'DUPLICATE_WARNING',
+          potential_duplicates: potentialDuplicates.map((d) => ({
+            id: d._id,
+            name: d.name,
+            email: d.email || null,
+            phone: d.phone || null,
+            status: toCanonicalSupplierStatus(d.status),
+            similarity: d.similarity || null,
+          })),
+        });
+      }
+
       const updated = await Supplier.findByIdAndUpdate(req.params.id, { $set: patch }, { returnDocument: 'after' });
       if (!updated) return res.status(404).json({ error: 'Supplier not found' });
+
+      const changed = {};
+      const fields = ['name', 'email', 'phone', 'address', 'domain', 'main_contact', 'internal_note', 'status', 'reliability_level', 'last_verification_date', 'default_lead_time_days'];
+      for (const f of fields) {
+        const b = before?.[f];
+        const a = updated?.[f];
+        const bv = b instanceof Date ? b.toISOString() : b;
+        const av = a instanceof Date ? a.toISOString() : a;
+        if (bv !== av) changed[f] = { before: b ?? null, after: a ?? null };
+      }
+
+      await SupplierHistory.create({
+        supplier: updated._id,
+        user: req.user.id,
+        action: 'MODIFICATION',
+        old_value: Object.fromEntries(Object.entries(changed).map(([k, v]) => [k, v.before])),
+        new_value: Object.fromEntries(Object.entries(changed).map(([k, v]) => [k, v.after])),
+      }).catch(() => null);
 
       await History.create({
         action_type: 'supplier',
@@ -459,6 +968,12 @@ router.patch(
           },
         },
       });
+
+      await upsertSupplierAlertsForSupplier({
+        supplier: updated,
+        userId: req.user.id,
+        potential_duplicates: potentialDuplicates,
+      }).catch(() => null);
 
       return res.json(updated);
     } catch (err) {
@@ -496,10 +1011,99 @@ router.post(
 
       const supplier = await Supplier.findById(req.params.id).lean();
       if (!supplier) return res.status(404).json({ error: 'Supplier not found' });
+      if (!isActiveSupplierStatus(supplier.status)) {
+        return res.status(409).json({ error: 'Fournisseur inactif' });
+      }
       const product = await Product.findById(productId).select('_id name lifecycle_status').lean();
       if (!product) return res.status(404).json({ error: 'Product not found' });
       if (String(product.lifecycle_status || 'active') !== 'active') {
         return res.status(409).json({ error: 'Produit archive / indisponible' });
+      }
+
+      // Controle intelligent: un fournisseur a risque eleve ne peut pas etre associe a un produit.
+      // (Regle explainable, basee sur retards + commandes ouvertes + ACK + litiges)
+      try {
+        const emailPolicy = await getSupplierEmailPolicy().catch(() => null);
+        const ackSlaHours = emailPolicy && typeof emailPolicy.ack_sla_hours === 'number' ? emailPolicy.ack_sla_hours : 24;
+        const ackSlaMs = Math.max(6, Math.min(168, Math.floor(Number(ackSlaHours || 24)))) * 60 * 60 * 1000;
+        const windowDays = 180;
+        const since = new Date(Date.now() - windowDays * 24 * 60 * 60 * 1000);
+        const now = new Date();
+
+        const [deliveredPos, openPos] = await Promise.all([
+          PurchaseOrder.find({
+            supplier: supplier._id,
+            status: 'delivered',
+            delivered_at: { $ne: null },
+            ordered_at: { $gte: since },
+          })
+            .select('supplier status ordered_at promised_at delivered_at')
+            .sort({ ordered_at: -1 })
+            .limit(450)
+            .lean(),
+          PurchaseOrder.find({
+            supplier: supplier._id,
+            status: 'ordered',
+            received_at: { $in: [null, undefined] },
+          })
+            .select('supplier status ordered_at promised_at createdAt supplier_ack incidents')
+            .sort({ ordered_at: -1, createdAt: -1 })
+            .limit(250)
+            .lean(),
+        ]);
+
+        const kpis = computeSupplierDeliveryKpis(deliveredPos || []);
+        const openOrdersCount = Array.isArray(openPos) ? openPos.length : 0;
+
+        let lateOpenOrdersCount = 0;
+        let maxDaysLate = 0;
+        let ackOverdueCount = 0;
+        let openIncidentsCount = 0;
+        let criticalOpenIncidentsCount = 0;
+
+        for (const po of openPos || []) {
+          const promised = po?.promised_at ? new Date(po.promised_at) : null;
+          if (promised && !Number.isNaN(promised.getTime())) {
+            const daysLate = (now.getTime() - promised.getTime()) / (24 * 60 * 60 * 1000);
+            if (daysLate > 0.00001) {
+              lateOpenOrdersCount += 1;
+              maxDaysLate = Math.max(maxDaysLate, daysLate);
+            }
+          }
+
+          const ackStatus = String(po?.supplier_ack?.status || 'none');
+          const orderedAt = po.ordered_at ? new Date(po.ordered_at) : (po.createdAt ? new Date(po.createdAt) : null);
+          if (ackStatus === 'none' && orderedAt && !Number.isNaN(orderedAt.getTime())) {
+            if ((now.getTime() - orderedAt.getTime()) >= ackSlaMs) ackOverdueCount += 1;
+          }
+
+          const incidents = Array.isArray(po?.incidents) ? po.incidents : [];
+          for (const inc of incidents) {
+            if (inc && String(inc.status || 'open') === 'open') {
+              openIncidentsCount += 1;
+              if (String(inc.severity || '') === 'critical') criticalOpenIncidentsCount += 1;
+            }
+          }
+        }
+
+        const riskScore = computeSupplierRisk({
+          kpis,
+          openOrdersCount,
+          lateOpenOrdersCount,
+          maxDaysLate,
+          ackOverdueCount,
+          openIncidentsCount,
+          criticalOpenIncidentsCount,
+        });
+        const riskLevel = riskLevelFromScore(riskScore);
+        if (['critique', 'eleve'].includes(String(riskLevel))) {
+          return res.status(409).json({
+            error: 'Fournisseur a risque eleve',
+            details: `Association bloquee: risque ${riskLevel} (score ${riskScore}/100) sur ${windowDays} jours.`,
+          });
+        }
+      } catch {
+        // Never block on insights compute error; only enforce "inactive" strictly.
       }
 
       const isPrimary = Boolean(req.body?.is_primary);
@@ -567,7 +1171,7 @@ router.get('/recommendation', requirePermission(PERMISSIONS.SUPPLIER_MANAGE), as
       .lean();
     if (!links.length) {
       // Fallback: no explicit mapping yet -> consider all active suppliers.
-      const suppliers = await Supplier.find({ status: 'active' }).select('_id name status default_lead_time_days').lean();
+      const suppliers = await Supplier.find({ status: supplierStatusQuery(SUPPLIER_STATUS.ACTIF) }).select('_id name status default_lead_time_days').lean();
       links = suppliers.map((s) => ({
         supplier: s,
         product: product._id,
@@ -596,7 +1200,7 @@ router.get('/recommendation', requirePermission(PERMISSIONS.SUPPLIER_MANAGE), as
     const candidates = [];
     for (const link of links) {
       const supplier = link.supplier;
-      if (!supplier || supplier.status !== 'active') continue;
+      if (!supplier || !isActiveSupplierStatus(supplier.status)) continue;
       const sid = String(supplier._id);
       const history = bySupplier.get(sid) || [];
       const kpis = computeSupplierDeliveryKpis(history);
@@ -688,7 +1292,7 @@ router.get('/ranking', requirePermission(PERMISSIONS.SUPPLIER_MANAGE), async (re
   try {
     const max = Math.max(5, Math.min(200, Number(req.query?.max || 50)));
 
-    const suppliers = await Supplier.find({ status: 'active' })
+    const suppliers = await Supplier.find({ status: supplierStatusQuery(SUPPLIER_STATUS.ACTIF) })
       .select('_id name status default_lead_time_days')
       .sort({ name: 1 })
       .lean();
@@ -759,6 +1363,179 @@ router.get('/ranking', requirePermission(PERMISSIONS.SUPPLIER_MANAGE), async (re
   }
 });
 
+// GET /api/suppliers/:id (fiche détail)
+router.get('/:id', requirePermission(PERMISSIONS.SUPPLIER_MANAGE), async (req, res) => {
+  try {
+    if (!isValidObjectIdLike(req.params.id)) return res.status(400).json({ error: 'id invalide' });
+    const supplier = await Supplier.findById(req.params.id).lean();
+    if (!supplier) return res.status(404).json({ error: 'Supplier not found' });
+
+    const quality = computeSupplierProfileQuality(supplier);
+    const alerts = await SupplierAlert.find({ supplier: supplier._id })
+      .sort({ createdAt: -1 })
+      .limit(50)
+      .lean();
+
+    return res.json({
+      ok: true,
+      supplier: {
+        ...supplier,
+        status: toCanonicalSupplierStatus(supplier.status),
+        profile_state: quality.state,
+        missing_fields: quality.missing_fields,
+      },
+      alerts,
+    });
+  } catch (err) {
+    return res.status(500).json({ error: 'Failed to fetch supplier detail', details: err.message });
+  }
+});
+
+// GET /api/suppliers/:id/history
+router.get('/:id/history', requirePermission(PERMISSIONS.SUPPLIER_MANAGE), async (req, res) => {
+  try {
+    if (!isValidObjectIdLike(req.params.id)) return res.status(400).json({ error: 'id invalide' });
+    const { page, limit, skip } = parsePageLimit(req, { defaultLimit: 50, maxLimit: 200 });
+
+    const [items, total] = await Promise.all([
+      SupplierHistory.find({ supplier: req.params.id })
+        .sort({ createdAt: -1 })
+        .skip(skip)
+        .limit(limit)
+        .populate('user', 'username email role status telephone')
+        .lean(),
+      SupplierHistory.countDocuments({ supplier: req.params.id }),
+    ]);
+
+    return res.json({
+      ok: true,
+      page,
+      limit,
+      total,
+      total_pages: Math.max(1, Math.ceil(total / limit)),
+      items,
+    });
+  } catch (err) {
+    return res.status(500).json({ error: 'Failed to fetch supplier history', details: err.message });
+  }
+});
+
+// PATCH /api/suppliers/:id/status
+router.patch(
+  '/:id/status',
+  requirePermission(PERMISSIONS.SUPPLIER_MANAGE),
+  strictBody(['status', 'comment']),
+  async (req, res) => {
+    try {
+      if (!isValidObjectIdLike(req.params.id)) return res.status(400).json({ error: 'id invalide' });
+      const status = normalizeSupplierStatus(req.body?.status);
+      if (!status) return res.status(400).json({ error: 'status invalide' });
+      const comment = asOptionalString(req.body?.comment);
+      if (comment !== undefined && !isSafeText(comment, { min: 0, max: 240 })) return res.status(400).json({ error: 'comment invalide' });
+
+      const before = await Supplier.findById(req.params.id).lean();
+      if (!before) return res.status(404).json({ error: 'Supplier not found' });
+
+      const updated = await Supplier.findByIdAndUpdate(req.params.id, { $set: { status } }, { returnDocument: 'after' });
+      if (!updated) return res.status(404).json({ error: 'Supplier not found' });
+
+      await SupplierHistory.create({
+        supplier: updated._id,
+        user: req.user.id,
+        action: 'CHANGEMENT_STATUT',
+        old_value: { status: toCanonicalSupplierStatus(before.status) },
+        new_value: { status: toCanonicalSupplierStatus(updated.status) },
+        comment: comment || '',
+      }).catch(() => null);
+
+      await History.create({
+        action_type: 'supplier',
+        user: req.user.id,
+        source: 'ui',
+        description: 'Changement statut fournisseur',
+        actor_role: req.user.role,
+        tags: ['supplier', 'status'],
+        status_before: before.status,
+        status_after: updated.status,
+        context: { supplier_id: String(updated._id), comment: comment || '' },
+      }).catch(() => null);
+
+      const potentialDuplicates = await findPotentialDuplicateSuppliers({
+        supplierId: updated._id,
+        name: updated.name,
+        email: updated.email,
+        phone: updated.phone,
+      });
+      await upsertSupplierAlertsForSupplier({
+        supplier: updated,
+        userId: req.user.id,
+        potential_duplicates: potentialDuplicates,
+      }).catch(() => null);
+
+      return res.json({ ok: true, supplier: updated });
+    } catch (err) {
+      return res.status(400).json({ error: 'Failed to update supplier status', details: err.message });
+    }
+  }
+);
+
+// PATCH /api/suppliers/:id/reliability
+router.patch(
+  '/:id/reliability',
+  requirePermission(PERMISSIONS.SUPPLIER_MANAGE),
+  strictBody(['reliability_level', 'comment']),
+  async (req, res) => {
+    try {
+      if (!isValidObjectIdLike(req.params.id)) return res.status(400).json({ error: 'id invalide' });
+      const reliability = normalizeReliabilityLevel(req.body?.reliability_level);
+      if (!reliability) return res.status(400).json({ error: 'reliability_level invalide' });
+      const comment = asOptionalString(req.body?.comment);
+      if (comment !== undefined && !isSafeText(comment, { min: 0, max: 240 })) return res.status(400).json({ error: 'comment invalide' });
+
+      const before = await Supplier.findById(req.params.id).lean();
+      if (!before) return res.status(404).json({ error: 'Supplier not found' });
+
+      const updated = await Supplier.findByIdAndUpdate(req.params.id, { $set: { reliability_level: reliability } }, { returnDocument: 'after' });
+      if (!updated) return res.status(404).json({ error: 'Supplier not found' });
+
+      await SupplierHistory.create({
+        supplier: updated._id,
+        user: req.user.id,
+        action: 'CHANGEMENT_FIABILITE',
+        old_value: { reliability_level: before.reliability_level || RELIABILITY_LEVEL.NON_EVALUE },
+        new_value: { reliability_level: updated.reliability_level || RELIABILITY_LEVEL.NON_EVALUE },
+        comment: comment || '',
+      }).catch(() => null);
+
+      await History.create({
+        action_type: 'supplier',
+        user: req.user.id,
+        source: 'ui',
+        description: 'Changement fiabilite fournisseur',
+        actor_role: req.user.role,
+        tags: ['supplier', 'reliability'],
+        context: { supplier_id: String(updated._id), comment: comment || '' },
+      }).catch(() => null);
+
+      const potentialDuplicates = await findPotentialDuplicateSuppliers({
+        supplierId: updated._id,
+        name: updated.name,
+        email: updated.email,
+        phone: updated.phone,
+      });
+      await upsertSupplierAlertsForSupplier({
+        supplier: updated,
+        userId: req.user.id,
+        potential_duplicates: potentialDuplicates,
+      }).catch(() => null);
+
+      return res.json({ ok: true, supplier: updated });
+    } catch (err) {
+      return res.status(400).json({ error: 'Failed to update supplier reliability', details: err.message });
+    }
+  }
+);
+
 // POST /api/suppliers/:id/notify-email
 // Petit système de notification fournisseur "par mail" (hors commandes).
 // Usage: message court (demande d'info, demande devis, relance administrative...).
@@ -773,7 +1550,7 @@ router.post(
 
       const supplier = await Supplier.findById(req.params.id).select('_id name email status').lean();
       if (!supplier) return res.status(404).json({ error: 'Supplier not found' });
-      if (supplier.status !== 'active') return res.status(409).json({ error: 'Fournisseur inactif' });
+      if (!isActiveSupplierStatus(supplier.status)) return res.status(409).json({ error: 'Fournisseur inactif' });
 
       const to = String(supplier.email || '').trim();
       if (!to) return res.status(409).json({ error: 'Email fournisseur manquant' });

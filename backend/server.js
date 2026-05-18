@@ -12,6 +12,7 @@ const idempotencyGuard = require('./middlewares/idempotencyGuard');
 const perfMonitor = require('./middlewares/perfMonitor');
 const { verifyMailer, isMailConfigured } = require('./services/mailerService');
 const { initMailQueue, getMailQueueHealth } = require('./services/mailQueueService');
+const { isTwilioSmsConfigured, isTwilioWhatsappConfigured } = require('./services/twilioService');
 const { startAiAutoTrainingJob } = require('./services/aiGovernanceService');
 const { rebuildAiAlerts } = require('./services/alertService');
 const { getQrSecretStatus } = require('./services/qrTokenService');
@@ -173,6 +174,8 @@ app.get('/api/health', async (req, res) => {
   }
 
   const smtpConfigured = isMailConfigured();
+  const twilioSmsConfigured = isTwilioSmsConfigured();
+  const twilioWhatsappConfigured = isTwilioWhatsappConfigured();
   const mongoConnected = readyState === 1;
   const smtpOk = smtpConfigured ? Boolean(smtp.ok) : true;
   const queueEnabled = Boolean(mailQueue?.enabled);
@@ -243,6 +246,14 @@ app.get('/api/health', async (req, res) => {
       ...mailQueue,
       critical: false,
     },
+    messaging: {
+      twilio: {
+        configured: Boolean(twilioSmsConfigured || twilioWhatsappConfigured),
+        sms_configured: twilioSmsConfigured,
+        whatsapp_configured: twilioWhatsappConfigured,
+        critical: false,
+      },
+    },
     security: {
       internal_bond_qr_secret: {
         ok: qrSecretStatus.ok,
@@ -282,8 +293,10 @@ app.use('/api/files', require('./routes/files'));
 app.use('/api/reports', require('./routes/reports'));
 app.use('/api/users', require('./routes/users')); 
 app.use('/api/suppliers', require('./routes/suppliers')); 
+app.use('/api/supplier-alerts', require('./routes/supplier-alerts'));
 app.use('/api/purchase-orders', require('./routes/purchase-orders')); 
 app.use('/api/inventory', require('./routes/inventory'));
+app.use('/api/support', require('./routes/support'));
 app.use('/api/admin', require('./routes/admin'));
 app.use('/api/supplier-portal', require('./routes/supplier-portal'));
 

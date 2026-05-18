@@ -1,5 +1,4 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Link } from 'react-router-dom';
 import {
   History,
   Download,
@@ -9,7 +8,6 @@ import {
   ArrowUpFromLine,
   User,
   Calendar,
-  MessageSquareText,
 } from 'lucide-react';
 import SidebarResp from '../../components/responsable/SidebarResp';
 import HeaderPage from '../../components/shared/HeaderPage';
@@ -18,6 +16,7 @@ import LoadingSpinner from '../../components/shared/LoadingSpinner';
 import { useToast } from '../../components/shared/Toast';
 import { get } from '../../services/api';
 import useIsMobile from '../../hooks/useIsMobile';
+import { useLocation } from 'react-router-dom';
 import './TransactionsResp.css';
 
 function formatDate(value) {
@@ -30,11 +29,20 @@ function formatDate(value) {
 const TransactionsResp = ({ userName, onLogout }) => {
   const toast = useToast();
   const isMobile = useIsMobile(640);
+  const location = useLocation();
   const [sidebarCollapsed, setSidebarCollapsed] = useState(() => (typeof window !== 'undefined' ? window.innerWidth <= 768 : false));
   const [isLoading, setIsLoading] = useState(false);
   const [items, setItems] = useState([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [filterType, setFilterType] = useState('tous');
+
+  useEffect(() => {
+    const params = new URLSearchParams(location.search || '');
+    const q = String(params.get('q') || '').trim();
+    const type = String(params.get('type') || '').trim().toLowerCase();
+    if (q) setSearchQuery(q);
+    if (type === 'sortie' || type === 'entree' || type === 'tous') setFilterType(type);
+  }, [location.search]);
 
   const loadData = useCallback(async () => {
     setIsLoading(true);
@@ -88,7 +96,8 @@ const TransactionsResp = ({ userName, onLogout }) => {
       const matchesSearch = !q
         || item.produit.toLowerCase().includes(q)
         || item.code.toLowerCase().includes(q)
-        || item.magasinier.toLowerCase().includes(q);
+        || item.magasinier.toLowerCase().includes(q)
+        || String(item.source || '').toLowerCase().includes(q);
       const matchesType = filterType === 'tous' || item.type === filterType;
       return matchesSearch && matchesType;
     });
@@ -155,18 +164,6 @@ const TransactionsResp = ({ userName, onLogout }) => {
             {isLoading && <LoadingSpinner overlay text="Chargement..." />}
 
             <div className="tx-page">
-              <div className="tx-banner">
-                <div className="tx-banner-info">
-                  <MessageSquareText size={18} />
-                  <div>
-                    <strong>Flux décisionnel</strong>
-                    <div className="tx-banner-sub">Accéder aux discussions et événements (optionnel).</div>
-                  </div>
-                </div>
-                <Link to="/responsable/flux" className="tx-btn secondary">
-                  Ouvrir le flux
-                </Link>
-              </div>
               <div className="tx-toolbar">
                 <div className="tx-filter">
                   <Filter size={16} />

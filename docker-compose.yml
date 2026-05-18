@@ -1,0 +1,74 @@
+services:
+  mongo:
+    image: mongo:7
+    container_name: sentinel-mongo
+    restart: unless-stopped
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongo_data:/data/db
+    healthcheck:
+      test: ["CMD", "mongosh", "--quiet", "--eval", "db.adminCommand({ ping: 1 }).ok"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    container_name: sentinel-redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: sentinel-backend
+    restart: unless-stopped
+    ports:
+      - "5000:5000"
+    environment:
+      NODE_ENV: development
+      PORT: 5000
+      MONGODB_URI: mongodb://mongo:27017/pfe_sentinel
+      REDIS_URL: redis://redis:6379
+      JWT_SECRET: dev_jwt_secret_change_me
+      PII_HASH_SECRET: dev_pii_hash_secret_change_me
+      INTERNAL_BOND_QR_SECRET: dev_qr_secret_change_me
+      FRONTEND_URLS: http://localhost:8080
+      MAIL_QUEUE_ENABLED: "true"
+      AI_AUTO_TRAIN_ON_BOOT: "false"
+      AI_PYTHON_BIN: python3
+    volumes:
+      - backend_uploads:/app/uploads
+      - backend_ai_data:/app/data/ai
+    depends_on:
+      mongo:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  web:
+    build:
+      context: .
+      dockerfile: Dockerfile.web
+      args:
+        REACT_APP_API_URL: /api
+    container_name: sentinel-web
+    restart: unless-stopped
+    ports:
+      - "8080:80"
+    depends_on:
+      - backend
+
+volumes:
+  mongo_data:
+  backend_uploads:
+  backend_ai_data:
+

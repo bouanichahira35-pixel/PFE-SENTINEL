@@ -17,4 +17,7 @@ const userSessionSchema = new mongoose.Schema(
   { timestamps: true }
 );
 
+userSessionSchema.index({ session_id: 1, user: 1, is_active: 1, expires_at: 1 });
+userSessionSchema.index({ user: 1, is_active: 1, expires_at: 1 });
+
 module.exports = mongoose.model('UserSession', userSessionSchema);

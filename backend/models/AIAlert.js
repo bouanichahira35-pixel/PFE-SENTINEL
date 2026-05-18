@@ -2,6 +2,8 @@ const mongoose = require('../db');
 
 const aiAlertSchema = new mongoose.Schema(
   {
+    // External dataset import id (ex: ALT-000001). Optional and sparse-unique to keep imports idempotent.
+    external_alert_id: { type: String, trim: true, index: true, unique: true, sparse: true },
     product: { type: mongoose.Schema.Types.ObjectId, ref: 'Product', required: true },
     alert_type: { type: String, enum: ['anomaly', 'rupture', 'surconsommation'], required: true },
     risk_level: { type: String, enum: ['low', 'medium', 'high'], default: 'low' },

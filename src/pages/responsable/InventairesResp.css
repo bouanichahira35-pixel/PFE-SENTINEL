@@ -81,6 +81,13 @@
   margin-bottom: 12px;
 }
 
+.inv-head-actions {
+  display: inline-flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  align-items: center;
+}
+
 .inv-head h3 {
   display: inline-flex;
   align-items: center;
@@ -174,9 +181,13 @@
   color: #0f172a;
 }
 
-.inv-pill.counting { background: #e0f2fe; color: #0369a1; }
-.inv-pill.closed { background: #fff7ed; color: #9a3412; }
-.inv-pill.applied { background: #dcfce7; color: #166534; }
+.inv-pill.brouillon { background: rgba(148, 163, 184, 0.18); color: #334155; }
+.inv-pill.a_faire { background: rgba(59, 130, 246, 0.12); color: #1d4ed8; }
+.inv-pill.en_cours { background: rgba(245, 158, 11, 0.16); color: #92400e; }
+.inv-pill.a_valider { background: rgba(123, 63, 242, 0.14); color: #6d28d9; }
+.inv-pill.a_recompter { background: rgba(234, 88, 12, 0.16); color: #9a3412; }
+.inv-pill.valide { background: rgba(34, 197, 94, 0.14); color: #166534; }
+.inv-pill.rejete { background: rgba(239, 68, 68, 0.14); color: #991b1b; }
 
 .inv-empty {
   padding: 14px;

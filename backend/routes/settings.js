@@ -7,6 +7,7 @@ const History = require('../models/History');
 const requireAuth = require('../middlewares/requireAuth'); 
 const { enqueueMail } = require('../services/mailQueueService'); 
 const { isSafeText, normalizeEmail, isValidEmail, normalizePhone, isValidPhone } = require('../utils/validation');
+const { STOCK_RULES_DEFAULT, sanitizeStockRulesConfig, diffStockRules } = require('../constants/stockRules');
 
 const BCRYPT_SALT_ROUNDS = Number(process.env.BCRYPT_SALT_ROUNDS || 12);
 const USER_PREFS_DEFAULT = Object.freeze({
@@ -20,11 +21,7 @@ const USER_PREFS_DEFAULT = Object.freeze({
   },
 });
 
-const STOCK_RULES_DEFAULT = Object.freeze({
-  seuilAlerte: 10,
-  joursInactivite: 30,
-  validationObligatoire: true,
-});
+
 
 const AI_SETTINGS_DEFAULT = Object.freeze({
   predictionsEnabled: true,
@@ -219,19 +216,114 @@ router.post('/me/test-email', async (req, res) => {
 router.get('/stock-rules/config', async (req, res) => { 
   try { 
     if (req.user.role !== 'responsable') return res.status(403).json({ error: 'Acces refuse' }); 
-    const value = await getAppSettingValue('stock_rules_config', STOCK_RULES_DEFAULT); 
+    const raw = await getAppSettingValue('stock_rules_config', STOCK_RULES_DEFAULT);
+    const value = sanitizeStockRulesConfig(raw);
     return res.json({ value }); 
   } catch (err) { 
     return res.status(500).json({ error: 'Failed to fetch stock rules config' }); 
   } 
 }); 
 
+function buildThresholdMissingFilter() {
+  return {
+    $or: [{ seuil_minimum: 0 }, { seuil_minimum: null }, { seuil_minimum: { $exists: false } }],
+  };
+}
+
+async function computeStockRulesImpact(cfgInput) {
+  const cfg = sanitizeStockRulesConfig(cfgInput);
+  const approvedFilter = { lifecycle_status: 'active', validation_status: 'approved' };
+
+  const [totalApproved, noThresholdCount, ruptureCount, toValidateCount] = await Promise.all([
+    Product.countDocuments(approvedFilter),
+    Product.countDocuments({ ...approvedFilter, ...buildThresholdMissingFilter() }),
+    Product.countDocuments({ ...approvedFilter, quantity_current: { $lte: 0 } }),
+    Product.countDocuments({ lifecycle_status: 'active', validation_status: 'pending' }),
+  ]);
+
+  const effectiveSeuil = {
+    $cond: [
+      { $gt: ['$seuil_minimum', 0] },
+      '$seuil_minimum',
+      cfg.autoriserProduitsSansSeuil ? cfg.seuilAlerte : 0,
+    ],
+  };
+
+  const underThresholdAgg = await Product.aggregate([
+    { $match: approvedFilter },
+    {
+      $match: {
+        $expr: {
+          $and: [
+            { $gt: ['$quantity_current', 0] },
+            { $gt: [effectiveSeuil, 0] },
+            { $lte: ['$quantity_current', effectiveSeuil] },
+          ],
+        },
+      },
+    },
+    { $count: 'count' },
+  ]);
+  const underThresholdCount = underThresholdAgg?.[0]?.count || 0;
+
+  const inactiveDays = Math.max(1, Number(cfg.joursInactivite || STOCK_RULES_DEFAULT.joursInactivite));
+  const inactiveSince = new Date(Date.now() - inactiveDays * 24 * 60 * 60 * 1000);
+  const inactiveCount = await Product.countDocuments({ ...approvedFilter, updatedAt: { $lte: inactiveSince } });
+
+  let supplierlessCount = 0;
+  try {
+    const SupplierProduct = require('../models/SupplierProduct');
+    const linkedIds = await SupplierProduct.distinct('product', {});
+    supplierlessCount = await Product.countDocuments({ ...approvedFilter, _id: { $nin: linkedIds || [] } });
+  } catch {
+    supplierlessCount = 0;
+  }
+
+  const toVerifyCount = await Product.countDocuments({
+    ...approvedFilter,
+    $or: [{ category: null }, { category: { $exists: false } }, { unite: { $in: [null, ''] } }],
+  });
+
+  const alerts = {
+    stock_sous_seuil: cfg.activerAlertesAutomatiques && cfg.alerteStockSousSeuil ? underThresholdCount : 0,
+    rupture: cfg.activerAlertesAutomatiques && cfg.alerteRuptureStock ? ruptureCount : 0,
+    produit_inactif: cfg.activerAlertesAutomatiques && cfg.alerteProduitInactif ? inactiveCount : 0,
+    produit_sans_fournisseur: cfg.activerAlertesAutomatiques && cfg.alerteProduitSansFournisseur ? supplierlessCount : 0,
+    produit_sans_unite_ou_categorie:
+      cfg.activerAlertesAutomatiques && cfg.alerteProduitSansUniteOuCategorie ? toVerifyCount : 0,
+  };
+  const totalAlerts = Object.values(alerts).reduce((a, b) => a + Number(b || 0), 0);
+
+  return {
+    ok: true,
+    config: cfg,
+    counts: {
+      total_approved_products: totalApproved,
+      products_without_threshold: noThresholdCount,
+      products_under_threshold: underThresholdCount,
+      products_in_rupture: ruptureCount,
+      products_inactive: inactiveCount,
+      products_to_validate: toValidateCount,
+      products_to_verify: toVerifyCount,
+    },
+    alerts: { ...alerts, total: totalAlerts },
+  };
+}
+
 // GET /api/settings/stock-rules/impact
 // Donne un aperçu de l'impact des règles sur un catalogue volumineux.
 router.get('/stock-rules/impact', async (req, res) => {
   try {
     if (req.user.role !== 'responsable') return res.status(403).json({ error: 'Acces refuse' });
-    const cfg = await getAppSettingValue('stock_rules_config', STOCK_RULES_DEFAULT);
+    const cfgRaw = await getAppSettingValue('stock_rules_config', STOCK_RULES_DEFAULT);
+    const payload = await computeStockRulesImpact(cfgRaw);
+    payload.note =
+      "Un produit avec seuil_minimum = 0 (ou null) n'utilise le seuil global que si l'option est active. Vous pouvez appliquer le seuil global aux produits sans seuil sans ecraser les seuils personnalises.";
+    return res.json(payload);
+
+    // Legacy implementation (kept temporarily for compatibility / debugging)
+    // eslint-disable-next-line no-unreachable
+    const cfg = cfgRaw;
 
     const approvedFilter = { lifecycle_status: 'active' };
     const [totalApproved, noThresholdCount, ruptureCount] = await Promise.all([
@@ -280,18 +372,30 @@ router.get('/stock-rules/impact', async (req, res) => {
   }
 });
 
+// POST /api/settings/stock-rules/simulate
+// Calcule l'impact sans enregistrer la config.
+router.post('/stock-rules/simulate', async (req, res) => {
+  try {
+    if (req.user.role !== 'responsable') return res.status(403).json({ error: 'Acces refuse' });
+    const cfg = sanitizeStockRulesConfig(req.body || {});
+    const payload = await computeStockRulesImpact(cfg);
+    return res.json(payload);
+  } catch (err) {
+    return res.status(500).json({ error: 'Failed to simulate stock rules', details: err.message });
+  }
+});
+
 // POST /api/settings/stock-rules/apply-default-threshold
 // Applique le seuil global (seuilAlerte) aux produits approuvés dont seuil_minimum=0.
 router.post('/stock-rules/apply-default-threshold', async (req, res) => {
   try {
     if (req.user.role !== 'responsable') return res.status(403).json({ error: 'Acces refuse' });
-    const cfg = await getAppSettingValue('stock_rules_config', STOCK_RULES_DEFAULT);
+    const cfgRaw = await getAppSettingValue('stock_rules_config', STOCK_RULES_DEFAULT);
+    const cfg = sanitizeStockRulesConfig(cfgRaw);
     const seuil = Number(cfg?.seuilAlerte ?? STOCK_RULES_DEFAULT.seuilAlerte);
-    if (!Number.isFinite(seuil) || seuil < 0) {
-      return res.status(400).json({ error: 'seuilAlerte invalide' });
-    }
+    if (!Number.isFinite(seuil) || seuil < 0) return res.status(400).json({ error: 'seuilAlerte invalide' });
 
-    const filter = { lifecycle_status: 'active', seuil_minimum: 0 };
+    const filter = { lifecycle_status: 'active', validation_status: 'approved', ...buildThresholdMissingFilter() };
     const r = await Product.updateMany(filter, { $set: { seuil_minimum: seuil } });
 
     await History.create({
@@ -317,22 +421,86 @@ router.post('/stock-rules/apply-default-threshold', async (req, res) => {
 router.patch('/stock-rules/config', async (req, res) => { 
   try { 
     if (req.user.role !== 'responsable') return res.status(403).json({ error: 'Acces refuse' }); 
-    const payload = { 
-      seuilAlerte: Number(req.body?.seuilAlerte ?? STOCK_RULES_DEFAULT.seuilAlerte),
-      joursInactivite: Number(req.body?.joursInactivite ?? STOCK_RULES_DEFAULT.joursInactivite),
-      validationObligatoire: Boolean(req.body?.validationObligatoire),
-    };
-    if (!Number.isFinite(payload.seuilAlerte) || payload.seuilAlerte < 0) {
-      return res.status(400).json({ error: 'seuilAlerte invalide' });
-    }
-    if (!Number.isFinite(payload.joursInactivite) || payload.joursInactivite < 1) {
-      return res.status(400).json({ error: 'joursInactivite invalide' });
-    }
+    const currentRaw = await getAppSettingValue('stock_rules_config', STOCK_RULES_DEFAULT);
+    const current = sanitizeStockRulesConfig(currentRaw);
+    const payload = sanitizeStockRulesConfig(req.body || {});
+
+    const changes = diffStockRules(current, payload);
+
     await setAppSettingValue('stock_rules_config', payload, req.user.id);
-    return res.json({ message: 'Regles stock mises a jour', value: payload });
+
+    if (changes.length) {
+      await History.create({
+        action_type: 'stock_rules_update',
+        user: req.user.id,
+        source: 'ui',
+        description: 'Mise a jour des regles metier du stock',
+        actor_role: req.user.role,
+        tags: ['stock_rules', 'config'],
+        context: { changes, before: current, after: payload },
+      });
+    }
+
+    const impact = await computeStockRulesImpact(payload);
+    return res.json({ ok: true, message: 'Regles stock mises a jour', value: payload, changes, impact });
   } catch (err) {
     return res.status(500).json({ error: 'Failed to update stock rules config' });
   } 
+});
+
+// POST /api/settings/stock-rules/reset-default
+router.post('/stock-rules/reset-default', async (req, res) => {
+  try {
+    if (req.user.role !== 'responsable') return res.status(403).json({ error: 'Acces refuse' });
+    const currentRaw = await getAppSettingValue('stock_rules_config', STOCK_RULES_DEFAULT);
+    const current = sanitizeStockRulesConfig(currentRaw);
+    const payload = sanitizeStockRulesConfig(STOCK_RULES_DEFAULT);
+    const changes = diffStockRules(current, payload);
+
+    await setAppSettingValue('stock_rules_config', payload, req.user.id);
+    await History.create({
+      action_type: 'stock_rules_reset',
+      user: req.user.id,
+      source: 'ui',
+      description: 'Restauration des valeurs par defaut (regles stock)',
+      actor_role: req.user.role,
+      tags: ['stock_rules', 'config', 'reset'],
+      context: { changes, before: current, after: payload },
+    });
+
+    const impact = await computeStockRulesImpact(payload);
+    return res.json({ ok: true, value: payload, changes, impact });
+  } catch (err) {
+    return res.status(500).json({ error: 'Failed to reset stock rules config', details: err.message });
+  }
+});
+
+// GET /api/settings/stock-rules/history
+router.get('/stock-rules/history', async (req, res) => {
+  try {
+    if (req.user.role !== 'responsable') return res.status(403).json({ error: 'Acces refuse' });
+    const limit = Math.min(200, Math.max(1, Number(req.query?.limit || 50)));
+    const rows = await History.find({
+      action_type: { $in: ['stock_rules_update', 'stock_rules_apply', 'stock_rules_reset'] },
+    })
+      .sort({ date_action: -1 })
+      .limit(limit)
+      .populate('user', 'username role')
+      .lean();
+
+    const items = (rows || []).map((h) => ({
+      _id: h._id,
+      date: h.date_action || h.createdAt,
+      user: h.user ? { _id: h.user._id, username: h.user.username, role: h.user.role } : null,
+      action: h.action_type,
+      description: h.description || '',
+      context: h.context || {},
+    }));
+
+    return res.json({ ok: true, items });
+  } catch (err) {
+    return res.status(500).json({ error: 'Failed to fetch stock rules history', details: err.message });
+  }
 });
 
 router.get('/ai/config', async (req, res) => {

@@ -32,7 +32,8 @@
     "test": "react-scripts test",
     "eject": "react-scripts eject",
     "backend:start": "cd backend && npm start",
-    "demo:setup": "cd backend && npm run demo:setup"
+    "demo:setup": "cd backend && npm run demo:setup",
+    "import:realistic-dataset": "cd backend && npm run import:realistic-dataset"
   },
   "eslintConfig": {
     "extends": [

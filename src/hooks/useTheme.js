@@ -16,11 +16,15 @@ const useTheme = () => {
     localStorage.setItem('darkMode', JSON.stringify(isDarkMode));
   }, [isDarkMode]);
 
+  const setTheme = useCallback((dark) => {
+    setIsDarkMode(Boolean(dark));
+  }, []);
+
   const toggleTheme = useCallback(() => {
     setIsDarkMode(prev => !prev);
   }, []);
 
-  return { isDarkMode, toggleTheme };
+  return { isDarkMode, setTheme, toggleTheme };
 };
 
 export default useTheme;

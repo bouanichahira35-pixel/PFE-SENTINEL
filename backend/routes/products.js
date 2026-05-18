@@ -18,6 +18,7 @@ const History = require('../models/History');
 const { logSecurityEvent } = require('../services/securityAuditService');
 const { enqueueMail } = require('../services/mailQueueService');
 const { getUserPreferences, canSendNotificationEmail } = require('../services/userPreferencesService');
+const { getStockRulesConfig } = require('../services/stockRulesService');
 const {
   asDate,
   asNonNegativeNumber,
@@ -181,6 +182,63 @@ async function notifyResponsablesOnPendingValidation(product, creatorUser) {
   }
 }
 
+async function notifyResponsablesOnNewProduct(product, creatorUser) {
+  try {
+    if (!product?._id) return;
+
+    const responsables = await User.find({ role: 'responsable', status: 'active' })
+      .select('_id email username role')
+      .lean();
+    if (!responsables.length) return;
+
+    const creatorName = creatorUser?.username || creatorUser?.email || 'magasinier';
+    const subject = `Nouveau produit ajoute au catalogue: ${product.name || 'Produit'}`;
+    const text = [
+      `Produit: ${product.name || 'Produit'}`,
+      product.code_product ? `Code: ${product.code_product}` : null,
+      `Ajoute par: ${creatorName}`,
+      product.family ? `Famille: ${product.family}` : null,
+      product.unite ? `Unite: ${product.unite}` : null,
+      Number.isFinite(Number(product.quantity_current)) ? `Quantite initiale: ${Number(product.quantity_current)}` : null,
+      Number.isFinite(Number(product.seuil_minimum)) ? `Seuil minimum: ${Number(product.seuil_minimum)}` : null,
+    ].filter(Boolean).join('\n');
+
+    const targets = responsables.filter((r) => String(r._id) !== String(creatorUser?.id || creatorUser?._id || ''));
+    if (!targets.length) return;
+
+    await Notification.insertMany(
+      targets.map((r) => ({
+        user: r._id,
+        title: subject,
+        message: text,
+        type: 'info',
+        is_read: false,
+      }))
+    );
+
+    for (const r of targets) {
+      if (!r.email) continue;
+      try {
+        const prefs = await getUserPreferences(r._id);
+        if (!canSendNotificationEmail(prefs, 'stock')) continue;
+        await enqueueMail({
+          kind: 'product_created',
+          role: r.role,
+          to: r.email,
+          subject,
+          text,
+          html: `<pre style="font-family:monospace;white-space:pre-wrap;">${text}</pre>`,
+          job_id: `product_created_${product._id}_${r._id}_${Date.now()}`,
+        });
+      } catch {
+        // best-effort
+      }
+    }
+  } catch {
+    // best-effort
+  }
+}
+
 async function getNextProductCode() {
   const year = new Date().getFullYear();
   const counterName = `product_code_${year}`;
@@ -284,6 +342,63 @@ router.get('/', requireAuth, async (req, res) => {
     res.status(500).json({ error: 'Failed to fetch products' }); 
   } 
 }); 
+
+// GET /api/products/inactive?days=60
+// Produits "inactifs" = rupture de stock OU absence de demandes sur une fenêtre récente.
+// Utilisé côté Responsable pour piloter les produits à archiver / corriger.
+router.get('/inactive', requireAuth, async (req, res) => {
+  try {
+    const days = Math.max(1, Math.min(365, Math.floor(asNonNegativeNumber(req.query?.days) || 60)));
+    const since = new Date(Date.now() - days * 24 * 60 * 60 * 1000);
+
+    const products = await Product.find({ lifecycle_status: 'active' })
+      .populate('category')
+      .sort({ createdAt: -1 })
+      .lean();
+
+    if (!products.length) return res.json({ ok: true, days, items: [] });
+
+    const reqAgg = await Request.aggregate([
+      {
+        $group: {
+          _id: '$product',
+          last_request_at: { $max: '$date_request' },
+          recent_request_count: {
+            $sum: { $cond: [{ $gte: ['$date_request', since] }, 1, 0] },
+          },
+        },
+      },
+    ]);
+
+    const statsByProduct = new Map(reqAgg.map((row) => [String(row._id), row]));
+
+    const items = products
+      .map((p) => {
+        const pid = String(p?._id || '');
+        const stat = statsByProduct.get(pid);
+        const stockStatus = computeStatus(p?.quantity_current, p?.seuil_minimum);
+        const rupture = stockStatus === 'rupture';
+        const recentCount = Number(stat?.recent_request_count || 0);
+        const noDemand = !rupture && recentCount <= 0;
+        const reason = rupture ? 'rupture' : noDemand ? 'no_demand' : '';
+
+        if (!reason) return null;
+
+        return {
+          ...p,
+          inactive_reason: reason,
+          stock_status: stockStatus,
+          last_request_at: stat?.last_request_at || null,
+          recent_request_count: recentCount,
+        };
+      })
+      .filter(Boolean);
+
+    return res.json({ ok: true, days, items });
+  } catch (err) {
+    return res.status(500).json({ error: 'Failed to fetch inactive products', details: err.message });
+  }
+});
 
 router.get('/qr-check', requireAuth, async (req, res) => {
   try {
@@ -421,6 +536,17 @@ router.post(
       });
     }
 
+    let stockRulesConfig = null;
+    try {
+      stockRulesConfig = await getStockRulesConfig();
+    } catch {
+      stockRulesConfig = null;
+    }
+
+    const validationRequiredForNew =
+      !creatorIsResponsable && Boolean(stockRulesConfig?.validationObligatoireNouveauxProduits);
+    const validationStatus = validationRequiredForNew ? 'pending' : 'approved';
+
     const payload = { 
       code_product: req.body.code_product ? normalizeProductCode(req.body.code_product) : (await getNextProductCode()), 
       name, 
@@ -445,9 +571,9 @@ router.post(
         ? asOptionalString(req.body.image_product)
         : null,
       created_by: req.user.id, 
-      // Cahier de charge: creation -> utilisable immediatement (pas de validation Responsable).
-      validated_by: req.user.id,
-      validation_status: 'approved',
+      // Regles metier: selon configuration, un produit cree par magasinier peut exiger validation responsable.
+      validated_by: validationStatus === 'approved' ? req.user.id : undefined,
+      validation_status: validationStatus,
     }; 
 
     if (errors.length > 0) {
@@ -471,6 +597,7 @@ router.post(
         category: item.category ? String(item.category) : null, 
       }, 
     }); 
+    notifyResponsablesOnNewProduct(item, req.user);
     res.status(201).json(item);
   } catch (err) {
     if (err?.code === 11000 && err?.keyPattern?.qr_code_value) {
@@ -519,6 +646,7 @@ router.put(
     if (String(product.lifecycle_status || 'active') === 'archived') {
       return res.status(409).json({ error: 'Produit archive (modification interdite)' });
     }
+    const categoryBefore = product.category ? String(product.category) : null;
     const beforeSnapshot = {
       name: product.name,
       seuil_minimum: Number(product.seuil_minimum || 0),
@@ -654,6 +782,27 @@ router.put(
           name: duplicateQr.name,
         },
       });
+    }
+
+    // Regles metier: certaines modifications necessitent une re-validation responsable.
+    try {
+      const stockRulesConfig = await getStockRulesConfig();
+      const seuilChanged = Number(beforeSnapshot.seuil_minimum || 0) !== Number(product.seuil_minimum || 0);
+      const categoryAfter = product.category ? String(product.category) : null;
+      const categoryChanged = categoryBefore !== categoryAfter;
+      const actorIsResponsable = req.user.role === 'responsable';
+
+      const requiresRevalidation =
+        !actorIsResponsable
+        && ((stockRulesConfig?.validationApresModificationSeuil && seuilChanged)
+          || (stockRulesConfig?.validationApresChangementCategorie && categoryChanged));
+
+      if (requiresRevalidation) {
+        product.validation_status = 'pending';
+        product.validated_by = null;
+      }
+    } catch {
+      // ignore: stock rules config is best-effort
     }
 
     product.status = computeStatus(product.quantity_current, product.seuil_minimum);

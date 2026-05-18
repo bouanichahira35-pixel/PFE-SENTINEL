@@ -11,9 +11,37 @@ const categorySchema = new mongoose.Schema(
       enum: ['bureautique', 'menage', 'petrole'],
       default: [],
     },
+    parent_family: {
+      type: String,
+      enum: ['economat', 'produit_chimique', 'gaz', 'consommable_laboratoire', 'consommable_informatique'],
+      required: false,
+      index: true,
+    },
+    tags: { type: [String], default: [] },
+
+    // Business rules (pilotage)
+    is_sensitive: { type: Boolean, default: false },
+    requires_special_validation: { type: Boolean, default: false },
+    requires_fds: { type: Boolean, default: false },
+    requires_lot_tracking: { type: Boolean, default: false },
+    requires_expiry_date: { type: Boolean, default: false },
+
+    // Visibility (optional scoping)
+    visible_metiers: { type: [String], default: [] },
+    visible_sites: { type: [String], default: [] },
+    visible_services: { type: [String], default: [] },
+
+    // Lifecycle (industrial reality): avoid hard-deletes by default
+    lifecycle_status: { type: String, enum: ['active', 'archived'], default: 'active', index: true },
+    archived_at: Date,
+    archived_by: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+    archived_reason: { type: String, trim: true },
     created_by: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
   },
   { timestamps: true }
 );
+
+categorySchema.index({ name: 1 }, { unique: true });
+categorySchema.index({ lifecycle_status: 1, parent_family: 1, name: 1 });
 
 module.exports = mongoose.model('Category', categorySchema);

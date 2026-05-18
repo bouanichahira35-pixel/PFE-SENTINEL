@@ -3,7 +3,7 @@
   align-items: center;
   justify-content: space-between;
   padding: 0 1.5rem;
-  height: 64px;
+  min-height: 64px;
   background: var(--color-bg-primary);
   border-bottom: 1px solid var(--color-border);
   position: sticky;
@@ -17,6 +17,27 @@
   gap: 0.25rem;
 }
 
+.header-title-block {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.header-title-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  min-width: 0;
+}
+
+.header-title-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--color-primary);
+}
+
 .header-menu-btn {
   display: none;
 }
@@ -26,6 +47,18 @@
   font-weight: 600;
   color: var(--color-text-primary);
   margin: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.header-subtitle {
+  font-size: 0.78rem;
+  color: var(--color-text-secondary);
+  line-height: 1.2;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .header-center {
@@ -342,6 +375,10 @@
 
   .header-title {
     font-size: 1rem;
+  }
+
+  .header-subtitle {
+    display: none;
   }
 
   .header-username {

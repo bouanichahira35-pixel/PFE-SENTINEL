@@ -3,6 +3,7 @@ const PurchaseOrder = require('../models/PurchaseOrder');
 const { enqueueMail } = require('./mailQueueService');
 const { logSecurityEvent } = require('./securityAuditService');
 const { buildSupplierPortalUrlForSupplier } = require('./supplierPortalTokenService');
+const { isActiveSupplierStatus } = require('./supplierRegistryService');
 
 const POLICY_KEY = 'supplier_email_policy_v1';
 
@@ -70,7 +71,7 @@ async function sendPurchaseOrderEmailToSupplier({
   const supplier = po?.supplier;
   const supplierEmail = String(supplier?.email || '').trim();
   if (!supplierEmail) return { ok: false, skipped: true, reason: 'supplier_email_missing' };
-  if (supplier?.status && supplier.status !== 'active') return { ok: false, skipped: true, reason: 'supplier_inactive' };
+  if (supplier?.status && !isActiveSupplierStatus(supplier.status)) return { ok: false, skipped: true, reason: 'supplier_inactive' };
 
   const already = Array.isArray(po.supplier_notifications)
     ? po.supplier_notifications.some((n) => n?.kind === kind)

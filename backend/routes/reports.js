@@ -2,6 +2,8 @@ const router = require('express').Router();
 const Product = require('../models/Product');
 const StockEntry = require('../models/StockEntry');
 const StockExit = require('../models/StockExit');
+const StockLot = require('../models/StockLot');
+const SupplierProduct = require('../models/SupplierProduct');
 const requireAuth = require('../middlewares/requireAuth');
 const requirePermission = require('../middlewares/requirePermission');
 const { PERMISSIONS } = require('../constants/permissions');
@@ -121,16 +123,35 @@ router.get('/consumption/person', requireAuth, requirePermission(PERMISSIONS.HIS
     const exits = await StockExit.find({
       canceled: false,
       date_exit: { $gte: range.dateFrom, $lte: range.dateTo },
-    }).populate('product', 'name family').lean();
+    })
+      .sort({ date_exit: -1 })
+      .populate({
+        path: 'product',
+        select: 'code_product name family unite category',
+        populate: { path: 'category', select: 'name' },
+      })
+      .populate({ path: 'request', select: 'note status' })
+      .lean();
 
-    const rows = exits
-      .filter((x) => ['economat', 'consommable_informatique'].includes(x.product?.family))
-      .map((x) => ({
-        beneficiaire: x.beneficiary || 'N/A',
-        designation: x.product?.name || '-',
-        quantity: Number(x.quantity || 0),
-        date_prelevement: x.date_exit,
-      }));
+    const rows = (exits || []).map((x) => ({
+      exit_id: x._id,
+      exit_number: x.exit_number || null,
+      date_exit: x.date_exit,
+
+      beneficiary: x.beneficiary || 'N/A',
+      direction: x.direction_laboratory || null,
+
+      product_id: x.product?._id || null,
+      product_code: x.product?.code_product || null,
+      product_name: x.product?.name || '-',
+      product_family: x.product?.family || null,
+      product_category: x.product?.category?.name || null,
+      unit: x.product?.unite || 'Unite',
+
+      quantity: Number(x.quantity || 0),
+      motif: x.note || x.request?.note || null,
+      request_status: x.request?.status || null,
+    }));
 
     res.json({ period: range, count: rows.length, rows });
   } catch (err) {
@@ -151,9 +172,26 @@ router.get('/chemical-register', requireAuth, requirePermission(PERMISSIONS.HIST
     const prevStart = new Date(year, month - 2, 1);
     const prevEnd = new Date(year, month - 1, 0, 23, 59, 59, 999);
 
-    const products = await Product.find({ family: 'produit_chimique' }).lean();
+    const products = await Product.find({ family: 'produit_chimique', lifecycle_status: 'active' }).lean();
+    const productIds = (products || []).map((p) => p?._id).filter(Boolean);
 
-    const [entryPrevAgg, exitPrevAgg, stockBeforeAgg] = await Promise.all([
+    if (!productIds.length) {
+      return res.json({ year, month, count: 0, rows: [] });
+    }
+
+    const now = new Date();
+    const in30Days = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000);
+
+    const [
+      entryPrevAgg,
+      exitPrevAgg,
+      stockBeforeAgg,
+      stockBeforeOutAgg,
+      supplierLinks,
+      lastEntryAgg,
+      lastExitAgg,
+      lotsAgg,
+    ] = await Promise.all([
       StockEntry.aggregate([
         { $match: { canceled: false, date_entry: { $gte: prevStart, $lte: prevEnd } } },
         { $group: { _id: '$product', qty: { $sum: '$quantity' } } },
@@ -166,11 +204,42 @@ router.get('/chemical-register', requireAuth, requirePermission(PERMISSIONS.HIST
         { $match: { canceled: false, date_entry: { $lt: periodStart } } },
         { $group: { _id: '$product', qty: { $sum: '$quantity' } } },
       ]),
-    ]);
-
-    const stockBeforeOutAgg = await StockExit.aggregate([
-      { $match: { canceled: false, date_exit: { $lt: periodStart } } },
-      { $group: { _id: '$product', qty: { $sum: '$quantity' } } },
+      StockExit.aggregate([
+        { $match: { canceled: false, date_exit: { $lt: periodStart } } },
+        { $group: { _id: '$product', qty: { $sum: '$quantity' } } },
+      ]),
+      SupplierProduct.find({ product: { $in: productIds }, is_primary: true })
+        .populate('supplier', 'name status')
+        .select('supplier product is_primary')
+        .lean(),
+      StockEntry.aggregate([
+        { $match: { canceled: false, product: { $in: productIds } } },
+        { $group: { _id: '$product', last_entry_at: { $max: '$date_entry' } } },
+      ]),
+      StockExit.aggregate([
+        { $match: { canceled: false, product: { $in: productIds } } },
+        { $group: { _id: '$product', last_exit_at: { $max: '$date_exit' } } },
+      ]),
+      StockLot.aggregate([
+        {
+          $match: {
+            product: { $in: productIds },
+            quantity_available: { $gt: 0 },
+            expiry_date: { $exists: true, $ne: null },
+          },
+        },
+        {
+          $group: {
+            _id: '$product',
+            next_expiry_date: { $min: '$expiry_date' },
+            lots_expiring_30d: {
+              $sum: {
+                $cond: [{ $lte: ['$expiry_date', in30Days] }, 1, 0],
+              },
+            },
+          },
+        },
+      ]),
     ]);
 
     const mapInPrev = new Map(entryPrevAgg.map((x) => [String(x._id), Number(x.qty || 0)]));
@@ -178,17 +247,58 @@ router.get('/chemical-register', requireAuth, requirePermission(PERMISSIONS.HIST
     const mapInBefore = new Map(stockBeforeAgg.map((x) => [String(x._id), Number(x.qty || 0)]));
     const mapOutBefore = new Map(stockBeforeOutAgg.map((x) => [String(x._id), Number(x.qty || 0)]));
 
+    const supplierByProduct = new Map(
+      (supplierLinks || [])
+        .filter((link) => link?.product)
+        .map((link) => [String(link.product), link?.supplier?.name || null])
+    );
+    const lastEntryByProduct = new Map((lastEntryAgg || []).map((x) => [String(x._id), x?.last_entry_at || null]));
+    const lastExitByProduct = new Map((lastExitAgg || []).map((x) => [String(x._id), x?.last_exit_at || null]));
+    const lotsByProduct = new Map(
+      (lotsAgg || []).map((x) => [
+        String(x._id),
+        {
+          next_expiry_date: x?.next_expiry_date || null,
+          lots_expiring_30d: Number(x?.lots_expiring_30d || 0),
+        },
+      ])
+    );
+
     const rows = products.map((p) => {
       const pid = String(p._id);
       const stockDebutMois = (mapInBefore.get(pid) || 0) - (mapOutBefore.get(pid) || 0);
+      const lastEntryAt = lastEntryByProduct.get(pid) || null;
+      const lastExitAt = lastExitByProduct.get(pid) || null;
+      const lastMovementAt = (() => {
+        const a = lastEntryAt ? new Date(lastEntryAt).getTime() : 0;
+        const b = lastExitAt ? new Date(lastExitAt).getTime() : 0;
+        if (!a && !b) return null;
+        return new Date(Math.max(a, b));
+      })();
+
+      const lotStats = lotsByProduct.get(pid) || { next_expiry_date: null, lots_expiring_30d: 0 };
+      const fds = p?.fds_attachment && p?.fds_attachment?.file_url
+        ? { file_name: p.fds_attachment.file_name || 'FDS', file_url: p.fds_attachment.file_url }
+        : null;
       return {
         date_jour: new Date(),
         product_id: p._id,
+        code_product: p.code_product,
         designation: p.name,
+        chemical_class: p.chemical_class || null,
+        physical_state: p.physical_state || null,
         stock_debut_mois: stockDebutMois,
         quantite_achetee_mois_precedent: mapInPrev.get(pid) || 0,
         quantite_consommee_mois_precedent: mapOutPrev.get(pid) || 0,
         quantite_restante: Number(p.quantity_current || 0),
+        seuil_minimum: Number(p.seuil_minimum || 0),
+        unite: p.unite || 'Unite',
+        emplacement: p.emplacement || null,
+        fournisseur: supplierByProduct.get(pid) || null,
+        fds,
+        last_movement_at: lastMovementAt,
+        next_expiry_date: lotStats.next_expiry_date,
+        lots_expiring_30d: lotStats.lots_expiring_30d,
         period_start: periodStart,
         period_end: periodEnd,
       };

@@ -68,6 +68,22 @@ Dans `backend/`:
 docker compose up --build
 ```
 
+## Docker (stack complet: web + backend + mongo + redis)
+
+Depuis la racine du repo :
+
+```bash
+docker compose up --build
+```
+
+- Prérequis: Docker Desktop (Windows/Mac) ou Docker Engine (Linux) + plugin Compose v2.
+- Web (Nginx + build React): `http://localhost:8080`
+- API: `http://localhost:5000/api`
+
+Note :
+- Le web proxy `/api/*` vers le service `backend` via Nginx (pas besoin de CORS).
+- Le build Docker du frontend utilise `REACT_APP_API_URL=/api`.
+
 ## Notes
 
 - Le script `npm run start:legacy` existe si vous avez une contrainte OpenSSL legacy sur un environnement spécifique.

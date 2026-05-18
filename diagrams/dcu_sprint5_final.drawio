@@ -1,0 +1,158 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<mxfile host="app.diagrams.net" modified="2026-05-05T10:00:00.000Z" agent="5.0" version="24.0.0">
+  <diagram id="use-case-sprint5" name="DCU Sprint 5 - Pilotage et Analyse Décisionnelle">
+    <mxGraphModel dx="1200" dy="800" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="850" pageHeight="1100" background="ffffff" math="0" shadow="0">
+      <root>
+        <mxCell id="0"/>
+        <mxCell id="1" parent="0"/>
+        <!-- SYSTÈME -->
+        <mxCell id="system" value="SENTINEL\n(Pilotage)" style="shape=rectangle;html=1;verticalAlign=middle;align=center;strokeColor=black;fillColor=none;rounded=0;strokeWidth=2;fontSize=12;fontStyle=bold" vertex="1" parent="1">
+          <mxGeometry x="300" y="100" width="250" height="600" as="geometry"/>
+        </mxCell>
+
+        <!-- ACTEURS -->
+        <!-- Responsable -->
+        <mxCell id="acteur1" value="Responsable\n(Pilotage)" style="shape=ellipse;html=1;align=center;verticalAlign=middle;pointerEvents=1;fontSize=10;fontStyle=bold" vertex="1" parent="1">
+          <mxGeometry x="50" y="280" width="100" height="80" as="geometry"/>
+        </mxCell>
+
+        <!-- Administrateur -->
+        <mxCell id="acteur2" value="Administrateur\n(Système)" style="shape=ellipse;html=1;align=center;verticalAlign=middle;pointerEvents=1;fontSize=10;fontStyle=bold" vertex="1" parent="1">
+          <mxGeometry x="680" y="280" width="100" height="80" as="geometry"/>
+        </mxCell>
+
+        <!-- SYSTÈMES EXTERNES -->
+        <!-- Générateur PDF/CSV -->
+        <mxCell id="ext1" value="Générateur\nRapport\n(PDF/CSV)" style="shape=rectangle;html=1;align=center;verticalAlign=middle;fontSize=9;fillColor=#e1d5e7;strokeColor=#9673a6" vertex="1" parent="1">
+          <mxGeometry x="50" y="500" width="100" height="80" as="geometry"/>
+        </mxCell>
+
+        <!-- Assistant IA -->
+        <mxCell id="ext2" value="Assistant\nIA / NLP" style="shape=rectangle;html=1;align=center;verticalAlign=middle;fontSize=9;fillColor=#e1d5e7;strokeColor=#9673a6" vertex="1" parent="1">
+          <mxGeometry x="680" y="500" width="100" height="80" as="geometry"/>
+        </mxCell>
+
+        <!-- CAS D'UTILISATION -->
+        <!-- UC1: Consulter Tableau de Bord -->
+        <mxCell id="uc1" value="Consulter Tableau\nde Bord" style="shape=ellipse;html=1;align=center;verticalAlign=middle;pointerEvents=1;fontSize=10;fontStyle=bold;fillColor=#ffe6cc;strokeColor=black;strokeWidth=2" vertex="1" parent="1">
+          <mxGeometry x="330" y="150" width="110" height="70" as="geometry"/>
+        </mxCell>
+
+        <!-- UC2: Configurer Seuils Alerte -->
+        <mxCell id="uc2" value="Configurer\nSeuils d'Alerte" style="shape=ellipse;html=1;align=center;verticalAlign=middle;pointerEvents=1;fontSize=10;fontStyle=bold;fillColor=#ffe6cc;strokeColor=black;strokeWidth=2" vertex="1" parent="1">
+          <mxGeometry x="330" y="260" width="110" height="70" as="geometry"/>
+        </mxCell>
+
+        <!-- UC3: Consulter Alertes -->
+        <mxCell id="uc3" value="Consulter\nListe Alertes" style="shape=ellipse;html=1;align=center;verticalAlign=middle;pointerEvents=1;fontSize=10;fontStyle=bold;fillColor=#ffe6cc;strokeColor=black;strokeWidth=2" vertex="1" parent="1">
+          <mxGeometry x="330" y="370" width="110" height="70" as="geometry"/>
+        </mxCell>
+
+        <!-- UC4: Marquer Alerte Traitée -->
+        <mxCell id="uc4" value="Marquer\nAlerte Traitée" style="shape=ellipse;html=1;align=center;verticalAlign=middle;pointerEvents=1;fontSize=9;fillColor=#f8cecc;strokeColor=black;strokeWidth=1" vertex="1" parent="1">
+          <mxGeometry x="500" y="370" width="90" height="60" as="geometry"/>
+        </mxCell>
+
+        <!-- UC5: Exporter Rapport -->
+        <mxCell id="uc5" value="Exporter\nRapport\n(PDF/CSV)" style="shape=ellipse;html=1;align=center;verticalAlign=middle;pointerEvents=1;fontSize=10;fontStyle=bold;fillColor=#ffe6cc;strokeColor=black;strokeWidth=2" vertex="1" parent="1">
+          <mxGeometry x="330" y="480" width="110" height="80" as="geometry"/>
+        </mxCell>
+
+        <!-- UC6: Consulter Registre Chimique -->
+        <mxCell id="uc6" value="Consulter Registre\nProduits Chimiques" style="shape=ellipse;html=1;align=center;verticalAlign=middle;pointerEvents=1;fontSize=10;fontStyle=bold;fillColor=#ffe6cc;strokeColor=black;strokeWidth=2" vertex="1" parent="1">
+          <mxGeometry x="310" y="600" width="130" height="70" as="geometry"/>
+        </mxCell>
+
+        <!-- UC7: Poser Question Assistant -->
+        <mxCell id="uc7" value="Poser Question\nAssistant IA" style="shape=ellipse;html=1;align=center;verticalAlign=middle;pointerEvents=1;fontSize=10;fontStyle=bold;fillColor=#ffe6cc;strokeColor=black;strokeWidth=2" vertex="1" parent="1">
+          <mxGeometry x="500" y="520" width="110" height="70" as="geometry"/>
+        </mxCell>
+
+        <!-- UC8: Consulter État Services -->
+        <mxCell id="uc8" value="Consulter\nÉtat Services" style="shape=ellipse;html=1;align=center;verticalAlign=middle;pointerEvents=1;fontSize=9;fillColor=#f8cecc;strokeColor=black;strokeWidth=1" vertex="1" parent="1">
+          <mxGeometry x="500" y="150" width="90" height="60" as="geometry"/>
+        </mxCell>
+
+        <!-- ASSOCIATIONS (RELATIONS) -->
+        <!-- Responsable -> UC1 -->
+        <mxCell id="rel1" style="edgeStyle=orthogonalEdgeStyle;html=1;verticalAlign=bottom;endArrow=open;endSize=12;strokeColor=black;rounded=0" edge="1" parent="1" source="acteur1" target="uc1">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+
+        <!-- Responsable -> UC2 -->
+        <mxCell id="rel2" style="edgeStyle=orthogonalEdgeStyle;html=1;verticalAlign=bottom;endArrow=open;endSize=12;strokeColor=black;rounded=0" edge="1" parent="1" source="acteur1" target="uc2">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+
+        <!-- Responsable -> UC3 -->
+        <mxCell id="rel3" style="edgeStyle=orthogonalEdgeStyle;html=1;verticalAlign=bottom;endArrow=open;endSize=12;strokeColor=black;rounded=0" edge="1" parent="1" source="acteur1" target="uc3">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+
+        <!-- Responsable -> UC5 -->
+        <mxCell id="rel5" style="edgeStyle=orthogonalEdgeStyle;html=1;verticalAlign=bottom;endArrow=open;endSize=12;strokeColor=black;rounded=0" edge="1" parent="1" source="acteur1" target="uc5">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+
+        <!-- Responsable -> UC6 -->
+        <mxCell id="rel6" style="edgeStyle=orthogonalEdgeStyle;html=1;verticalAlign=bottom;endArrow=open;endSize=12;strokeColor=black;rounded=0" edge="1" parent="1" source="acteur1" target="uc6">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+
+        <!-- Responsable -> UC7 -->
+        <mxCell id="rel7" style="edgeStyle=orthogonalEdgeStyle;html=1;verticalAlign=bottom;endArrow=open;endSize=12;strokeColor=black;rounded=0" edge="1" parent="1" source="acteur1" target="uc7">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+
+        <!-- Admin -> UC8 -->
+        <mxCell id="rel8" style="edgeStyle=orthogonalEdgeStyle;html=1;verticalAlign=bottom;endArrow=open;endSize=12;strokeColor=black;rounded=0" edge="1" parent="1" source="acteur2" target="uc8">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+
+        <!-- UC3 -> UC4 (inclusion) -->
+        <mxCell id="rel4" value="&lt;&lt;include&gt;&gt;" style="edgeStyle=orthogonalEdgeStyle;html=1;verticalAlign=bottom;endArrow=open;endSize=12;strokeColor=black;rounded=0;dashed=1" edge="1" parent="1" source="uc3" target="uc4">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="480" y="405"/>
+            </Array>
+          </mxGeometry>
+        </mxCell>
+
+        <!-- UC5 -> Générateur (utilise) -->
+        <mxCell id="rel9" value="&lt;&lt;use&gt;&gt;" style="edgeStyle=orthogonalEdgeStyle;html=1;verticalAlign=bottom;endArrow=open;endSize=12;strokeColor=#9673a6;rounded=0;dashed=1" edge="1" parent="1" source="uc5" target="ext1">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="150" y="520"/>
+            </Array>
+          </mxGeometry>
+        </mxCell>
+
+        <!-- UC7 -> Assistant IA (utilise) -->
+        <mxCell id="rel10" value="&lt;&lt;use&gt;&gt;" style="edgeStyle=orthogonalEdgeStyle;html=1;verticalAlign=bottom;endArrow=open;endSize=12;strokeColor=#9673a6;rounded=0;dashed=1" edge="1" parent="1" source="uc7" target="ext2">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="650" y="555"/>
+            </Array>
+          </mxGeometry>
+        </mxCell>
+
+        <!-- LÉGENDE -->
+        <mxCell id="legend_title" value="Légende Sprint 5 :" style="text=1;fontSize=10;fontStyle=bold;align=left" vertex="1" parent="1">
+          <mxGeometry x="50" y="620" width="200" height="30" as="geometry"/>
+        </mxCell>
+
+        <mxCell id="legend1" value="Orange = Cas standard (traçable, authentifié)" style="text=1;fontSize=8;align=left" vertex="1" parent="1">
+          <mxGeometry x="50" y="650" width="250" height="20" as="geometry"/>
+        </mxCell>
+
+        <mxCell id="legend2" value="Rose pâle = Cas optionnel/dégradé" style="text=1;fontSize=8;align=left" vertex="1" parent="1">
+          <mxGeometry x="50" y="670" width="250" height="20" as="geometry"/>
+        </mxCell>
+
+        <mxCell id="legend3" value="Pointillé = Relation de dépendance" style="text=1;fontSize=8;align=left" vertex="1" parent="1">
+          <mxGeometry x="50" y="690" width="250" height="20" as="geometry"/>
+        </mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>

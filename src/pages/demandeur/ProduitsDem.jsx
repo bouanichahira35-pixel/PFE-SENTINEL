@@ -7,6 +7,7 @@ import ProtectedImage from '../../components/shared/ProtectedImage';
 import { useToast } from '../../components/shared/Toast';
 import { get, post } from '../../services/api';
 import { asPositiveInt, isSafeText, sanitizeText } from '../../utils/formGuards';
+import { normalizeChemicalClass } from '../../utils/chemicalRegister';
 import './ProduitsDem.css';
 
 function computeStockBadge(quantity, seuil) {
@@ -101,6 +102,10 @@ const ProduitsDem = ({ userName, onLogout }) => {
           image: p?.image_product || '',
           quantite: Number(p?.quantity_current || 0),
           seuilMin: Number(p?.seuil_minimum || 0),
+          family: p?.family || '',
+          chemical_class: p?.chemical_class || '',
+          physical_state: p?.physical_state || '',
+          fds: p?.fds_attachment?.file_url ? { file_name: p?.fds_attachment?.file_name || 'FDS', file_url: p.fds_attachment.file_url } : null,
         }));
       setProducts(mapped);
     } catch (err) {
@@ -359,6 +364,24 @@ const ProduitsDem = ({ userName, onLogout }) => {
                 <span className="modal-product-code">{selectedProduct?.code}</span>
               </div>
             </div>
+
+            {selectedProduct?.family === 'produit_chimique' && (
+              <div className="chem-safety-box" role="note" aria-label="Information sécurité">
+                <div className="chem-safety-title">
+                  <FlaskConical size={16} />
+                  <strong>Produit chimique</strong>
+                </div>
+                <div className="chem-safety-lines">
+                  <span>Classe : <strong>{normalizeChemicalClass(selectedProduct?.chemical_class)}</strong></span>
+                  <span>FDS : <strong>{selectedProduct?.fds?.file_url ? 'Disponible' : 'Manquante'}</strong></span>
+                </div>
+                <div className={`chem-safety-note ${selectedProduct?.fds?.file_url ? 'ok' : 'warn'}`}>
+                  {selectedProduct?.fds?.file_url
+                    ? 'Consigne : consulter la FDS avant utilisation.'
+                    : 'FDS non disponible. Veuillez contacter le magasinier ou le responsable.'}
+                </div>
+              </div>
+            )}
 
             <form onSubmit={handleSubmit} className="modal-form" noValidate>
               <div className="form-group">

@@ -22,6 +22,10 @@ const RESET_JWT_EXPIRES_IN = process.env.RESET_JWT_EXPIRES_IN || '15m';
 // Security policy: application sessions are limited to 15 minutes max.
 const JWT_EXPIRES_IN = '15m';
 const SESSION_INACTIVITY_MS = getSessionInactivityMs();
+const SESSION_TOUCH_INTERVAL_MS = Math.max(
+  1000,
+  Number(process.env.AUTH_SESSION_TOUCH_INTERVAL_MS || 30 * 1000)
+);
 const BCRYPT_SALT_ROUNDS = Number(process.env.BCRYPT_SALT_ROUNDS || 12);
 const REFRESH_JWT_EXPIRES_IN = process.env.REFRESH_JWT_EXPIRES_IN || '7d';
 const SINGLE_SESSION_MODE = String(process.env.SINGLE_SESSION_MODE || 'true') === 'true';
@@ -230,6 +234,66 @@ function isSessionInactive(session, now) {
   return now.getTime() - new Date(lastActivity).getTime() >= SESSION_INACTIVITY_MS;
 }
 
+function andRoleFilter(query, roleFilter) {
+  if (!roleFilter) return query;
+  return { $and: [query, roleFilter] };
+}
+
+async function findLoginCandidates(identifier, normalizedRole) {
+  const rawIdentifier = String(identifier || '').trim();
+  if (!rawIdentifier) return [];
+
+  const normalizedIdentifier = rawIdentifier.toLowerCase();
+  const roleFilter = normalizedRole ? buildRoleFilter(normalizedRole) : null;
+
+  const selectFields = [
+    '+password_hash',
+    '_id',
+    'username',
+    'email',
+    'telephone',
+    'role',
+    'status',
+    'image_profile',
+    'demandeur_profile',
+    'service_direction',
+  ].join(' ');
+
+  if (rawIdentifier.includes('@')) {
+    const exactEmail = await User.findOne(andRoleFilter({ email: normalizedIdentifier }, roleFilter))
+      .select(selectFields)
+      .lean();
+    if (exactEmail) return [exactEmail];
+  }
+
+  const phone = normalizePhone(rawIdentifier) || normalizePhone(normalizedIdentifier);
+  if (phone) {
+    const exactPhone = await User.findOne(andRoleFilter({ telephone: phone }, roleFilter))
+      .select(selectFields)
+      .lean();
+    if (exactPhone) return [exactPhone];
+  }
+
+  const exactUsername = await User.findOne(andRoleFilter({ username: rawIdentifier }, roleFilter))
+    .select(selectFields)
+    .lean();
+  if (exactUsername) return [exactUsername];
+
+  if (normalizedIdentifier && normalizedIdentifier !== rawIdentifier) {
+    const lowerUsername = await User.findOne(andRoleFilter({ username: normalizedIdentifier }, roleFilter))
+      .select(selectFields)
+      .lean();
+    if (lowerUsername) return [lowerUsername];
+  }
+
+  // Fallback: legacy compatible search (may include regex).
+  const loginQuery = buildUserLookupQuery(rawIdentifier, normalizedRole);
+  return User.find(loginQuery)
+    .select(selectFields)
+    .limit(4)
+    .lean();
+}
+
 // POST /api/auth/login
 router.post('/login', async (req, res) => {
   try {
@@ -251,14 +315,10 @@ router.post('/login', async (req, res) => {
     const ip = req.ip;
     const ua = req.headers['user-agent'] || '';
 
-    const loginQuery = buildUserLookupQuery(identifier, normalizedRole);
-
-    const candidates = await User.find(loginQuery)
-      .select('+password_hash')
-      .limit(15);
+    const candidates = await findLoginCandidates(identifier, normalizedRole);
 
     if (!candidates.length) {
-      await logSecurityEvent({
+      logSecurityEvent({
         event_type: 'login_failed',
         email: normalizedIdentifier,
         role: normalizedRole || undefined,
@@ -266,7 +326,7 @@ router.post('/login', async (req, res) => {
         user_agent: ua,
         success: false,
         details: 'Utilisateur introuvable',
-      });
+      }).catch(() => {});
       return res.status(401).json({ error: 'Utilisateur introuvable' });
     }
 
@@ -281,7 +341,7 @@ router.post('/login', async (req, res) => {
 
     if (!user) {
       const matchedIdentityUser = candidates[0];
-      await logSecurityEvent({
+      logSecurityEvent({
         event_type: 'login_failed',
         user: matchedIdentityUser._id,
         email: matchedIdentityUser.email,
@@ -290,7 +350,7 @@ router.post('/login', async (req, res) => {
         user_agent: ua,
         success: false,
         details: 'Mot de passe incorrect',
-      });
+      }).catch(() => {});
       return res.status(401).json({ error: 'Mot de passe incorrect' });
     }
 
@@ -298,7 +358,7 @@ router.post('/login', async (req, res) => {
     const canonicalStatus = normalizeUserStatus(user.status);
 
     if (!isTechnicalRole(canonicalRole)) {
-      await logSecurityEvent({
+      logSecurityEvent({
         event_type: 'login_failed',
         user: user._id,
         email: user.email,
@@ -307,12 +367,12 @@ router.post('/login', async (req, res) => {
         user_agent: ua,
         success: false,
         details: 'Role non supporte',
-      });
+      }).catch(() => {});
       return res.status(403).json({ error: 'Compte bloque' });
     }
 
     if (!isUserActive(canonicalStatus)) {
-      await logSecurityEvent({
+      logSecurityEvent({
         event_type: 'login_failed',
         user: user._id,
         email: user.email,
@@ -321,12 +381,13 @@ router.post('/login', async (req, res) => {
         user_agent: ua,
         success: false,
         details: 'Compte bloque',
-      });
+      }).catch(() => {});
       return res.status(403).json({ error: 'Compte bloque' });
     }
 
+    const now = new Date();
     const profilePatch = {
-      last_login: new Date(),
+      last_login: now,
     };
     if (canonicalRole !== user.role) {
       profilePatch.role = canonicalRole;
@@ -335,44 +396,55 @@ router.post('/login', async (req, res) => {
       profilePatch.status = canonicalStatus;
     }
 
-    await User.updateOne({ _id: user._id }, { $set: profilePatch });
-
-    if (SINGLE_SESSION_MODE) {
-      await UserSession.updateMany(
-        { user: user._id, is_active: true },
-        { $set: { is_active: false, logout_time: new Date(), revoked_reason: 'new_login' } }
-      );
-    }
-
     const sessionId = randomUUID();
-    const accessExpiresAt = new Date(Date.now() + 15 * 60 * 1000);
-    const refreshExpiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
+    const accessExpiresAt = new Date(now.getTime() + 15 * 60 * 1000);
+    const refreshExpiresAt = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000);
 
-    await UserSession.create({
+    const sessionCreate = UserSession.create({
       user: user._id,
       session_id: sessionId,
       device: req.headers['sec-ch-ua-platform'] || 'web',
       ip_address: ip,
       user_agent: ua,
-      last_activity_at: new Date(),
+      last_activity_at: now,
       expires_at: refreshExpiresAt,
       is_active: true,
     });
 
+    const profileUpdate = User.updateOne({ _id: user._id }, { $set: profilePatch });
+
+    const revokeOtherSessions = SINGLE_SESSION_MODE
+      ? UserSession.updateMany(
+        { user: user._id, is_active: true, session_id: { $ne: sessionId } },
+        { $set: { is_active: false, logout_time: now, revoked_reason: 'new_login' } }
+      )
+      : Promise.resolve();
+
+    await Promise.all([sessionCreate, profileUpdate, revokeOtherSessions]);
+
+    const tokenPayload = {
+      id: user._id,
+      role: canonicalRole,
+      username: user.username,
+      sid: sessionId,
+      demandeur_profile: user.demandeur_profile || 'bureautique',
+      service_direction: user.service_direction || '',
+    };
+
     const token = jwt.sign(
-      { id: user._id, role: canonicalRole, username: user.username, sid: sessionId },
+      tokenPayload,
       process.env.JWT_SECRET,
       { expiresIn: JWT_EXPIRES_IN }
     );
     const refreshToken = jwt.sign(
-      { id: user._id, role: canonicalRole, username: user.username, sid: sessionId, purpose: 'refresh' },
+      { ...tokenPayload, purpose: 'refresh' },
       process.env.JWT_SECRET,
       { expiresIn: REFRESH_JWT_EXPIRES_IN }
     );
 
     res.cookie(REFRESH_COOKIE_NAME, refreshToken, getRefreshCookieOptions());
 
-    await logSecurityEvent({
+    logSecurityEvent({
       event_type: 'login_success',
       user: user._id,
       email: user.email,
@@ -381,7 +453,7 @@ router.post('/login', async (req, res) => {
       user_agent: ua,
       success: true,
       details: `Session ${sessionId}`,
-    });
+    }).catch(() => {});
 
     return res.json({
       token,
@@ -772,12 +844,15 @@ router.post('/refresh', async (req, res) => {
     }
 
     const now = new Date();
+    const nowMsValue = now.getTime();
     const session = await UserSession.findOne({
       session_id: payload.sid,
       user: payload.id,
       is_active: true,
       expires_at: { $gt: now },
-    }).select('_id session_id login_time updatedAt last_activity_at');
+    })
+      .select('_id session_id login_time updatedAt last_activity_at')
+      .lean();
 
     if (!session) return res.status(401).json({ error: 'Session invalide' });
 
@@ -795,16 +870,32 @@ router.post('/refresh', async (req, res) => {
       return res.status(401).json({ error: formatInactivityMessage(SESSION_INACTIVITY_MS) });
     }
 
-    await UserSession.updateOne(
-      { _id: session._id, is_active: true },
-      { $set: { last_activity_at: now } }
-    );
+    const lastActivity = getLastActivityDate(session);
+    const lastActivityMs = lastActivity ? new Date(lastActivity).getTime() : 0;
+    const shouldTouchSession =
+      !lastActivityMs || (nowMsValue - lastActivityMs) >= SESSION_TOUCH_INTERVAL_MS;
+
+    if (shouldTouchSession) {
+      UserSession.updateOne(
+        { _id: session._id, is_active: true },
+        { $set: { last_activity_at: now } }
+      ).catch(() => {});
+    }
 
     const refreshedRole = normalizeRole(payload.role);
     const safeRole = isTechnicalRole(refreshedRole) ? refreshedRole : payload.role;
 
+    const tokenPayload = {
+      id: payload.id,
+      role: safeRole,
+      username: payload.username,
+      sid: payload.sid,
+      demandeur_profile: payload.demandeur_profile,
+      service_direction: payload.service_direction,
+    };
+
     const token = jwt.sign(
-      { id: payload.id, role: safeRole, username: payload.username, sid: payload.sid },
+      tokenPayload,
       process.env.JWT_SECRET,
       { expiresIn: JWT_EXPIRES_IN }
     );

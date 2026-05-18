@@ -2,6 +2,8 @@ const mongoose = require('../db');
 
 const productSchema = new mongoose.Schema(
   {
+    // External dataset import id (ex: P0001). Optional and sparse-unique to avoid breaking existing data.
+    external_product_id: { type: String, trim: true, index: true, unique: true, sparse: true },
     code_product: { type: String, required: true, unique: true, uppercase: true, trim: true },
     name: { type: String, required: true },
     description: String,

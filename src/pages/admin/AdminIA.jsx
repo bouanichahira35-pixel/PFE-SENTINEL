@@ -5,6 +5,7 @@ import HeaderPage from '../../components/shared/HeaderPage';
 import LoadingSpinner from '../../components/shared/LoadingSpinner';
 import { get, patch, post } from '../../services/api';
 import { useToast } from '../../components/shared/Toast';
+import './AdminDashboard.css';
 import './AdminIA.css';
 
 const AdminIA = ({ userName, onLogout }) => {

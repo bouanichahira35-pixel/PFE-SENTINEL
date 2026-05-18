@@ -8,6 +8,13 @@ const stockExitSchema = new mongoose.Schema(
     // Optional paper number that may come from external process/ECM
     withdrawal_paper_number: String,
 
+    // External deliveries (sites petroliers / hors societe)
+    exit_context: { type: String, enum: ['internal', 'external'], default: 'internal' },
+    external_destination: String,
+    external_company: String,
+    delivery_note_number: String,
+    delivery_note_date: Date,
+
     // Core stock linkage
     product: { type: mongoose.Schema.Types.ObjectId, ref: 'Product', required: true },
     quantity: { type: Number, required: true, min: 0 },

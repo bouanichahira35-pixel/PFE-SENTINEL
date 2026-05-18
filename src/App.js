@@ -16,16 +16,37 @@ import HistoriqueMag from "./pages/magasinier/HistoriqueMag";
 import ChatMag from "./pages/magasinier/ChatMag";
 import ParametresMag from "./pages/magasinier/ParametresMag";
 import InventaireMag from "./pages/magasinier/InventaireMag";
+import FeuilleInventaireMag from "./pages/magasinier/FeuilleInventaireMag";
 
 import DashboardResp from "./pages/responsable/DashboardResp";
+import ProduitsResp from "./pages/responsable/ProduitsResp";
 import PilotageResp from "./pages/responsable/PilotageResp";
+import ConsommationResp from "./pages/responsable/ConsommationResp";
 import TransactionsResp from "./pages/responsable/TransactionsResp";
 import ChatbotResp from "./pages/responsable/ChatbotResp";
 import ChatResp from "./pages/responsable/ChatResp";
-import ParametresResp from "./pages/responsable/ParametresResp";
+import ParametresResp from "./pages/responsable/parametres/ParametresPage";
 import InventairesResp from "./pages/responsable/InventairesResp";
-import FluxResp from "./pages/responsable/FluxResp";
+import LancerInventaireResp from "./pages/responsable/LancerInventaireResp";
+import InventairesAValiderResp from "./pages/responsable/InventairesAValiderResp";
+import AnalyseInventaireResp from "./pages/responsable/AnalyseInventaireResp";
 import FournisseursResp from "./pages/responsable/FournisseursResp";
+import CategoriesResp from "./pages/responsable/CategoriesResp";
+import RegistreChimique from "./pages/responsable/RegistreChimique";
+import ReglesStock from "./pages/responsable/ReglesStock";
+
+import FournisseursPage from "./pages/responsable/fournisseurs/FournisseursPage";
+import NouveauFournisseurPage from "./pages/responsable/fournisseurs/NouveauFournisseurPage";
+import FicheFournisseurPage from "./pages/responsable/fournisseurs/FicheFournisseurPage";
+import ModifierFournisseurPage from "./pages/responsable/fournisseurs/ModifierFournisseurPage";
+import FournisseurCommandesPage from "./pages/responsable/fournisseurs/FournisseurCommandesPage";
+import FournisseurProduitsPage from "./pages/responsable/fournisseurs/FournisseurProduitsPage";
+import FournisseurDocumentsPage from "./pages/responsable/fournisseurs/FournisseurDocumentsPage";
+import FournisseurIncidentsPage from "./pages/responsable/fournisseurs/FournisseurIncidentsPage";
+import FournisseurEvaluationPage from "./pages/responsable/fournisseurs/FournisseurEvaluationPage";
+
+import NouvelleCommandeFournisseurPage from "./pages/responsable/commandes/NouvelleCommandeFournisseurPage";
+import CommandeFournisseurDetailsPage from "./pages/responsable/commandes/CommandeFournisseurDetailsPage";
 
 import ProduitsDem from "./pages/demandeur/ProduitsDem";
 import MesDemandes from "./pages/demandeur/MesDemandes";
@@ -38,6 +59,7 @@ import AdminSettings from "./pages/admin/AdminSettings";
 import AdminSecurity from "./pages/admin/AdminSecurity";
 import AdminSessions from "./pages/admin/AdminSessions";
 import AdminRbac from "./pages/admin/AdminRbac";
+import AdminSupport from "./pages/admin/AdminSupport";
 import SupplierPortal from "./pages/supplier/SupplierPortal";
 
 import NotFound from "./pages/NotFound";
@@ -76,44 +98,10 @@ const App = () => {
     applyUiLanguage(getUiLanguage());
   }, []);
 
-  const handleLogout = useCallback(async (reason = "", options = {}) => {
+  const handleLogout = useCallback((reason = "", options = {}) => {
     const remote = options?.remote !== false;
     const token = sessionStorage.getItem("token") || "";
     const refreshToken = sessionStorage.getItem("refreshToken") || "";
-
-    if (remote) {
-      let accessLogoutOk = false;
-
-      if (token) {
-        try {
-          await fetch(`${API_BASE}/auth/logout`, {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-              Authorization: `Bearer ${token}`,
-            },
-            credentials: "include",
-            body: JSON.stringify({}),
-          });
-          accessLogoutOk = true;
-        } catch {
-          accessLogoutOk = false;
-        }
-      }
-
-      if (!accessLogoutOk) {
-        try {
-          await fetch(`${API_BASE}/auth/logout-refresh`, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            credentials: "include",
-            body: JSON.stringify(refreshToken ? { refreshToken } : {}),
-          });
-        } catch {
-          // best-effort
-        }
-      }
-    }
 
     setUserName("");
     setUserRole("");
@@ -137,6 +125,43 @@ const App = () => {
     localStorage.removeItem("userRole");
     localStorage.removeItem("imageProfile");
     localStorage.removeItem("serviceDirection");
+
+    if (remote) {
+      // Non-bloquant: la UI se déconnecte immédiatement, la révocation côté serveur est best-effort.
+      (async () => {
+        let accessLogoutOk = false;
+
+        if (token) {
+          try {
+            await fetch(`${API_BASE}/auth/logout`, {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+                Authorization: `Bearer ${token}`,
+              },
+              credentials: "include",
+              body: JSON.stringify({}),
+            });
+            accessLogoutOk = true;
+          } catch {
+            accessLogoutOk = false;
+          }
+        }
+
+        if (!accessLogoutOk) {
+          try {
+            await fetch(`${API_BASE}/auth/logout-refresh`, {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              credentials: "include",
+              body: JSON.stringify(refreshToken ? { refreshToken } : {}),
+            });
+          } catch {
+            // best-effort
+          }
+        }
+      })();
+    }
   }, []);
 
   useEffect(() => {
@@ -357,23 +382,46 @@ const App = () => {
                   <Route path="/magasinier/chat" element={<ChatMag userName={userName} onLogout={handleLogout} />} />
                   <Route path="/magasinier/parametres" element={<ParametresMag userName={userName} onLogout={handleLogout} />} />
                   <Route path="/" element={<Navigate to="/magasinier" replace />} />
+                  <Route path="/magasinier/inventaire/:id" element={<FeuilleInventaireMag userName={userName} onLogout={handleLogout} />} />
                 </>
               )}
 
               {userRole === ROLES.RESPONSABLE && (
                 <>
                   <Route path="/responsable" element={<DashboardResp userName={userName} onLogout={handleLogout} />} />
+                  <Route path="/responsable/produits" element={<ProduitsResp userName={userName} onLogout={handleLogout} />} />
                   <Route path="/responsable/pilotage" element={<PilotageResp userName={userName} onLogout={handleLogout} />} />
-                  <Route path="/responsable/flux" element={<FluxResp userName={userName} onLogout={handleLogout} />} />
+                  <Route path="/responsable/alertes" element={<Navigate to="/responsable/pilotage?tab=alertes" replace />} />
+                  <Route path="/responsable/flux" element={<Navigate to="/responsable/transactions" replace />} />
                   <Route path="/responsable/inventaires" element={<InventairesResp userName={userName} onLogout={handleLogout} />} />
+                  <Route path="/responsable/inventaires/lancer" element={<LancerInventaireResp userName={userName} onLogout={handleLogout} />} />
+                  <Route path="/responsable/inventaires/a-valider" element={<InventairesAValiderResp userName={userName} onLogout={handleLogout} />} />
+                  <Route path="/responsable/inventaires/analyse/:id" element={<AnalyseInventaireResp userName={userName} onLogout={handleLogout} />} />
                   <Route path="/responsable/analyse" element={<Navigate to="/responsable/pilotage?tab=analyse" replace />} />
                   <Route path="/responsable/surveillance" element={<Navigate to="/responsable/pilotage?tab=alertes" replace />} />
                   <Route path="/responsable/transactions" element={<TransactionsResp userName={userName} onLogout={handleLogout} />} />
                   <Route path="/responsable/historique" element={<Navigate to="/responsable/transactions" replace />} />
-                  <Route path="/responsable/fournisseurs" element={<FournisseursResp userName={userName} onLogout={handleLogout} />} />
+                  <Route path="/responsable/fournisseurs" element={<FournisseursPage userName={userName} onLogout={handleLogout} />} />
+                  <Route path="/responsable/fournisseurs-legacy" element={<FournisseursResp userName={userName} onLogout={handleLogout} />} />
+                  <Route path="/responsable/fournisseurs/nouveau" element={<NouveauFournisseurPage userName={userName} onLogout={handleLogout} />} />
+                  <Route path="/responsable/fournisseurs/:id" element={<FicheFournisseurPage userName={userName} onLogout={handleLogout} />} />
+                  <Route path="/responsable/fournisseurs/:id/modifier" element={<ModifierFournisseurPage userName={userName} onLogout={handleLogout} />} />
+                  <Route path="/responsable/fournisseurs/:id/commandes" element={<FournisseurCommandesPage userName={userName} onLogout={handleLogout} />} />
+                  <Route path="/responsable/fournisseurs/:id/produits" element={<FournisseurProduitsPage userName={userName} onLogout={handleLogout} />} />
+                  <Route path="/responsable/fournisseurs/:id/documents" element={<FournisseurDocumentsPage userName={userName} onLogout={handleLogout} />} />
+                  <Route path="/responsable/fournisseurs/:id/incidents" element={<FournisseurIncidentsPage userName={userName} onLogout={handleLogout} />} />
+                  <Route path="/responsable/fournisseurs/:id/evaluation" element={<FournisseurEvaluationPage userName={userName} onLogout={handleLogout} />} />
+
+                  <Route path="/responsable/commandes/nouvelle" element={<NouvelleCommandeFournisseurPage userName={userName} onLogout={handleLogout} />} />
+                  <Route path="/responsable/commandes/:id" element={<CommandeFournisseurDetailsPage userName={userName} onLogout={handleLogout} />} />
+                  <Route path="/responsable/categories" element={<CategoriesResp userName={userName} onLogout={handleLogout} />} />
+                  <Route path="/responsable/consommation" element={<ConsommationResp userName={userName} onLogout={handleLogout} />} />
+                  <Route path="/responsable/registre-chimique" element={<RegistreChimique userName={userName} onLogout={handleLogout} />} />
+                  <Route path="/responsable/regles-stock" element={<ReglesStock userName={userName} onLogout={handleLogout} />} />
                   <Route path="/responsable/chatbot" element={<ChatbotResp userName={userName} onLogout={handleLogout} />} />
                   <Route path="/responsable/chat" element={<ChatResp userName={userName} onLogout={handleLogout} />} />
                   <Route path="/responsable/parametres" element={<ParametresResp userName={userName} onLogout={handleLogout} />} />
+                  <Route path="/responsable/parametres/fournisseurs" element={<Navigate to="/responsable/fournisseurs" replace />} />
                   <Route path="/" element={<Navigate to="/responsable" replace />} />
                 </>
               )}
@@ -387,6 +435,7 @@ const App = () => {
                   <Route path="/admin/rbac" element={<AdminRbac userName={userName} onLogout={handleLogout} />} />
                   <Route path="/admin/securite" element={<AdminSecurity userName={userName} onLogout={handleLogout} />} />
                   <Route path="/admin/parametres" element={<AdminSettings userName={userName} onLogout={handleLogout} />} />
+                  <Route path="/admin/support" element={<AdminSupport userName={userName} onLogout={handleLogout} />} />
                   <Route path="/" element={<Navigate to="/admin" replace />} />
                 </>
               )}

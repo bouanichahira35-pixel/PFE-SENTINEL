@@ -20,7 +20,7 @@ const ChatResp = ({ userName, onLogout }) => {
   const messagesEndRef = useRef(null);
   const i18n = {
     fr: {
-      title: 'Chat Magasiniers',
+      title: 'Chat',
       contacts: 'Magasiniers',
       search: 'Rechercher...',
       online: 'En ligne',
@@ -32,7 +32,7 @@ const ChatResp = ({ userName, onLogout }) => {
       failSend: 'Envoi message echoue',
     },
     en: {
-      title: 'Storekeeper Chat',
+      title: 'Chat',
       contacts: 'Storekeepers',
       search: 'Search...',
       online: 'Online',

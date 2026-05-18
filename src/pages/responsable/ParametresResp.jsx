@@ -1,7 +1,9 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { User, Lock, Moon, Sun, Camera, Save, Layers, Settings, Globe, Bell, Eye, EyeOff, Truck, RefreshCw, LifeBuoy } from 'lucide-react';
+import { User, Lock, Moon, Sun, Camera, Save, Globe, Bell, Eye, EyeOff, Truck, RefreshCw, LifeBuoy } from 'lucide-react';
+import { useLocation, useNavigate } from 'react-router-dom';
 import SidebarResp from '../../components/responsable/SidebarResp';
 import HeaderPage from '../../components/shared/HeaderPage';
+import SupportItTickets from '../../components/parametres/SupportItTickets';
 import useTheme from '../../hooks/useTheme';
 import useProtectedFileUrl from '../../hooks/useProtectedFileUrl';
 import { get, patch, post, uploadFile } from '../../services/api';
@@ -11,11 +13,6 @@ import { asNonNegativeInt, asPositiveInt, isSafeText, sanitizeText } from '../..
 import './ParametresResp.css';
 
 const MAX_AVATAR_SIZE_BYTES = 5 * 1024 * 1024;
-const STOCK_RULES_FRONT_DEFAULT = Object.freeze({
-  seuilAlerte: 10,
-  joursInactivite: 30,
-  validationObligatoire: true,
-});
 
 const roleLabel = (role) => {
   if (role === 'magasinier') return 'Magasinier';
@@ -30,20 +27,13 @@ const DEMANDEUR_PROFILES = [
   { id: 'petrole', label: 'Site pétrole (Externe / Terrain)' },
 ];
 
-function formatTimeFr(value) {
-  if (!value) return '';
-  try {
-    return new Date(value).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
-  } catch {
-    return '';
-  }
-}
-
 const ParametresResp = ({ userName, onLogout }) => {
   const toast = useToast();
   const uiLanguage = useUiLanguage();
+  const location = useLocation();
+  const navigate = useNavigate();
   const [sidebarCollapsed, setSidebarCollapsed] = useState(() => (typeof window !== 'undefined' ? window.innerWidth <= 768 : false));
-  const { isDarkMode, toggleTheme } = useTheme();
+  const { isDarkMode, setTheme } = useTheme();
   const [activeTab, setActiveTab] = useState('profil');
   const initializedThemeRef = useRef(false);
 
@@ -68,15 +58,6 @@ const ParametresResp = ({ userName, onLogout }) => {
     demandesAlerts: true,
   });
 
-  const [stockRules, setStockRules] = useState({
-    seuilAlerte: 10,
-    joursInactivite: 30,
-    validationObligatoire: true,
-  });
-  const [stockRulesSavedAt, setStockRulesSavedAt] = useState('');
-  const [stockRulesImpact, setStockRulesImpact] = useState(null);
-  const [stockRulesImpactLoading, setStockRulesImpactLoading] = useState(false);
-
   const aiSettings = useMemo(() => ({
     predictionsEnabled: true,
     alertesAuto: true,
@@ -96,11 +77,6 @@ const ParametresResp = ({ userName, onLogout }) => {
   const [userActionId, setUserActionId] = useState('');
   const [demandeurProfileDraftById, setDemandeurProfileDraftById] = useState(() => ({}));
 
-  const [categories, setCategories] = useState([]);
-  const [newCategoryName, setNewCategoryName] = useState('');
-  const [newCategoryAudiences, setNewCategoryAudiences] = useState([]);
-  const [categoryAudiencesDraftById, setCategoryAudiencesDraftById] = useState(() => ({}));
-
   const [suppliersLoading, setSuppliersLoading] = useState(false);
   const [suppliersError, setSuppliersError] = useState('');
   const [suppliers, setSuppliers] = useState([]);
@@ -109,7 +85,6 @@ const ParametresResp = ({ userName, onLogout }) => {
   const [purchaseOrders, setPurchaseOrders] = useState([]);
   const [supplierNotifyLoadingId, setSupplierNotifyLoadingId] = useState('');
   const [supplierNotifyTargetId, setSupplierNotifyTargetId] = useState('');
-  const [newSupplier, setNewSupplier] = useState({ name: '', email: '', phone: '', default_lead_time_days: 7 });
   const [approvedProducts, setApprovedProducts] = useState([]);
   const [expandedSupplierId, setExpandedSupplierId] = useState('');
   const [supplierLinksById, setSupplierLinksById] = useState(() => ({}));
@@ -124,8 +99,6 @@ const ParametresResp = ({ userName, onLogout }) => {
   const [supplierAiRec, setSupplierAiRec] = useState(null);
   const [supplierAiLoading, setSupplierAiLoading] = useState(false);
   const [supplierAiError, setSupplierAiError] = useState('');
-  const [supportDraft, setSupportDraft] = useState({ subject: '', message: '', priority: 'normal' });
-  const [supportSending, setSupportSending] = useState(false);
 
   const tabs = [
     { id: 'profil', label: ({ fr: 'Profil', en: 'Profile', ar: 'الملف الشخصي' }[uiLanguage]), icon: User },
@@ -133,9 +106,6 @@ const ParametresResp = ({ userName, onLogout }) => {
     { id: 'apparence', label: ({ fr: 'Apparence', en: 'Appearance', ar: 'المظهر' }[uiLanguage]), icon: Moon },
     { id: 'langue', label: ({ fr: 'Langue', en: 'Language', ar: 'اللغة' }[uiLanguage]), icon: Globe },
     { id: 'notifications', label: ({ fr: 'Notifications', en: 'Notifications', ar: 'الإشعارات' }[uiLanguage]), icon: Bell },
-    { id: 'categories', label: ({ fr: 'Categories', en: 'Categories', ar: 'التصنيفات' }[uiLanguage]), icon: Layers },
-    { id: 'regles', label: ({ fr: 'Regles Stock', en: 'Stock Rules', ar: 'قواعد المخزون' }[uiLanguage]), icon: Settings },
-    { id: 'fournisseurs', label: ({ fr: 'Fournisseurs', en: 'Suppliers', ar: 'Suppliers' }[uiLanguage]), icon: Truck },
     { id: 'support', label: ({ fr: 'Support IT', en: 'IT Support', ar: 'دعم تقني' }[uiLanguage]), icon: LifeBuoy },
   ];
   const i18n = {
@@ -143,6 +113,19 @@ const ParametresResp = ({ userName, onLogout }) => {
     en: { title: 'Settings', loading: 'Loading...', languageSaved: 'Language saved' },
     ar: { title: 'الإعدادات', loading: 'جار التحميل...', languageSaved: 'تم حفظ اللغة' },
   }[uiLanguage];
+
+  useEffect(() => {
+    const params = new URLSearchParams(location.search || '');
+    const tab = String(params.get('tab') || '').trim();
+    if (!tab) return;
+
+    const allowed = new Set([
+      ...tabs.map((t) => t.id),
+    ]);
+    if (!allowed.has(tab)) return;
+    setActiveTab((prev) => (prev === tab ? prev : tab));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [location.search]);
 
   const avatarUrl = useProtectedFileUrl(profileData.imageProfile);
   const displayAvatarUrl = avatarPreviewUrl || avatarUrl;
@@ -157,17 +140,6 @@ const ParametresResp = ({ userName, onLogout }) => {
     () => magasiniers.filter((u) => (u.activeSessionsCount || 0) > 0),
     [magasiniers]
   );
-  const stockRulesPreview = useMemo(() => {
-    const seuil = Number(stockRules.seuilAlerte);
-    const jours = Number(stockRules.joursInactivite);
-    const validSeuil = Number.isFinite(seuil) && seuil >= 0;
-    const validJours = Number.isFinite(jours) && jours >= 1;
-    return {
-      valid: validSeuil && validJours,
-      seuil: validSeuil ? Math.round(seuil) : null,
-      jours: validJours ? Math.round(jours) : null,
-    };
-  }, [stockRules.joursInactivite, stockRules.seuilAlerte]);
 
   const loadMagasiniers = async () => { 
     setUsersLoading(true); 
@@ -207,23 +179,6 @@ const ParametresResp = ({ userName, onLogout }) => {
     if (usersView === 'demandeur') return loadDemandeurs();
     return loadMagasiniers();
   };
- 
-  const loadCategories = async () => { 
-    try { 
-      const data = await get('/categories'); 
-      setCategories(data || []); 
-      const list = Array.isArray(data) ? data : [];
-      setCategoryAudiencesDraftById(() => {
-        const next = {};
-        list.forEach((c) => {
-          next[c._id] = Array.isArray(c.audiences) ? c.audiences : [];
-        });
-        return next;
-      });
-    } catch { 
-      setCategories([]); 
-    } 
-  }; 
 
   const loadSuppliersData = async () => {
     setSuppliersLoading(true);
@@ -338,33 +293,16 @@ const ParametresResp = ({ userName, onLogout }) => {
       return;
     }
 
-    setIsSaving(true);
-    try {
-      await post('/purchase-orders/quick', {
-        product_id: pid,
-        quantity: qty,
-        supplier_id: recommendedSupplierId,
-        note: 'Commande creee via recommandation IA (fournisseurs).',
-        decision_kind: 'supplier_ai_recommendation',
-        decision_title: 'Commande IA (fournisseur recommande)',
-        decision_level: 'info',
-      });
-      toast.success('Commande fournisseur creee');
-      await loadSuppliersData();
-    } catch (err) {
-      toast.error(err.message || 'Creation commande echouee');
-    } finally {
-      setIsSaving(false);
-    }
+    // Ne pas creer directement depuis Parametres: rediriger vers le flux Commandes (Approvisionnement).
+    navigate(
+      `/responsable/commandes/nouvelle?fournisseurId=${encodeURIComponent(recommendedSupplierId)}&produitId=${encodeURIComponent(pid)}&quantite=${encodeURIComponent(String(qty))}&source=recommandation`
+    );
   };
 
   const loadSettings = async () => {
     setIsLoading(true);
     try {
-      const [me, rules] = await Promise.all([
-        get('/settings/me'),
-        get('/settings/stock-rules/config').catch(() => ({ value: {} })),
-      ]);
+      const me = await get('/settings/me');
 
       const user = me?.user || {};
       const preferences = me?.preferences || {};
@@ -388,20 +326,10 @@ const ParametresResp = ({ userName, onLogout }) => {
         demandesAlerts: preferences.notifications?.demandesAlerts ?? true,
       });
 
-      if (!initializedThemeRef.current) {
-        const darkFromServer = Boolean(preferences.dark_mode);
-        if (darkFromServer !== isDarkMode) toggleTheme();
-        initializedThemeRef.current = true;
-      }
+      // Ne pas forcer le thème à l’ouverture des paramètres.
+      // Le thème est piloté côté UI (bouton du header / onglet Apparence).
+      if (!initializedThemeRef.current) initializedThemeRef.current = true;
 
-      setStockRules({
-        seuilAlerte: Number(rules?.value?.seuilAlerte ?? 10),
-        joursInactivite: Number(rules?.value?.joursInactivite ?? 30),
-        validationObligatoire: Boolean(rules?.value?.validationObligatoire ?? true),
-      });
-      setStockRulesSavedAt('');
-
-      await loadCategories();
     } catch (err) {
       toast.error(err.message || 'Erreur chargement parametres');
     } finally {
@@ -413,15 +341,6 @@ const ParametresResp = ({ userName, onLogout }) => {
     loadSettings();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
-
-  useEffect(() => { 
-    if (activeTab === 'utilisateurs') reloadUsers(); 
-    if (activeTab === 'categories') loadCategories(); 
-    if (activeTab === 'regles') loadStockRulesImpact();
-    if (activeTab === 'fournisseurs') loadSuppliersData(); 
-    if (activeTab === 'ia') loadAiRuntimeStatus();
-    // eslint-disable-next-line react-hooks/exhaustive-deps 
-  }, [activeTab]); 
 
   const loadAiRuntimeStatus = async () => {
     setAiRuntimeLoading(true);
@@ -445,13 +364,8 @@ const ParametresResp = ({ userName, onLogout }) => {
     }
   };
 
-  useEffect(() => {
-    if (activeTab !== 'utilisateurs') return;
-    reloadUsers();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [usersView]);
 
-  const sendSupportRequest = async () => {
+  /* const sendSupportRequest = async () => {
     const subject = String(supportDraft.subject || '').trim();
     const message = String(supportDraft.message || '').trim();
     const priority = String(supportDraft.priority || 'normal').trim().toLowerCase();
@@ -473,7 +387,7 @@ const ParametresResp = ({ userName, onLogout }) => {
     } finally {
       setSupportSending(false);
     }
-  };
+  }; */
 
   const handleRevokeSessions = async (u) => { 
     const confirmed = window.confirm(`Deconnecter toutes les sessions actives de ${u.username} ?`);
@@ -586,84 +500,9 @@ const ParametresResp = ({ userName, onLogout }) => {
     toast.success(i18n.languageSaved);
   };
 
-  const setThemeMode = async (dark) => { 
-    if (dark !== isDarkMode) toggleTheme(); 
-    await savePreferences({ dark_mode: dark }); 
-  }; 
-
-  const loadStockRulesImpact = async () => {
-    setStockRulesImpactLoading(true);
-    try {
-      const payload = await get('/settings/stock-rules/impact');
-      setStockRulesImpact(payload || null);
-    } catch (err) {
-      setStockRulesImpact(null);
-      toast.error(err.message || "Impact indisponible (verifiez que le backend est demarre).");
-    } finally {
-      setStockRulesImpactLoading(false);
-    }
-  };
-
-  const applyDefaultThresholdToMissingProducts = async () => {
-    const missing = Number(stockRulesImpact?.counts?.products_without_threshold || 0);
-    const seuil = Number(stockRulesImpact?.config?.seuilAlerte ?? stockRules.seuilAlerte);
-    const confirmed = window.confirm(
-      missing > 0
-        ? `Appliquer le seuil global (${seuil}) a ${missing} produit(s) sans seuil (seuil_minimum = 0) ?`
-        : `Aucun produit sans seuil detecte. Voulez-vous quand meme continuer ?`
-    );
-    if (!confirmed) return;
-    setIsSaving(true);
-    try {
-      const r = await post('/settings/stock-rules/apply-default-threshold', {});
-      toast.success(`Seuil applique. Produits modifies: ${r?.modified ?? 0}`);
-      await loadStockRulesImpact();
-    } catch (err) {
-      toast.error(err.message || 'Erreur application seuil');
-    } finally {
-      setIsSaving(false);
-    }
-  };
- 
-  const saveStockRules = async () => { 
-    const seuilAlerte = Number(stockRules.seuilAlerte);
-    const joursInactivite = Number(stockRules.joursInactivite);
-    if (!Number.isFinite(seuilAlerte) || seuilAlerte < 0) {
-      toast.error("Le seuil d'alerte doit etre un nombre >= 0.");
-      return;
-    }
-    if (!Number.isFinite(joursInactivite) || joursInactivite < 1) {
-      toast.error("Les jours d'inactivite doivent etre >= 1.");
-      return;
-    }
-
-    setIsSaving(true); 
-    try { 
-      const payload = { 
-        seuilAlerte: Math.round(seuilAlerte), 
-        joursInactivite: Math.round(joursInactivite), 
-        validationObligatoire: Boolean(stockRules.validationObligatoire), 
-      }; 
-      await patch('/settings/stock-rules/config', { 
-        ...payload, 
-      }); 
-      setStockRules(payload); 
-      setStockRulesSavedAt(new Date().toISOString()); 
-      toast.success('Regles de stock enregistrees'); 
-      try {
-        await loadStockRulesImpact();
-      } catch {
-        // ignore impact refresh errors
-      }
-    } catch (err) { 
-      toast.error(err.message || 'Erreur enregistrement regles'); 
-    } finally { 
-      setIsSaving(false); 
-    } 
-  }; 
-  const resetStockRules = () => {
-    setStockRules({ ...STOCK_RULES_FRONT_DEFAULT });
-    toast.info('Valeurs par defaut chargees. Cliquez sur "Enregistrer les regles".');
+  const setThemeMode = async (dark) => {
+    setTheme(dark);
+    await savePreferences({ dark_mode: Boolean(dark) });
   };
 
   const sendTestEmail = async () => {
@@ -673,63 +512,6 @@ const ParametresResp = ({ userName, onLogout }) => {
       toast.success('Email de test envoye');
     } catch (err) {
       toast.error(err.message || "Echec envoi email");
-    } finally {
-      setIsSaving(false);
-    }
-  };
-
-  const addCategory = async () => {  
-    const nameRaw = String(newCategoryName || '');
-    if (!isSafeText(nameRaw, { min: 2, max: 40 })) {
-      toast.error('Nom categorie obligatoire (2-40, sans < >).');
-      return; 
-    } 
-    const name = sanitizeText(nameRaw, { maxLen: 40 });
-    setIsSaving(true); 
-    try { 
-      await post('/categories', {
-        name,
-        description: `${name} (cree via parametres)`,
-        audiences: newCategoryAudiences,
-      }); 
-      setNewCategoryName(''); 
-      setNewCategoryAudiences([]);
-      await loadCategories(); 
-      toast.success('Categorie ajoutee'); 
-    } catch (err) { 
-      toast.error(err.message || 'Erreur ajout categorie'); 
-    } finally { 
-      setIsSaving(false);
-    }
-  };  
-
-  const toggleNewCategoryAudience = (id) => {
-    setNewCategoryAudiences((prev) => {
-      const current = new Set(prev || []);
-      if (current.has(id)) current.delete(id);
-      else current.add(id);
-      return Array.from(current);
-    });
-  };
-
-  const toggleCategoryAudience = (catId, id) => {
-    setCategoryAudiencesDraftById((prev) => {
-      const current = new Set(Array.isArray(prev[catId]) ? prev[catId] : []);
-      if (current.has(id)) current.delete(id);
-      else current.add(id);
-      return { ...prev, [catId]: Array.from(current) };
-    });
-  };
-
-  const saveCategoryAudiences = async (cat) => {
-    setIsSaving(true);
-    try {
-      const draft = Array.isArray(categoryAudiencesDraftById[cat._id]) ? categoryAudiencesDraftById[cat._id] : [];
-      await patch(`/categories/${cat._id}`, { audiences: draft });
-      toast.success('Categorie mise a jour');
-      await loadCategories();
-    } catch (err) {
-      toast.error(err.message || 'Erreur mise a jour categorie');
     } finally {
       setIsSaving(false);
     }
@@ -749,53 +531,6 @@ const ParametresResp = ({ userName, onLogout }) => {
     if (avatarPreviewUrl) URL.revokeObjectURL(avatarPreviewUrl);
     setAvatarPreviewUrl(URL.createObjectURL(file));
     setAvatarFile(file);
-  };
-
-  const createSupplier = async () => {
-    const nameRaw = String(newSupplier.name || '');
-    if (!isSafeText(nameRaw, { min: 2, max: 80 })) {
-      toast.error('Nom fournisseur obligatoire (2-80, sans < >).');
-      return;
-    }
-    const name = sanitizeText(nameRaw, { maxLen: 80 });
-
-    const emailRaw = String(newSupplier.email || '').trim();
-    const phoneRaw = String(newSupplier.phone || '').trim();
-    const isValidEmail = (value) => /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(String(value || '').trim());
-    const normalizePhone = (value) => String(value || '').trim().replace(/[^\d+]/g, '');
-    const normalizedPhone = phoneRaw ? normalizePhone(phoneRaw) : '';
-    if (emailRaw && !isValidEmail(emailRaw)) {
-      toast.error('Email fournisseur invalide.');
-      return;
-    }
-    if (phoneRaw && !/^(\+?\d{6,18})$/.test(normalizedPhone)) {
-      toast.error('Telephone fournisseur invalide (ex: +21698123456).');
-      return;
-    }
-
-    const lead = asNonNegativeInt(newSupplier.default_lead_time_days, { min: 0, max: 3650 });
-    if (!Number.isFinite(lead)) {
-      toast.error('Delai par defaut invalide (0-3650 jours).');
-      return;
-    }
-
-    setIsSaving(true);
-    try {
-      await post('/suppliers', {
-        name,
-        email: emailRaw || undefined,
-        phone: normalizedPhone || undefined,
-        default_lead_time_days: Math.floor(lead),
-        status: 'active',
-      });
-      setNewSupplier({ name: '', email: '', phone: '', default_lead_time_days: 7 });
-      await loadSuppliersData();
-      toast.success('Fournisseur ajoute');
-    } catch (err) {
-      toast.error(err.message || 'Erreur ajout fournisseur');
-    } finally {
-      setIsSaving(false);
-    }
   };
 
   const loadSupplierDetails = async (supplierId) => {
@@ -1161,159 +896,6 @@ const ParametresResp = ({ userName, onLogout }) => {
                   <button className="btn-save resp" type="button" onClick={sendTestEmail} disabled={isSaving}>
                     <Bell size={16} /> Tester email
                   </button>
-                </div>
-              )}
-
-              {activeTab === 'categories' && ( 
-                <div className="param-section"> 
-                  <h2>Gestion des categories</h2> 
-                  <div className="categories-list"> 
-                    {categories.map((cat) => ( 
-                      <div key={cat._id} className="category-item"> 
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                          <Layers size={16} /> 
-                          <span style={{ fontWeight: 900 }}>{cat.name}</span>
-                        </div>
-                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10, alignItems: 'center', marginTop: 8 }}>
-                          <span style={{ fontSize: 12, color: '#64748b', fontWeight: 800 }}>Visible pour:</span>
-                          {DEMANDEUR_PROFILES.map((p) => (
-                            <label key={p.id} style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, fontWeight: 800, color: '#0f172a' }}>
-                              <input
-                                type="checkbox"
-                                checked={(categoryAudiencesDraftById[cat._id] || []).includes(p.id)}
-                                onChange={() => toggleCategoryAudience(cat._id, p.id)}
-                                disabled={isSaving}
-                              />
-                              {p.label}
-                            </label>
-                          ))}
-                          <button className="btn-add" type="button" onClick={() => saveCategoryAudiences(cat)} disabled={isSaving}>
-                            Enregistrer
-                          </button>
-                          <span style={{ fontSize: 12, color: '#64748b' }}>
-                            (Si aucun n'est coche: visible pour tous les demandeurs)
-                          </span>
-                        </div>
-                      </div> 
-                    ))} 
-                  </div> 
-                  <div className="add-category"> 
-                    <input type="text" maxLength={60} placeholder="Nouvelle categorie..." value={newCategoryName} onChange={(e) => setNewCategoryName(e.target.value)} /> 
-                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10, alignItems: 'center', marginTop: 8 }}>
-                      <span style={{ fontSize: 12, color: '#64748b', fontWeight: 800 }}>Audiences:</span>
-                      {DEMANDEUR_PROFILES.map((p) => (
-                        <label key={p.id} style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, fontWeight: 800, color: '#0f172a' }}>
-                          <input
-                            type="checkbox"
-                            checked={(newCategoryAudiences || []).includes(p.id)}
-                            onChange={() => toggleNewCategoryAudience(p.id)}
-                            disabled={isSaving}
-                          />
-                          {p.label}
-                        </label>
-                      ))}
-                    </div>
-                    <button className="btn-add" type="button" onClick={addCategory} disabled={isSaving}>Ajouter</button> 
-                  </div> 
-                </div> 
-              )} 
-
-              {activeTab === 'regles' && (
-                <div className="param-section">
-                  <h2>Regles de gestion du stock</h2>
-                  <div className="rules-help-card"> 
-                    <h3>A quoi sert cet onglet ?</h3> 
-                    <p>Ces regles sont appliquees globalement sur tout le stock pour declencher les alertes et les validations.</p> 
-                    <p style={{ marginTop: 8 }}>
-                      Important: le seuil d&apos;un produit (seuil minimum) reste prioritaire. Le seuil global sert de valeur par defaut et d&apos;outil de normalisation.
-                    </p>
-                    <ol> 
-                      <li>Definir le seuil global d'alerte stock.</li> 
-                      <li>Definir la duree d'inactivite d'un produit.</li> 
-                      <li>Activer ou non la validation des nouveaux produits.</li> 
-                    </ol> 
-                  </div> 
-                  <div className="form-group">
-                    <label>Seuil d'alerte par defaut</label>
-                    <input type="number" min="0" max="1000000000" step="1" value={stockRules.seuilAlerte} onChange={(e) => setStockRules({ ...stockRules, seuilAlerte: e.target.value })} />
-                    <span className="input-hint">Quantite minimum avant alerte</span>
-                  </div>
-                  <div className="form-group">
-                    <label>Jours d'inactivite</label>
-                    <input type="number" min="1" max="3650" step="1" value={stockRules.joursInactivite} onChange={(e) => setStockRules({ ...stockRules, joursInactivite: e.target.value })} />
-                    <span className="input-hint">Produit considere inactif apres ce nombre de jours</span>
-                  </div>
-                  <div className="toggle-item">
-                    <div>
-                      <span className="toggle-label">Validation obligatoire des nouveaux produits</span>
-                      <span className="toggle-desc">Les produits ajoutes par le magasinier doivent etre valides</span>
-                    </div>
-                    <label className="toggle-switch">
-                      <input type="checkbox" checked={stockRules.validationObligatoire} onChange={(e) => setStockRules({ ...stockRules, validationObligatoire: e.target.checked })} />
-                      <span className="toggle-slider"></span>
-                    </label>
-                  </div>
-                  <div className="rules-preview"> 
-                    <h3>Apercu operationnel</h3> 
-                    {stockRulesPreview.valid ? ( 
-                      <> 
-                        <p>Le systeme classe un produit en alerte a partir de <strong>{stockRulesPreview.seuil}</strong> unite(s).</p> 
-                        <p>Le systeme classe un produit inactif apres <strong>{stockRulesPreview.jours}</strong> jour(s) sans mouvement.</p> 
-                        <p>Validation nouveaux produits: <strong>{stockRules.validationObligatoire ? 'obligatoire' : 'non obligatoire'}</strong>.</p> 
-                      </> 
-                    ) : ( 
-                      <p>Valeurs invalides detectees. Corrigez les champs avant sauvegarde.</p> 
-                    )} 
-                    {stockRulesSavedAt && ( 
-                      <p className="rules-saved-at">Derniere sauvegarde: {formatTimeFr(stockRulesSavedAt)}</p> 
-                    )} 
-                  </div> 
-
-                  <div className="rules-preview"> 
-                    <h3>Impact sur le catalogue</h3>
-                    {stockRulesImpactLoading ? (
-                      <p>Analyse en cours...</p>
-                    ) : stockRulesImpact?.counts ? (
-                      <>
-                        <p>
-                          Produits approuves: <strong>{stockRulesImpact.counts.total_approved_products}</strong>
-                        </p>
-                        <p>
-                          Produits sans seuil (seuil_minimum = 0): <strong>{stockRulesImpact.counts.products_without_threshold}</strong>
-                        </p>
-                        <p>
-                          Sous seuil (avec seuil specifique): <strong>{stockRulesImpact.counts.products_under_threshold}</strong>
-                        </p>
-                        <p>
-                          En rupture: <strong>{stockRulesImpact.counts.products_in_rupture}</strong>
-                        </p>
-                        {stockRulesImpact.note ? (
-                          <p style={{ marginTop: 8, color: '#64748b' }}>{stockRulesImpact.note}</p>
-                        ) : null}
-                        <div className="rules-actions" style={{ marginTop: 12 }}>
-                          <button
-                            className="btn-secondary"
-                            type="button"
-                            onClick={applyDefaultThresholdToMissingProducts}
-                            disabled={isSaving || !stockRulesPreview.valid}
-                          >
-                            Appliquer le seuil global aux produits sans seuil
-                          </button>
-                        </div>
-                      </>
-                    ) : (
-                      <p>Impact indisponible. Cliquez sur Actualiser ou reessayez plus tard.</p>
-                    )}
-                  </div>
-
-                  <div className="rules-actions"> 
-                    <button className="btn-save resp" type="button" onClick={saveStockRules} disabled={isSaving || !stockRulesPreview.valid}> 
-                      <Save size={16} /> Enregistrer les regles 
-                    </button> 
-                    <button className="btn-secondary" type="button" onClick={resetStockRules} disabled={isSaving}>
-                      Valeurs par defaut
-                    </button>
-                  </div>
                 </div>
               )}
 
@@ -1688,34 +1270,20 @@ const ParametresResp = ({ userName, onLogout }) => {
                   <div className="users-list" style={{ marginTop: 10 }}>
                     <div className="user-item" style={{ alignItems: 'flex-start' }}>
                       <div className="user-info" style={{ width: '100%' }}>
-                        <span className="user-name">Ajouter un fournisseur</span>
-                        <div style={{ display: 'grid', gridTemplateColumns: '1.4fr 1fr 1fr 0.8fr', gap: 10, marginTop: 10 }}>
-                          <input
-                            value={newSupplier.name}
-                            onChange={(e) => setNewSupplier((p) => ({ ...p, name: e.target.value }))}
-                            placeholder="Nom"
-                          />
-                          <input
-                            value={newSupplier.email}
-                            onChange={(e) => setNewSupplier((p) => ({ ...p, email: e.target.value }))}
-                            placeholder="Email"
-                          />
-                          <input
-                            value={newSupplier.phone}
-                            onChange={(e) => setNewSupplier((p) => ({ ...p, phone: e.target.value }))}
-                            placeholder="Telephone"
-                          />
-                          <input
-                            type="number"
-                            min="0"
-                            value={newSupplier.default_lead_time_days}
-                            onChange={(e) => setNewSupplier((p) => ({ ...p, default_lead_time_days: e.target.value }))}
-                            placeholder="Delai (j)"
-                          />
-                        </div>
-                        <div className="user-actions" style={{ marginTop: 10 }}>
-                          <button className="btn-user success" type="button" onClick={createSupplier} disabled={isSaving}>
-                            {isSaving ? '...' : 'Ajouter'}
+                        <span className="user-name">Raccourcis</span>
+                        <span className="user-role">Le paramétrage ne remplace pas la gestion complète : utilisez le module Fournisseurs 360°.</span>
+                        <div className="user-actions" style={{ marginTop: 10, display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+                          <button className="btn-user" type="button" onClick={() => navigate('/responsable/fournisseurs')} disabled={isSaving || suppliersLoading}>
+                            Gerer les fournisseurs
+                          </button>
+                          <button className="btn-user success" type="button" onClick={() => navigate('/responsable/fournisseurs/nouveau')} disabled={isSaving || suppliersLoading}>
+                            Creer une fiche fournisseur
+                          </button>
+                          <button className="btn-user secondary" type="button" onClick={() => navigate('/responsable/commandes/nouvelle?source=parametres-fournisseurs')} disabled={isSaving || suppliersLoading}>
+                            Creer commande
+                          </button>
+                          <button className="btn-user secondary" type="button" onClick={() => navigate('/responsable/fournisseurs?filtre=alertes')} disabled={isSaving || suppliersLoading}>
+                            Voir alertes fournisseurs
                           </button>
                         </div>
                       </div>
@@ -2056,7 +1624,7 @@ const ParametresResp = ({ userName, onLogout }) => {
                 </div>
               )}
 
-              {activeTab === 'support' && (
+              {activeTab === 'support_legacy' && (
                 <div className="param-section">
                   <div className="users-header">
                     <div>
@@ -2072,8 +1640,8 @@ const ParametresResp = ({ userName, onLogout }) => {
                             Objet
                             <input
                               style={{ marginTop: 6, width: '100%', border: '1px solid #e2e8f0', borderRadius: 10, padding: '10px 12px', fontWeight: 800 }}
-                              value={supportDraft.subject}
-                              onChange={(e) => setSupportDraft((p) => ({ ...p, subject: e.target.value }))}
+                              value={''}
+                              onChange={() => {}}
                               placeholder="Ex: Alertes IA absentes"
                               maxLength={120}
                             />
@@ -2082,8 +1650,8 @@ const ParametresResp = ({ userName, onLogout }) => {
                             Priorite
                             <select
                               style={{ marginTop: 6, width: '100%', border: '1px solid #e2e8f0', borderRadius: 10, padding: '10px 12px', fontWeight: 800 }}
-                              value={supportDraft.priority}
-                              onChange={(e) => setSupportDraft((p) => ({ ...p, priority: e.target.value }))}
+                              value={'normal'}
+                              onChange={() => {}}
                             >
                               <option value="normal">Normale</option>
                               <option value="urgent">Urgente</option>
@@ -2094,8 +1662,8 @@ const ParametresResp = ({ userName, onLogout }) => {
                             Message
                             <textarea
                               style={{ marginTop: 6, width: '100%', border: '1px solid #e2e8f0', borderRadius: 10, padding: '10px 12px', fontWeight: 800 }}
-                              value={supportDraft.message}
-                              onChange={(e) => setSupportDraft((p) => ({ ...p, message: e.target.value }))}
+                              value={''}
+                              onChange={() => {}}
                               placeholder="DÃ©cris le problÃ¨me (page, heure, contexte)"
                               rows={4}
                               maxLength={800}
@@ -2103,13 +1671,25 @@ const ParametresResp = ({ userName, onLogout }) => {
                           </label>
                         </div>
                         <div style={{ marginTop: 12 }}>
-                          <button className="btn-user primary" type="button" onClick={sendSupportRequest} disabled={supportSending}>
-                            {supportSending ? 'Envoi...' : 'Envoyer au support IT'}
+                          <button className="btn-user primary" type="button" onClick={() => {}} disabled>
+                            Support désactivé
                           </button>
                         </div>
                       </div>
                     </div>
                   </div>
+                </div>
+              )}
+
+              {activeTab === 'support' && (
+                <div className="param-section">
+                  <div className="users-header">
+                    <div>
+                      <h2>Support IT</h2>
+                      <p className="users-subtitle">Créer un ticket et suivre les réponses de l’administration.</p>
+                    </div>
+                  </div>
+                  <SupportItTickets />
                 </div>
               )}
 

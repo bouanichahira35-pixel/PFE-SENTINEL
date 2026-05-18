@@ -132,3 +132,55 @@
   display: none;
 }
 
+@media (max-width: 768px) {
+  .sidebar-admin,
+  .sidebar-admin.collapsed {
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    top: auto;
+    width: 100%;
+    min-height: 0;
+    height: 72px;
+    border-right: 0;
+    border-top: 1px solid #e7ebf3;
+    box-shadow: 0 -10px 24px rgba(15, 23, 42, 0.08);
+    z-index: 250;
+    overflow-x: auto;
+    overflow-y: hidden;
+  }
+
+  .sidebar-admin .sidebar-logo,
+  .sidebar-admin .sidebar-logout {
+    display: none;
+  }
+
+  .sidebar-admin .sidebar-nav {
+    height: 100%;
+    padding: 8px 10px;
+    flex-direction: row;
+    align-items: center;
+    gap: 8px;
+    overflow-x: auto;
+  }
+
+  .sidebar-admin .sidebar-nav-item {
+    min-width: 72px;
+    height: 54px;
+    flex: 0 0 auto;
+    flex-direction: column;
+    justify-content: center;
+    gap: 4px;
+    padding: 6px 8px;
+    border-radius: 10px;
+    font-size: 10px;
+    line-height: 1.1;
+    text-align: center;
+  }
+
+  .sidebar-admin.collapsed .sidebar-nav-label {
+    display: inline;
+  }
+}
+

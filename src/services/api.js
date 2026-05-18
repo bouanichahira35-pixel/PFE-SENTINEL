@@ -1,6 +1,6 @@
 function computeDefaultApiBase() {
   const fromEnv = String(process.env.REACT_APP_API_URL || "").trim();
-  if (fromEnv) return fromEnv;
+  if (fromEnv) return fromEnv.replace(/\/+$/, "");
 
   // Dev default: use CRA proxy (`package.json#proxy`) so mobile devices on LAN work
   // without CORS issues (frontend calls same-origin `/api/...`).
@@ -8,6 +8,14 @@ function computeDefaultApiBase() {
 }
 
 export const API_BASE = computeDefaultApiBase();
+
+const API_TIMEOUT_MS = (() => {
+  const raw = String(process.env.REACT_APP_API_TIMEOUT_MS || "").trim();
+  const parsed = Number(raw);
+  if (Number.isFinite(parsed) && parsed > 0) return Math.min(Math.max(parsed, 2_000), 120_000);
+  // Keep it high enough for slow dev machines, but not infinite.
+  return 20_000;
+})();
 
 const API_CACHE_TTL_MS = 45 * 1000;
 const API_CACHE_MAX_ITEMS = 60;
@@ -170,6 +178,45 @@ function recordNetworkResult({ latencyMs = 0, failed = false }) {
   });
 }
 
+let refreshInFlight = null;
+
+async function refreshAccessTokenOnce() {
+  if (refreshInFlight) return refreshInFlight;
+
+  refreshInFlight = (async () => {
+    const refreshToken = getRefreshToken();
+    try {
+      const refreshRes = await fetch(`${API_BASE}/auth/refresh`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify(refreshToken ? { refreshToken } : {}),
+      });
+      const refreshData = await refreshRes.json().catch(() => ({}));
+
+      if (refreshRes.ok && refreshData.token) {
+        sessionStorage.setItem("token", refreshData.token);
+        return { ok: true, token: refreshData.token };
+      }
+
+      if (!refreshRes.ok) {
+        const refreshReason = typeof refreshData?.error === "string" ? refreshData.error : "";
+        triggerAuthLogout(refreshReason || "Session expiree. Veuillez vous reconnecter.");
+      }
+
+      return { ok: false };
+    } catch {
+      return { ok: false };
+    }
+  })();
+
+  try {
+    return await refreshInFlight;
+  } finally {
+    refreshInFlight = null;
+  }
+}
+
 async function request(path, method, payload, retried = false) {
   const normalizedMethod = String(method || "GET").toUpperCase();
   const cacheableGet = normalizedMethod === "GET" && !payload;
@@ -193,6 +240,10 @@ async function request(path, method, payload, retried = false) {
   const startedAt = nowMs();
   let res;
   let data;
+  const controller = typeof AbortController !== "undefined" ? new AbortController() : null;
+  const timeoutId = controller
+    ? setTimeout(() => controller.abort(), API_TIMEOUT_MS)
+    : null;
 
   try {
     res = await fetch(`${API_BASE}${path}`, {
@@ -200,34 +251,51 @@ async function request(path, method, payload, retried = false) {
       headers,
       credentials: "include",
       body: payload ? JSON.stringify(payload) : undefined,
+      signal: controller ? controller.signal : undefined,
     });
     data = await readJsonOrText(res);
   } catch (err) {
     const latencyMs = Math.max(0, Math.round(nowMs() - startedAt));
     recordNetworkResult({ latencyMs, failed: true });
+
+    const message = String(err?.message || "");
+    const isAbort = String(err?.name || "") === "AbortError";
+    if (isAbort) {
+      const timeoutErr = new Error(
+        `Requete trop lente (>${Math.round(API_TIMEOUT_MS / 1000)}s). Verifiez le backend et la connexion reseau.`
+      );
+      timeoutErr.cause = err;
+      throw timeoutErr;
+    }
+
+    if (
+      message.includes("Failed to fetch") ||
+      message.includes("NetworkError") ||
+      message.toLowerCase().includes("fetch")
+    ) {
+      const origin = typeof window !== "undefined" && window?.location?.origin
+        ? window.location.origin
+        : "";
+      const baseHint = API_BASE.startsWith("http") ? API_BASE : `${origin}${API_BASE}`;
+      const netErr = new Error(
+        `Impossible de contacter l'API (${baseHint}). Lancez le backend (port 5000) et verifiez REACT_APP_API_URL.`
+      );
+      netErr.cause = err;
+      throw netErr;
+    }
+
     throw err;
+  } finally {
+    if (timeoutId) clearTimeout(timeoutId);
   }
 
   const latencyMs = Math.max(0, Math.round(nowMs() - startedAt));
 
   if (res.status === 401 && !retried && path !== "/auth/refresh") {
-      const refreshToken = getRefreshToken();
-    const refreshRes = await fetch(`${API_BASE}/auth/refresh`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      credentials: "include",
-      body: JSON.stringify(refreshToken ? { refreshToken } : {}),
-    });
-      const refreshData = await refreshRes.json().catch(() => ({}));
-      if (refreshRes.ok && refreshData.token) {
-        sessionStorage.setItem("token", refreshData.token);
-        return request(path, normalizedMethod, payload, true);
-      }
-
-      if (!refreshRes.ok) {
-        const refreshReason = typeof refreshData?.error === "string" ? refreshData.error : "";
-        triggerAuthLogout(refreshReason || "Session expiree. Veuillez vous reconnecter.");
-      }
+    const refreshed = await refreshAccessTokenOnce();
+    if (refreshed?.ok && refreshed.token) {
+      return request(path, normalizedMethod, payload, true);
+    }
   }
 
   if ((res.status === 401 || res.status === 403) && token) {
@@ -237,7 +305,10 @@ async function request(path, method, payload, retried = false) {
 
   if (!res.ok) {
     recordNetworkResult({ latencyMs, failed: true });
-    throw buildApiError(data);
+    const err = buildApiError(data);
+    err.status = res.status;
+    err.data = data;
+    throw err;
   }
 
   if (cacheableGet) {
@@ -300,23 +371,10 @@ async function uploadFileInternal(path, file, fieldName, retried = false) {
   });
 
   if (res.status === 401 && !retried && path !== "/auth/refresh") {
-    const refreshToken = getRefreshToken();
-    const refreshRes = await fetch(`${API_BASE}/auth/refresh`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      credentials: "include",
-      body: JSON.stringify(refreshToken ? { refreshToken } : {}),
-    });
-      const refreshData = await refreshRes.json().catch(() => ({}));
-      if (refreshRes.ok && refreshData.token) {
-        sessionStorage.setItem("token", refreshData.token);
-        return uploadFileInternal(path, file, fieldName, true);
-      }
-
-      if (!refreshRes.ok) {
-        const refreshReason = typeof refreshData?.error === "string" ? refreshData.error : "";
-        triggerAuthLogout(refreshReason || "Session expiree. Veuillez vous reconnecter.");
-      }
+    const refreshed = await refreshAccessTokenOnce();
+    if (refreshed?.ok && refreshed.token) {
+      return uploadFileInternal(path, file, fieldName, true);
+    }
   }
 
   const latencyMs = Math.max(0, Math.round(nowMs() - startedAt));

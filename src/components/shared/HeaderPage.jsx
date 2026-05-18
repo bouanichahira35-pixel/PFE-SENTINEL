@@ -9,6 +9,8 @@ import './HeaderPage.css';
 const HeaderPage = ({
   userName,
   title,
+  subtitle,
+  icon,
   searchValue,
   onSearchChange,
   showSearch = true,
@@ -192,7 +194,13 @@ const HeaderPage = ({
             <Menu size={20} />
           </button>
         )}
-        <h1 className="header-title">{title}</h1>
+        <div className="header-title-block">
+          <div className="header-title-row">
+            {icon && <span className="header-title-icon" aria-hidden="true">{icon}</span>}
+            <h1 className="header-title">{title}</h1>
+          </div>
+          {subtitle && <div className="header-subtitle">{subtitle}</div>}
+        </div>
       </div>
 
       <div className="header-center">

@@ -18,6 +18,7 @@ const StockLot = require('../models/StockLot');
 const Sequence = require('../models/Sequence');
 const { runInTransaction } = require('../services/transactionService');
 const { getSupplierEmailPolicy, sendPurchaseOrderEmailToSupplier } = require('../services/purchaseOrderSupplierMailService');
+const { isActiveSupplierStatus, supplierStatusQuery, SUPPLIER_STATUS } = require('../services/supplierRegistryService');
 
 const { asDate, asNonNegativeNumber, asOptionalString, asPositiveNumber, isSafeText, isValidObjectIdLike } = require('../utils/validation');
 
@@ -373,6 +374,9 @@ router.post(
       if (!supplierId || !isValidObjectIdLike(supplierId)) return res.status(400).json({ error: 'supplier_id invalide' });
       const supplier = await Supplier.findById(supplierId).lean();
       if (!supplier) return res.status(404).json({ error: 'Supplier not found' });
+      if (!isActiveSupplierStatus(supplier.status)) {
+        return res.status(409).json({ error: 'Fournisseur inactif' });
+      }
 
       const lines = Array.isArray(req.body?.lines) ? req.body.lines : [];
       if (!lines.length) return res.status(400).json({ error: 'lines obligatoire' });
@@ -525,9 +529,9 @@ router.post(
         supplier = link?.supplier || null;
       }
       if (!supplier) {
-        supplier = await Supplier.findOne({ status: 'active' }).sort({ createdAt: -1 }).lean();
+        supplier = await Supplier.findOne({ status: supplierStatusQuery(SUPPLIER_STATUS.ACTIF) }).sort({ createdAt: -1 }).lean();
       }
-      if (!supplier || supplier.status !== 'active') {
+      if (!supplier || !isActiveSupplierStatus(supplier.status)) {
         return res.status(409).json({ error: 'Aucun fournisseur actif disponible pour ce produit' });
       }
 

@@ -1,11 +1,12 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Users, RefreshCw, Ban, CheckCircle2, Shield, KeyRound, UserPlus, RotateCcw, Copy, User } from 'lucide-react';
+import { Users, RefreshCw, Ban, CheckCircle2, Shield, KeyRound, UserPlus, RotateCcw, Copy } from 'lucide-react';
 import SidebarAdmin from '../../components/admin/SidebarAdmin';
 import HeaderPage from '../../components/shared/HeaderPage';
 import LoadingSpinner from '../../components/shared/LoadingSpinner';
 import ProtectedImage from '../../components/shared/ProtectedImage';
 import { get, patch, post } from '../../services/api';
 import { useToast } from '../../components/shared/Toast';
+import './AdminDashboard.css';
 import './AdminUsers.css';
 
 const ROLES = [

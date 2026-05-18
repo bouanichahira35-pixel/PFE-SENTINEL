@@ -1,11 +1,12 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { ClipboardCheck, RefreshCw, CheckCircle2, AlertTriangle, Info } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
+import { ClipboardCheck, RefreshCw, Rocket, ClipboardList, Info } from 'lucide-react';
 import SidebarResp from '../../components/responsable/SidebarResp';
 import HeaderPage from '../../components/shared/HeaderPage';
 import ProtectedPage from '../../components/shared/ProtectedPage';
 import LoadingSpinner from '../../components/shared/LoadingSpinner';
 import { useToast } from '../../components/shared/Toast';
-import { get, post } from '../../services/api';
+import { get } from '../../services/api';
 import './InventairesResp.css';
 
 function formatDt(value) {
@@ -17,22 +18,27 @@ function formatDt(value) {
   }
 }
 
+const ACTIVE_STATUSES = new Set(['A_FAIRE', 'EN_COURS', 'A_VALIDER', 'A_RECOMPTER']);
+
 const InventairesResp = ({ userName, onLogout }) => {
   const toast = useToast();
+  const navigate = useNavigate();
   const [sidebarCollapsed, setSidebarCollapsed] = useState(() => (typeof window !== 'undefined' ? window.innerWidth <= 768 : false));
   const [isLoading, setIsLoading] = useState(false);
-  const [sessions, setSessions] = useState([]);
-  const [activeSessionId, setActiveSessionId] = useState('');
-  const [activeSession, setActiveSession] = useState(null);
-  const [lines, setLines] = useState([]);
-  const [summary, setSummary] = useState(null);
+  const [inventories, setInventories] = useState([]);
+  const [activeInventoryId, setActiveInventoryId] = useState('');
   const [showHelp, setShowHelp] = useState(false);
 
-  const loadSessions = useCallback(async () => {
+  const activeInventory = useMemo(
+    () => (inventories || []).find((x) => String(x._id) === String(activeInventoryId)) || null,
+    [activeInventoryId, inventories]
+  );
+
+  const loadInventories = useCallback(async () => {
     setIsLoading(true);
     try {
-      const payload = await get('/inventory/sessions');
-      setSessions(Array.isArray(payload?.sessions) ? payload.sessions : []);
+      const payload = await get('/inventory/inventories');
+      setInventories(Array.isArray(payload?.inventories) ? payload.inventories : []);
     } catch (err) {
       toast.error(err.message || 'Erreur chargement inventaires');
     } finally {
@@ -40,48 +46,11 @@ const InventairesResp = ({ userName, onLogout }) => {
     }
   }, [toast]);
 
-  const loadSession = useCallback(async (id) => {
-    if (!id) return;
-    setIsLoading(true);
-    try {
-      const payload = await get(`/inventory/sessions/${id}`);
-      setActiveSession(payload?.session || null);
-      setLines(Array.isArray(payload?.lines) ? payload.lines : []);
-      setSummary(payload?.summary || null);
-    } catch (err) {
-      toast.error(err.message || 'Erreur chargement session');
-    } finally {
-      setIsLoading(false);
-    }
-  }, [toast]);
-
   useEffect(() => {
-    loadSessions();
-  }, [loadSessions]);
+    loadInventories();
+  }, [loadInventories]);
 
-  useEffect(() => {
-    if (!activeSessionId) return;
-    loadSession(activeSessionId);
-  }, [activeSessionId, loadSession]);
-
-  const pendingToApply = useMemo(() => (sessions || []).filter((s) => String(s.status) === 'closed').length, [sessions]);
-
-  const applySession = async () => {
-    if (!activeSessionId) return;
-    const confirmed = window.confirm('Appliquer cet inventaire ? Cela va creer des ajustements (entree/sortie) et mettre a jour les stocks.');
-    if (!confirmed) return;
-    setIsLoading(true);
-    try {
-      const r = await post(`/inventory/sessions/${activeSessionId}/apply`, {});
-      toast.success(`Inventaire applique (${r?.adjustments?.length || 0} ajustements)`);
-      await loadSession(activeSessionId);
-      await loadSessions();
-    } catch (err) {
-      toast.error(err.message || 'Erreur application inventaire');
-    } finally {
-      setIsLoading(false);
-    }
-  };
+  const activeCount = useMemo(() => (inventories || []).filter((i) => ACTIVE_STATUSES.has(String(i.status))).length, [inventories]);
 
   return (
     <ProtectedPage userName={userName}>
@@ -107,22 +76,21 @@ const InventairesResp = ({ userName, onLogout }) => {
               {showHelp && (
                 <div className="inv-help-body">
                   <div className="inv-help-block">
-                    <strong>Contrôle & validation</strong>
+                    <strong>Lancement & suivi</strong>
                     <ol>
-                      <li>Vérifier la session clôturée et les écarts.</li>
-                      <li>Analyser les anomalies (surplus / manquants).</li>
-                      <li>Appliquer l’inventaire pour générer les ajustements.</li>
+                      <li>Définir le périmètre (GLOBAL ou TOURNANT).</li>
+                      <li>Assigner le magasinier et la date prévue.</li>
+                      <li>Suivre l'avancement puis valider à la fin.</li>
                     </ol>
                   </div>
                   <div className="inv-help-block">
-                    <strong>Impact métier</strong>
-                    <p>Après application, les stocks sont corrigés et l’historique est mis à jour.</p>
-                  </div>
-                  <div className="inv-help-block">
-                    <strong>Types d’inventaire</strong>
+                    <strong>Statuts métier</strong>
                     <ul>
-                      <li><strong>Annuel</strong> : contrôle global à date fixe.</li>
-                      <li><strong>Tournant</strong> : contrôles réguliers par familles de produits.</li>
+                      <li><code>A_FAIRE</code> : inventaire lancé et assigné.</li>
+                      <li><code>EN_COURS</code> : comptage démarré par le magasinier.</li>
+                      <li><code>A_VALIDER</code> : comptage terminé, attente validation.</li>
+                      <li><code>A_RECOMPTER</code> : recomptage demandé.</li>
+                      <li><code>VALIDE</code> / <code>REJETE</code> : clôture.</li>
                     </ul>
                   </div>
                 </div>
@@ -132,89 +100,91 @@ const InventairesResp = ({ userName, onLogout }) => {
             <div className="inv-resp-grid">
               <section className="inv-card">
                 <div className="inv-head">
-                  <h3><ClipboardCheck size={18} /> Sessions</h3>
-                  <button className="inv-btn" type="button" onClick={loadSessions} disabled={isLoading}><RefreshCw size={16} /> Actualiser</button>
+                  <h3><ClipboardCheck size={18} /> Inventaires</h3>
+                  <div className="inv-head-actions">
+                    <button className="inv-btn" type="button" onClick={loadInventories} disabled={isLoading}>
+                      <RefreshCw size={16} /> Actualiser
+                    </button>
+                    <button className="inv-btn" type="button" onClick={() => navigate('/responsable/inventaires/a-valider')} disabled={isLoading}>
+                      <ClipboardList size={16} /> À valider
+                    </button>
+                    <button className="inv-btn primary" type="button" onClick={() => navigate('/responsable/inventaires/lancer')} disabled={isLoading}>
+                      <Rocket size={16} /> Lancer un inventaire
+                    </button>
+                  </div>
                 </div>
                 <div className="inv-banner">
-                  <span>En attente d'application: <strong>{pendingToApply}</strong></span>
+                  <span>Inventaires actifs: <strong>{activeCount}</strong></span>
                 </div>
                 <div className="inv-list">
-                  {sessions.map((s) => (
+                  {inventories.map((s) => (
                     <button
                       key={s._id}
                       type="button"
-                      className={`inv-session ${String(activeSessionId) === String(s._id) ? 'active' : ''}`}
-                      onClick={() => setActiveSessionId(String(s._id))}
+                      className={`inv-session ${String(activeInventoryId) === String(s._id) ? 'active' : ''}`}
+                      onClick={() => setActiveInventoryId(String(s._id))}
                     >
                       <div className="inv-session-title">
                         <strong>{s.reference}</strong>
-                        <span className={`inv-pill ${String(s.status)}`}>{s.status}</span>
+                        <span className={`inv-pill ${String(s.status || '').toLowerCase()}`}>{String(s.status || '-')}</span>
                       </div>
-                      <div className="inv-session-sub">{s.title}</div>
+                      <div className="inv-session-sub">{String(s.type_inventaire || '-')}</div>
                       <div className="inv-session-meta">
-                        Cree: {formatDt(s.createdAt || s.created_at)} — Par: {s.created_by?.username || '-'}
+                        Lancé: {formatDt(s.date_lancement || s.createdAt)} — Magasinier: {s.magasinier_id?.username || '-'}
                       </div>
                     </button>
                   ))}
-                  {!sessions.length && <div className="inv-empty">Aucune session.</div>}
+                  {!inventories.length && <div className="inv-empty">Aucun inventaire.</div>}
                 </div>
               </section>
 
               <section className="inv-card">
                 <div className="inv-head">
-                  <h3>Validation & ajustements</h3>
-                  {activeSession?.reference ? <div className="inv-ref">Session: <strong>{activeSession.reference}</strong></div> : null}
+                  <h3>Détails</h3>
+                  {activeInventory?.reference ? <div className="inv-ref">Réf: <strong>{activeInventory.reference}</strong></div> : null}
                 </div>
 
-                {!activeSession ? (
-                  <div className="inv-empty">Selectionnez une session.</div>
+                {!activeInventory ? (
+                  <div className="inv-empty">Sélectionnez un inventaire.</div>
                 ) : (
                   <>
                     <div className="inv-banner">
-                      <span>Statut: <strong>{activeSession.status}</strong></span>
-                      <span>Cloture: <strong>{formatDt(activeSession.closed_at)}</strong></span>
-                      <span>Magasinier: <strong>{activeSession.created_by?.username || '-'}</strong></span>
-                    </div>
-
-                    {activeSession.status === 'closed' ? (
-                      <div className="inv-actions">
-                        <button className="inv-btn primary" type="button" onClick={applySession} disabled={isLoading}>
-                          <CheckCircle2 size={16} /> Appliquer l'inventaire
-                        </button>
-                        <div className="inv-hint">
-                          <AlertTriangle size={16} /> Conseil: appliquez apres cloture (mouvements geles).
-                        </div>
-                      </div>
-                    ) : (
-                      <div className="inv-empty">Cette session n'est pas en statut "closed".</div>
-                    )}
-
-                    <div className="inv-subhead">
-                      <strong>Ecarts</strong>
-                      {summary ? (
-                        <span className="inv-mini">
-                          OK: {summary.ok} | Surplus: {summary.surplus} | Manquants: {summary.missing} | Abs: {Math.round(Number(summary.total_abs_delta || 0))}
-                        </span>
-                      ) : null}
+                      <span>Statut: <strong>{activeInventory.status}</strong></span>
+                      <span>Type: <strong>{activeInventory.type_inventaire}</strong></span>
+                      <span>Magasin: <strong>{activeInventory.magasin_id?.name || '-'}</strong></span>
                     </div>
 
                     <div className="inv-lines">
-                      {lines.map((l) => (
-                        <div key={l._id} className="inv-line">
-                          <div className="inv-line-main">
-                            <strong>{l.product?.name || 'Produit'}</strong>
-                            <span className="inv-code">{l.product?.code_product || '-'}</span>
-                          </div>
+                      <div className="inv-line">
+                        <div className="inv-line-main"><strong>Périmètre</strong></div>
+                        <div className="inv-line-kv">
+                          <span>Zone: <strong>{activeInventory.zone_id?.name || '-'}</strong></span>
+                          <span>Famille: <strong>{activeInventory.famille_id || '-'}</strong></span>
+                          <span>Catégorie: <strong>{activeInventory.categorie_id?.name || '-'}</strong></span>
+                        </div>
+                      </div>
+                      <div className="inv-line">
+                        <div className="inv-line-main"><strong>Affectation</strong></div>
+                        <div className="inv-line-kv">
+                          <span>Magasinier: <strong>{activeInventory.magasinier_id?.username || '-'}</strong></span>
+                          <span>Date prévue: <strong>{formatDt(activeInventory.date_prevue)}</strong></span>
+                        </div>
+                      </div>
+                      <div className="inv-line">
+                        <div className="inv-line-main"><strong>Règles</strong></div>
+                        <div className="inv-line-kv">
+                          <span>Mouvements: <strong>{activeInventory.bloquer_mouvements ? 'bloqués' : 'non bloqués'}</strong></span>
+                          <span>Notifications: <strong>{activeInventory.notifications_activees ? 'activées' : 'désactivées'}</strong></span>
+                        </div>
+                      </div>
+                      {activeInventory.commentaire ? (
+                        <div className="inv-line">
+                          <div className="inv-line-main"><strong>Commentaire</strong></div>
                           <div className="inv-line-kv">
-                            <span>Systeme: <strong>{l.system_quantity_at_count}</strong></span>
-                            <span>Compte: <strong>{l.counted_quantity}</strong></span>
-                            <span className={`inv-delta ${l.delta > 0 ? 'pos' : l.delta < 0 ? 'neg' : 'zero'}`}>
-                              Ecart: <strong>{l.delta}</strong>
-                            </span>
+                            <span>{activeInventory.commentaire}</span>
                           </div>
                         </div>
-                      ))}
-                      {!lines.length && <div className="inv-empty">Aucune ligne.</div>}
+                      ) : null}
                     </div>
                   </>
                 )}

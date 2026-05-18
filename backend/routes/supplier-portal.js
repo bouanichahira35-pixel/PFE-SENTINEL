@@ -6,6 +6,7 @@ const Notification = require('../models/Notification');
 const User = require('../models/User');
 const { logSecurityEvent } = require('../services/securityAuditService');
 const { isSafeText } = require('../utils/validation');
+const { isActiveSupplierStatus } = require('../services/supplierRegistryService');
 
 // Public (no auth): read-only supplier portal
 
@@ -19,7 +20,7 @@ router.get('/orders', async (req, res) => {
     if (!supplierId) return res.status(400).json({ error: 'token invalide' });
 
     const supplier = await Supplier.findById(supplierId).select('_id name status').lean();
-    if (!supplier || supplier.status !== 'active') return res.status(404).json({ error: 'Fournisseur introuvable' });
+    if (!supplier || !isActiveSupplierStatus(supplier.status)) return res.status(404).json({ error: 'Fournisseur introuvable' });
 
     const items = await PurchaseOrder.find({ supplier: supplier._id })
       .sort({ ordered_at: -1, createdAt: -1 })

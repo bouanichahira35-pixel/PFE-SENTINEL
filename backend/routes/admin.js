@@ -38,6 +38,9 @@ async function setSettingValue(key, value, userId = null) {
   );
 }
 
+// Mini-console Support utilisateurs (tickets)
+router.use('/support', require('./admin-support'));
+
 // GET /api/admin/overview
 // Console technique: sessions, comptes, audit securite.
 router.get('/overview', requireAuth, async (req, res) => {
@@ -164,7 +167,7 @@ router.post('/support-request', requireAuth, strictBody(['subject', 'message', '
         user: a._id,
         title,
         message: body,
-        type: priority === 'critical' ? 'danger' : priority === 'urgent' ? 'warning' : 'info',
+        type: priority === 'critical' ? 'alert' : priority === 'urgent' ? 'warning' : 'info',
         is_read: false,
       }))
     );

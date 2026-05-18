@@ -18,6 +18,8 @@ const historySchema = new mongoose.Schema(
         'purchase_order',
         'supplier',
         'stock_rules_apply',
+        'stock_rules_update',
+        'stock_rules_reset',
         'inventory',
       ],
       required: true,

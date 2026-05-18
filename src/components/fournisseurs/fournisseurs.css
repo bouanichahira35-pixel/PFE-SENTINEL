@@ -1,0 +1,155 @@
+.f360-toolbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.f360-actions {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.f360-btn {
+  border: 1px solid rgba(2, 6, 23, 0.12);
+  background: #ffffff;
+  border-radius: 12px;
+  padding: 9px 12px;
+  font-weight: 900;
+  cursor: pointer;
+  color: #0f172a;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.f360-btn:hover {
+  background: #f8fafc;
+}
+
+.f360-btn.primary {
+  background: #1976d2;
+  border-color: #1976d2;
+  color: #ffffff;
+}
+
+.f360-btn.primary:hover {
+  background: #1565c0;
+}
+
+.f360-btn.success {
+  background: #10b981;
+  border-color: #10b981;
+  color: #ffffff;
+}
+
+.f360-btn.success:hover {
+  background: #059669;
+}
+
+.f360-btn.danger {
+  background: #ef4444;
+  border-color: #ef4444;
+  color: #ffffff;
+}
+
+.f360-btn.danger:hover {
+  background: #dc2626;
+}
+
+.f360-btn.secondary {
+  background: #f8fafc;
+}
+
+.f360-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border-radius: 999px;
+  padding: 5px 10px;
+  font-size: 12px;
+  font-weight: 900;
+  border: 1px solid rgba(2, 6, 23, 0.12);
+  background: #f8fafc;
+  color: #0f172a;
+}
+
+.f360-badge.success {
+  background: #ecfdf5;
+  border-color: rgba(5, 150, 105, 0.25);
+  color: #065f46;
+}
+
+.f360-badge.warn {
+  background: #fffbeb;
+  border-color: rgba(245, 158, 11, 0.25);
+  color: #92400e;
+}
+
+.f360-badge.danger {
+  background: #fef2f2;
+  border-color: rgba(239, 68, 68, 0.25);
+  color: #991b1b;
+}
+
+.f360-tabs {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  padding: 10px;
+  border-radius: 16px;
+  border: 1px solid rgba(2, 6, 23, 0.08);
+  background: #ffffff;
+  box-shadow: 0 10px 22px rgba(15, 23, 42, 0.06);
+}
+
+.f360-tab {
+  border: 1px solid rgba(2, 6, 23, 0.12);
+  background: #ffffff;
+  border-radius: 999px;
+  padding: 8px 12px;
+  font-weight: 950;
+  color: #334155;
+  text-decoration: none;
+}
+
+.f360-tab.active {
+  background: #e0f2fe;
+  border-color: rgba(2, 132, 199, 0.35);
+  color: #075985;
+}
+
+.f360-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+.f360-table th,
+.f360-table td {
+  border-bottom: 1px solid rgba(2, 6, 23, 0.08);
+  padding: 10px 10px;
+  vertical-align: top;
+}
+
+.f360-table th {
+  text-align: left;
+  font-size: 12px;
+  font-weight: 950;
+  color: #334155;
+  background: #f8fafc;
+}
+
+.f360-table tr:hover td {
+  background: #f8fafc;
+}
+
+.f360-muted {
+  color: #64748b;
+  font-weight: 800;
+  font-size: 12px;
+}
+

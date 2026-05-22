@@ -1,5 +1,22 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Users, RefreshCw, Ban, CheckCircle2, Shield, KeyRound, UserPlus, RotateCcw, Copy } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
+import {
+  Users,
+  RefreshCw,
+  Ban,
+  CheckCircle2,
+  Shield,
+  KeyRound,
+  Monitor,
+  UserPlus,
+  RotateCcw,
+  Search,
+  MoreVertical,
+  Eye,
+  Pencil,
+  Copy,
+  X,
+} from 'lucide-react';
 import SidebarAdmin from '../../components/admin/SidebarAdmin';
 import HeaderPage from '../../components/shared/HeaderPage';
 import LoadingSpinner from '../../components/shared/LoadingSpinner';
@@ -27,36 +44,79 @@ const CATALOG_PROFILES_CREATE = [
   ...CATALOG_PROFILES,
 ];
 
+function safeStr(value) {
+  return String(value || '').trim();
+}
+
+function formatDateTime(value) {
+  if (!value) return 'Non disponible';
+  const d = new Date(value);
+  if (Number.isNaN(d.getTime())) return 'Non disponible';
+  return d.toLocaleString('fr-FR');
+}
+
 function isStrongPassword(pwd) {
-  const p = String(pwd || '');
+  const p = safeStr(pwd);
   if (p.length < 8 || p.length > 64) return false;
   return /[a-z]/.test(p) && /[A-Z]/.test(p) && /\d/.test(p);
 }
 
 function isValidEmail(value) {
-  return /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(String(value || '').trim());
+  return /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(safeStr(value));
 }
 
 function normalizePhone(value) {
-  return String(value || '').trim().replace(/[^\d+]/g, '');
+  return safeStr(value).replace(/[^\d+]/g, '');
 }
 
 function isValidPhone(value) {
   return /^(\+?\d{6,18})$/.test(normalizePhone(value));
 }
 
-const AdminUsers = ({ userName, onLogout }) => {
+function statusLabel(status) {
+  if (status === 'active') return 'Actif';
+  if (status === 'blocked') return 'Bloqué';
+  return 'Inactif';
+}
+
+function statusTone(status) {
+  if (status === 'active') return 'ok';
+  if (status === 'blocked') return 'bad';
+  return 'neutral';
+}
+
+function roleLabel(role) {
+  const r = ROLES.find((x) => x.id === role);
+  return r ? r.label : safeStr(role) || '—';
+}
+
+function matchesNeedle(u, needle) {
+  if (!needle) return true;
+  const parts = [u?.username, u?.email, u?.telephone].map((p) => safeStr(p).toLowerCase()).filter(Boolean);
+  return parts.some((p) => p.includes(needle));
+}
+
+export default function AdminUsers({ userName, onLogout }) {
   const toast = useToast();
+  const navigate = useNavigate();
   const [sidebarCollapsed, setSidebarCollapsed] = useState(() => (typeof window !== 'undefined' ? window.innerWidth <= 768 : false));
-  const [roleFilter, setRoleFilter] = useState('magasinier');
-  const [statusFilter, setStatusFilter] = useState('active');
   const [isLoading, setIsLoading] = useState(false);
-  const [items, setItems] = useState([]);
-  const [reasonById, setReasonById] = useState({});
-  const [roleDraftById, setRoleDraftById] = useState({});
+
+  const [allUsers, setAllUsers] = useState([]);
+  const [q, setQ] = useState('');
+  const [roleFilter, setRoleFilter] = useState('');
+  const [statusFilter, setStatusFilter] = useState('');
+  const [serviceFilter, setServiceFilter] = useState('');
+
+  const [createOpen, setCreateOpen] = useState(false);
+  const [detailUserId, setDetailUserId] = useState(null);
+  const [editUserId, setEditUserId] = useState(null);
+
+  const [menuOpenForId, setMenuOpenForId] = useState(null);
+
+  const [reasonDialog, setReasonDialog] = useState({ open: false, kind: '', userId: null, nextRole: '' });
+  const [reasonText, setReasonText] = useState('');
   const [newPasswordById, setNewPasswordById] = useState({});
-  const [demandeurProfileDraftById, setDemandeurProfileDraftById] = useState({});
-  const [serviceDraftById, setServiceDraftById] = useState({});
 
   const [createDraft, setCreateDraft] = useState({
     username: '',
@@ -68,101 +128,176 @@ const AdminUsers = ({ userName, onLogout }) => {
     service_direction: '',
   });
 
-  const passwordHint = PASSWORD_HINT;
+  const [editDraft, setEditDraft] = useState({
+    service_direction: '',
+    demandeur_profile: 'bureautique',
+  });
+
+  useEffect(() => {
+    if (!menuOpenForId) return undefined;
+    const close = () => setMenuOpenForId(null);
+    window.addEventListener('click', close);
+    return () => window.removeEventListener('click', close);
+  }, [menuOpenForId]);
 
   const loadUsers = useCallback(async () => {
     setIsLoading(true);
     try {
-      const res = await get(`/users?role=${encodeURIComponent(roleFilter)}&status=${encodeURIComponent(statusFilter)}`);
-      const users = Array.isArray(res?.users) ? res.users : [];
-      setItems(users);
-      setRoleDraftById((prev) => {
-        const next = { ...prev };
-        users.forEach((u) => {
-          if (u?._id && !next[u._id]) next[u._id] = u.role;
-        });
-        return next;
-      });
-      setDemandeurProfileDraftById((prev) => {
-        const next = { ...prev };
-        users.forEach((u) => {
-          if (u?._id && !next[u._id]) next[u._id] = u.demandeur_profile || 'bureautique';
-        });
-        return next;
-      });
-      setServiceDraftById((prev) => {
-        const next = { ...prev };
-        users.forEach((u) => {
-          if (u?._id && next[u._id] === undefined) next[u._id] = u.service_direction || '';
-        });
-        return next;
-      });
+      const res = await get('/users');
+      setAllUsers(Array.isArray(res?.users) ? res.users : []);
     } catch (err) {
       toast.error(err.message || 'Chargement utilisateurs échoué');
-      setItems([]);
+      setAllUsers([]);
     } finally {
       setIsLoading(false);
     }
-  }, [roleFilter, statusFilter, toast]);
+  }, [toast]);
 
   useEffect(() => {
     loadUsers();
   }, [loadUsers]);
 
-  const toggleStatus = useCallback(async (u) => {
-    const id = u?._id;
-    if (!id) return;
-    const nextStatus = u.status === 'active' ? 'blocked' : 'active';
-    const reason = String(reasonById[id] || '').trim();
+  const kpis = useMemo(() => {
+    const total = allUsers.length;
+    const active = allUsers.filter((u) => u?.status === 'active').length;
+    const blocked = allUsers.filter((u) => u?.status === 'blocked').length;
+    const online = allUsers.filter((u) => (u?.activeSessionsCount || 0) > 0).length;
+    return { total, active, blocked, online };
+  }, [allUsers]);
+
+  const serviceOptions = useMemo(() => {
+    const set = new Set();
+    allUsers.forEach((u) => {
+      const v = safeStr(u?.service_direction);
+      if (v) set.add(v);
+    });
+    return Array.from(set).sort((a, b) => a.localeCompare(b));
+  }, [allUsers]);
+
+  const filteredUsers = useMemo(() => {
+    const needle = safeStr(q).toLowerCase();
+    const serviceNeedle = safeStr(serviceFilter).toLowerCase();
+
+    return (allUsers || [])
+      .filter((u) => {
+        if (roleFilter && safeStr(u?.role) !== roleFilter) return false;
+        if (statusFilter && safeStr(u?.status) !== statusFilter) return false;
+        if (serviceNeedle) {
+          const service = safeStr(u?.service_direction).toLowerCase();
+          if (!service.includes(serviceNeedle)) return false;
+        }
+        return matchesNeedle(u, needle);
+      })
+      .sort((a, b) => safeStr(a?.username).localeCompare(safeStr(b?.username)));
+  }, [allUsers, q, roleFilter, serviceFilter, statusFilter]);
+
+  const selectedUser = useMemo(() => {
+    const id = detailUserId || editUserId;
+    if (!id) return null;
+    return allUsers.find((u) => String(u?._id) === String(id)) || null;
+  }, [allUsers, detailUserId, editUserId]);
+
+  const openReason = useCallback((kind, userId, nextRole = '') => {
+    setMenuOpenForId(null);
+    setReasonText('');
+    setReasonDialog({ open: true, kind, userId, nextRole });
+  }, []);
+
+  const closeReason = useCallback(() => {
+    setReasonDialog({ open: false, kind: '', userId: null, nextRole: '' });
+    setReasonText('');
+  }, []);
+
+  const confirmReason = useCallback(async () => {
+    const reason = safeStr(reasonText);
     if (reason.length < 5) {
-      toast.warning('Motif obligatoire (min 5 caractères).');
+      toast.warning('Le motif est obligatoire pour cette action (min 5 caractères).');
       return;
     }
-    setIsLoading(true);
-    try {
-      await patch(`/users/${id}/status`, { status: nextStatus, reason });
-      toast.success('Statut mis à jour.');
-      await loadUsers();
-    } catch (err) {
-      toast.error(err.message || 'Mise à jour statut échouée');
-    } finally {
-      setIsLoading(false);
+    const user = allUsers.find((u) => String(u?._id) === String(reasonDialog.userId));
+    if (!user) {
+      toast.error('Utilisateur introuvable.');
+      closeReason();
+      return;
     }
-  }, [loadUsers, reasonById, toast]);
 
-  const revokeSessions = useCallback(async (u) => {
-    const id = u?._id;
-    if (!id) return;
     setIsLoading(true);
     try {
-      await post(`/users/${id}/revoke-sessions`, { reason: 'revoked_by_admin' });
-      toast.success('Sessions révoquées.');
+      if (reasonDialog.kind === 'toggle_status') {
+        const nextStatus = user.status === 'active' ? 'blocked' : 'active';
+        await patch(`/users/${encodeURIComponent(user._id)}/status`, { status: nextStatus, reason });
+        toast.success('Statut mis à jour.');
+      } else if (reasonDialog.kind === 'change_role') {
+        const nextRole = safeStr(reasonDialog.nextRole || user.role);
+        await patch(`/users/${encodeURIComponent(user._id)}/role`, { role: nextRole, reason });
+        toast.success('Rôle mis à jour.');
+      } else if (reasonDialog.kind === 'reset_password') {
+        const res = await post(`/users/${encodeURIComponent(user._id)}/reset-password`, { reason });
+        const newPwd = safeStr(res?.new_password);
+        if (newPwd) {
+          setNewPasswordById((p) => ({ ...p, [user._id]: newPwd }));
+          toast.success('Mot de passe réinitialisé (temporaire généré).');
+        } else {
+          toast.success('Mot de passe réinitialisé.');
+        }
+      } else if (reasonDialog.kind === 'revoke_sessions') {
+        await post(`/users/${encodeURIComponent(user._id)}/revoke-sessions`, { reason });
+        toast.success('Sessions révoquées.');
+      } else {
+        throw new Error('Action inconnue.');
+      }
+
+      closeReason();
       await loadUsers();
     } catch (err) {
-      toast.error(err.message || 'Révocation sessions échouée');
+      toast.error(err.message || 'Action échouée');
     } finally {
       setIsLoading(false);
     }
-  }, [loadUsers, toast]);
+  }, [allUsers, closeReason, loadUsers, reasonDialog, reasonText, toast]);
+
+  const openDetail = useCallback((id) => {
+    setDetailUserId(id);
+    setEditUserId(null);
+    setMenuOpenForId(null);
+  }, []);
+
+  const openEdit = useCallback((id) => {
+    const u = allUsers.find((x) => String(x?._id) === String(id));
+    setEditDraft({
+      service_direction: safeStr(u?.service_direction),
+      demandeur_profile: safeStr(u?.demandeur_profile || 'bureautique') || 'bureautique',
+    });
+    setEditUserId(id);
+    setDetailUserId(null);
+    setMenuOpenForId(null);
+  }, [allUsers]);
+
+  const closeDrawer = useCallback(() => {
+    setCreateOpen(false);
+    setDetailUserId(null);
+    setEditUserId(null);
+  }, []);
 
   const createUser = useCallback(async () => {
     const payload = {
-      username: String(createDraft.username || '').trim(),
-      email: String(createDraft.email || '').trim(),
+      username: safeStr(createDraft.username),
+      email: safeStr(createDraft.email),
       telephone: normalizePhone(createDraft.telephone),
-      role: String(createDraft.role || '').trim(),
-      password: String(createDraft.password || ''),
+      role: safeStr(createDraft.role),
+      password: safeStr(createDraft.password),
       ...(createDraft.role === 'demandeur'
         ? {
           ...(createDraft.demandeur_profile && createDraft.demandeur_profile !== 'auto'
-            ? { demandeur_profile: String(createDraft.demandeur_profile || 'bureautique') }
+            ? { demandeur_profile: safeStr(createDraft.demandeur_profile || 'bureautique') }
             : {}),
-          service_direction: String(createDraft.service_direction || '').trim(),
+          service_direction: safeStr(createDraft.service_direction),
         }
         : {}),
     };
-    if (!payload.username || !payload.email || !payload.telephone || !payload.password) {
-      toast.warning('Remplis username/email/telephone/mot de passe.');
+
+    if (!payload.username || !payload.email || !payload.role || !payload.password) {
+      toast.warning('Username, email, rôle et mot de passe sont obligatoires.');
       return;
     }
     if (payload.username.length < 3 || payload.username.length > 60) {
@@ -173,120 +308,70 @@ const AdminUsers = ({ userName, onLogout }) => {
       toast.warning('Email invalide.');
       return;
     }
-    if (!isValidPhone(payload.telephone)) {
+    if (!payload.telephone || !isValidPhone(payload.telephone)) {
       toast.warning('Téléphone invalide (ex: +21698123456).');
       return;
     }
     if (!isStrongPassword(payload.password)) {
-      toast.warning(passwordHint);
+      toast.warning(PASSWORD_HINT);
       return;
     }
+
     setIsLoading(true);
     try {
       await post('/users', payload);
       toast.success('Utilisateur créé.');
-      setCreateDraft({ username: '', email: '', telephone: '', role: 'demandeur', password: '', demandeur_profile: 'bureautique', service_direction: '' });
+      setCreateDraft({
+        username: '',
+        email: '',
+        telephone: '',
+        role: 'demandeur',
+        password: '',
+        demandeur_profile: 'bureautique',
+        service_direction: '',
+      });
+      setCreateOpen(false);
       await loadUsers();
     } catch (err) {
       toast.error(err.message || 'Création utilisateur échouée');
     } finally {
       setIsLoading(false);
     }
-  }, [createDraft, loadUsers, toast, passwordHint]);
+  }, [createDraft, loadUsers, toast]);
 
-  const updateRole = useCallback(async (u) => {
-    const id = u?._id;
-    if (!id) return;
-    const nextRole = String(roleDraftById[id] || u.role || '').trim();
-    const reason = String(reasonById[id] || '').trim();
-    if (!nextRole) return;
-    if (reason.length < 5) {
-      toast.warning('Motif obligatoire (min 5 caractères).');
-      return;
-    }
+  const saveEdit = useCallback(async () => {
+    if (!editUserId) return;
+    const u = allUsers.find((x) => String(x?._id) === String(editUserId));
+    if (!u) return;
+
     setIsLoading(true);
     try {
-      await patch(`/users/${id}/role`, { role: nextRole, reason });
-      toast.success('Rôle mis à jour.');
-      await loadUsers();
-    } catch (err) {
-      toast.error(err.message || 'Mise à jour rôle échouée');
-    } finally {
-      setIsLoading(false);
-    }
-  }, [loadUsers, reasonById, roleDraftById, toast]);
+      if (u.role === 'demandeur') {
+        const serviceDirection = safeStr(editDraft.service_direction);
+        if (serviceDirection && serviceDirection.length < 2) {
+          toast.warning('Service/Direction invalide (min 2 caractères).');
+          return;
+        }
+        await patch(`/users/${encodeURIComponent(u._id)}/service-direction`, { service_direction: serviceDirection });
 
-  const resetPassword = useCallback(async (u) => {
-    const id = u?._id;
-    if (!id) return;
-    const reason = String(reasonById[id] || '').trim();
-    if (reason.length < 5) {
-      toast.warning('Motif obligatoire (min 5 caractères).');
-      return;
-    }
-    setIsLoading(true);
-    try {
-      const res = await post(`/users/${id}/reset-password`, { reason });
-      const newPwd = String(res?.new_password || '').trim();
-      if (newPwd) {
-        setNewPasswordById((p) => ({ ...p, [id]: newPwd }));
-        toast.success('Mot de passe réinitialisé (copie-le).');
-      } else {
-        toast.success('Mot de passe réinitialisé.');
+        const profile = safeStr(editDraft.demandeur_profile || '').toLowerCase();
+        if (profile && profile !== safeStr(u.demandeur_profile || '').toLowerCase()) {
+          await patch(`/users/${encodeURIComponent(u._id)}/demandeur-profile`, { demandeur_profile: profile });
+        }
       }
-      await loadUsers();
-    } catch (err) {
-      toast.error(err.message || 'Reset mot de passe échoué');
-    } finally {
-      setIsLoading(false);
-    }
-  }, [loadUsers, reasonById, toast]);
 
-  const saveDemandeurProfile = useCallback(async (u) => {
-    const id = u?._id;
-    if (!id) return;
-    const draft = String(demandeurProfileDraftById[id] || '').trim().toLowerCase();
-    if (!['bureautique', 'menage', 'petrole'].includes(draft)) {
-      toast.warning('Profil catalogue invalide.');
-      return;
-    }
-    setIsLoading(true);
-    try {
-      await patch(`/users/${id}/demandeur-profile`, { demandeur_profile: draft });
-      toast.success('Profil catalogue mis à jour.');
+      toast.success('Mise à jour enregistrée.');
+      setEditUserId(null);
       await loadUsers();
     } catch (err) {
-      toast.error(err.message || 'Erreur mise à jour profil');
+      toast.error(err.message || 'Erreur mise à jour');
     } finally {
       setIsLoading(false);
     }
-  }, [demandeurProfileDraftById, loadUsers, toast]);
-
-  const saveServiceDirection = useCallback(async (u) => {
-    const id = u?._id;
-    if (!id) return;
-    const draft = String(serviceDraftById[id] || '').trim();
-    if (draft && draft.length < 2) {
-      toast.warning('Service/Direction invalide (min 2 caractÃ¨res).');
-      return;
-    }
-    setIsLoading(true);
-    try {
-      const res = await patch(`/users/${id}/service-direction`, { service_direction: draft });
-      if (res?.user?.demandeur_profile) {
-        setDemandeurProfileDraftById((p) => ({ ...p, [id]: res.user.demandeur_profile }));
-      }
-      toast.success('Service/Direction mis Ã  jour.');
-      await loadUsers();
-    } catch (err) {
-      toast.error(err.message || 'Erreur mise Ã  jour service');
-    } finally {
-      setIsLoading(false);
-    }
-  }, [serviceDraftById, loadUsers, toast]);
+  }, [allUsers, editDraft, editUserId, loadUsers, toast]);
 
   const copyPassword = useCallback(async (userId) => {
-    const pwd = String(newPasswordById[userId] || '').trim();
+    const pwd = safeStr(newPasswordById[userId]);
     if (!pwd) return;
     try {
       await navigator.clipboard.writeText(pwd);
@@ -296,12 +381,11 @@ const AdminUsers = ({ userName, onLogout }) => {
     }
   }, [newPasswordById, toast]);
 
-  const stats = useMemo(() => {
-    const total = items.length;
-    const online = items.filter((u) => (u.activeSessionsCount || 0) > 0).length;
-    const blocked = items.filter((u) => u.status === 'blocked').length;
-    return { total, online, blocked };
-  }, [items]);
+  const emptyText = useMemo(() => {
+    if (!allUsers.length) return 'Aucun utilisateur trouvé.';
+    if (!filteredUsers.length) return 'Aucun utilisateur ne correspond aux critères.';
+    return '';
+  }, [allUsers.length, filteredUsers.length]);
 
   return (
     <div className="admin-layout">
@@ -312,126 +396,65 @@ const AdminUsers = ({ userName, onLogout }) => {
         userName={userName}
       />
       <div className={`admin-main ${sidebarCollapsed ? 'collapsed' : ''}`}>
-        <HeaderPage title="Utilisateurs" subtitle="Gestion des acteurs + sessions" icon={<Users size={24} />} />
+        <HeaderPage title="Utilisateurs" subtitle="Gestion des comptes, rôles, statuts et sessions." icon={<Users size={24} />} />
         {isLoading && <LoadingSpinner overlay text="Chargement..." />}
 
         <div className="admin-page">
-          <div className="admin-card">
-            <div className="admin-card-title"><UserPlus size={18} /> Créer un utilisateur</div>
-            <div className="create-grid">
-              <label>
-                Username
-                <input
-                  value={createDraft.username}
-                  onChange={(e) => setCreateDraft((p) => ({ ...p, username: e.target.value }))}
-                  disabled={isLoading}
-                  maxLength={60}
-                  placeholder="Ex: ahmed.trabelsi"
-                  autoComplete="off"
-                />
-              </label>
-              <label>
-                Email
-                <input
-                  type="email"
-                  value={createDraft.email}
-                  onChange={(e) => setCreateDraft((p) => ({ ...p, email: e.target.value }))}
-                  disabled={isLoading}
-                  maxLength={120}
-                  placeholder="nom.prenom@etap.tn"
-                  autoComplete="off"
-                />
-              </label>
-              <label>
-                Telephone
-                <input
-                  inputMode="tel"
-                  value={createDraft.telephone}
-                  onChange={(e) => setCreateDraft((p) => ({ ...p, telephone: e.target.value }))}
-                  disabled={isLoading}
-                  maxLength={22}
-                  placeholder="Ex: +21698123456"
-                  autoComplete="off"
-                />
-              </label>
-              <label>
-                Rôle
-                <select value={createDraft.role} onChange={(e) => setCreateDraft((p) => ({ ...p, role: e.target.value }))} disabled={isLoading}>
-                  {ROLES.map((r) => <option key={r.id} value={r.id}>{r.label}</option>)}
-                </select>
-              </label>
-              {createDraft.role === 'demandeur' && (
-                <label>
-                  Profil catalogue
-                  <select value={createDraft.demandeur_profile} onChange={(e) => setCreateDraft((p) => ({ ...p, demandeur_profile: e.target.value }))} disabled={isLoading}>
-                    {CATALOG_PROFILES_CREATE.map((p) => (
-                      <option key={p.id} value={p.id}>{p.label}</option>
-                    ))}
-                  </select>
-                  <div className="helper-text">Choisis “Auto” pour mapper le profil depuis le service/direction.</div>
-                </label>
-              )}
-              {createDraft.role === 'demandeur' && (
-                <label>
-                  Service / Direction
-                  <input
-                    value={createDraft.service_direction}
-                    onChange={(e) => setCreateDraft((p) => ({ ...p, service_direction: e.target.value }))}
-                    disabled={isLoading}
-                    maxLength={80}
-                    placeholder="Ex: RH, Finance, HSE, Entretien, Site"
-                    autoComplete="off"
-                  />
-                  <div className="helper-text">Le service auto-map le profil catalogue si aucun profil n’est choisi.</div>
-                </label>
-              )}
-              <label>
-                Mot de passe
-                <input
-                  type="password"
-                  value={createDraft.password}
-                  onChange={(e) => setCreateDraft((p) => ({ ...p, password: e.target.value }))}
-                  disabled={isLoading}
-                  maxLength={64}
-                  placeholder="Mot de passe temporaire"
-                  autoComplete="new-password"
-                />
-                <div className={`pwd-hint ${createDraft.password ? (isStrongPassword(createDraft.password) ? 'ok' : 'bad') : ''}`}>
-                  {passwordHint}
-                </div>
-              </label>
+          <div className="admin-toolbar">
+            <div />
+            <div className="admin-users-actions">
+              <button className="admin-btn primary" type="button" onClick={() => setCreateOpen(true)} disabled={isLoading}>
+                <UserPlus size={16} />
+                <span>Nouvel utilisateur</span>
+              </button>
+              <button className="admin-btn" type="button" onClick={loadUsers} disabled={isLoading}>
+                <RefreshCw size={16} />
+                <span>Actualiser</span>
+              </button>
             </div>
-            <button className="admin-btn primary" type="button" onClick={createUser} disabled={isLoading}>
-              <UserPlus size={16} />
-              <span>Créer</span>
-            </button>
           </div>
-          <div className="users-toolbar">
-            <div className="filters">
-              <label>
-                Rôle
-                <select value={roleFilter} onChange={(e) => setRoleFilter(e.target.value)} disabled={isLoading}>
-                  {ROLES.map((r) => <option key={r.id} value={r.id}>{r.label}</option>)}
-                </select>
-              </label>
-              <label>
-                Statut
-                <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)} disabled={isLoading}>
-                  <option value="active">Active</option>
-                  <option value="blocked">Blocked</option>
-                </select>
-              </label>
+
+          <div className="users-kpis">
+            <div className="kpi">
+              <span>Total utilisateurs</span>
+              <strong>{kpis.total}</strong>
             </div>
+            <div className="kpi ok">
+              <span>Actifs</span>
+              <strong>{kpis.active}</strong>
+            </div>
+            <div className="kpi bad">
+              <span>Bloqués</span>
+              <strong>{kpis.blocked}</strong>
+            </div>
+            <div className="kpi">
+              <span>En ligne</span>
+              <strong>{kpis.online}</strong>
+            </div>
+          </div>
+
+          <div className="users-filters">
+            <div className="users-search">
+              <Search size={16} />
+              <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Rechercher (nom, email, téléphone)" disabled={isLoading} />
+            </div>
+            <select value={roleFilter} onChange={(e) => setRoleFilter(e.target.value)} disabled={isLoading}>
+              <option value="">Tous les rôles</option>
+              {ROLES.map((r) => <option key={r.id} value={r.id}>{r.label}</option>)}
+            </select>
+            <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)} disabled={isLoading}>
+              <option value="">Tous les statuts</option>
+              <option value="active">Actif</option>
+              <option value="blocked">Bloqué</option>
+            </select>
+            <select value={serviceFilter} onChange={(e) => setServiceFilter(e.target.value)} disabled={isLoading}>
+              <option value="">Tous les services/directions</option>
+              {serviceOptions.map((s) => <option key={s} value={s}>{s}</option>)}
+            </select>
             <button className="admin-btn" type="button" onClick={loadUsers} disabled={isLoading}>
               <RefreshCw size={16} />
               <span>Actualiser</span>
             </button>
-          </div>
-
-          <div className="users-stats">
-            <div className="chip"><span>Total</span><strong>{stats.total}</strong></div>
-            <div className="chip"><span>En ligne</span><strong>{stats.online}</strong></div>
-            <div className="chip"><span>Bloqués</span><strong>{stats.blocked}</strong></div>
           </div>
 
           <div className="users-table-wrap">
@@ -439,136 +462,332 @@ const AdminUsers = ({ userName, onLogout }) => {
               <thead>
                 <tr>
                   <th>Utilisateur</th>
-                  <th>Email</th>
-                  <th>Rôle</th>
-                  <th>Profil catalogue</th>
-                  <th>Service / Direction</th>
+                  <th>Rôle & service</th>
                   <th>Statut</th>
                   <th>Sessions</th>
-                  <th>Motif</th>
-                  <th>Actions</th>
+                  <th>Dernière activité</th>
+                  <th style={{ textAlign: 'right' }}>Actions</th>
                 </tr>
               </thead>
               <tbody>
-                {items.map((u) => (
+                {filteredUsers.map((u) => (
                   <tr key={u._id}>
                     <td>
                       <div className="user-cell">
-                        <ProtectedImage
-                          filePath={u.image_profile || ''}
-                          alt={u.username}
-                          className="user-avatar"
-                          fallbackText=""
-                        />
+                        <ProtectedImage filePath={u.image_profile || ''} alt={u.username} className="user-avatar" fallbackText="" />
                         <div className="user-name">
                           <strong>{u.username}</strong>
-                          <span className="user-sub">{u.telephone || '-'}</span>
+                          <div className="user-sub">
+                            <span>{u.email || '—'}</span>
+                            <span className="dot">•</span>
+                            <span>{u.telephone || '—'}</span>
+                          </div>
                         </div>
                       </div>
                     </td>
-                    <td>{u.email}</td>
-                    <td><span className="role-pill"><Shield size={14} /> {u.role}</span></td>
                     <td>
-                      {u.role === 'demandeur' ? (
-                        <div className="profile-edit">
-                          <select
-                            value={demandeurProfileDraftById[u._id] || u.demandeur_profile || 'bureautique'}
-                            onChange={(e) => setDemandeurProfileDraftById((p) => ({ ...p, [u._id]: e.target.value }))}
-                            disabled={isLoading}
-                          >
-                            {CATALOG_PROFILES.map((p) => (
-                              <option key={p.id} value={p.id}>{p.label}</option>
-                            ))}
-                          </select>
-                          <button className="icon-btn" type="button" onClick={() => saveDemandeurProfile(u)} title="Enregistrer profil" disabled={isLoading}>
-                            <RotateCcw size={16} />
-                          </button>
+                      <div className="role-service">
+                        <span className="role-pill"><Shield size={14} /> {roleLabel(u.role)}</span>
+                        <div className="role-sub">
+                          <span className="muted">{safeStr(u.service_direction) || '—'}</span>
+                          {u.role === 'demandeur' ? <span className="muted">• {safeStr(u.demandeur_profile) || 'bureautique'}</span> : null}
                         </div>
-                      ) : (
-                        <span className="muted">-</span>
-                      )}
+                      </div>
                     </td>
                     <td>
-                      {u.role === 'demandeur' ? (
-                        <div className="service-edit">
-                          <input
-                            value={serviceDraftById[u._id] || ''}
-                            onChange={(e) => setServiceDraftById((p) => ({ ...p, [u._id]: e.target.value }))}
-                            placeholder="RH, Finance, HSE..."
-                            disabled={isLoading}
-                            maxLength={80}
-                          />
-                          <button className="icon-btn" type="button" onClick={() => saveServiceDirection(u)} title="Enregistrer service" disabled={isLoading}>
-                            <RotateCcw size={16} />
-                          </button>
-                        </div>
-                      ) : (
-                        <span className="muted">-</span>
-                      )}
-                    </td>
-                    <td>
-                      <span className={`status-pill ${u.status === 'active' ? 'ok' : 'bad'}`}>
+                      <span className={`status-pill ${statusTone(u.status)}`}>
                         {u.status === 'active' ? <CheckCircle2 size={14} /> : <Ban size={14} />}
-                        {u.status}
+                        {statusLabel(u.status)}
                       </span>
                     </td>
-                    <td>{u.activeSessionsCount || 0}</td>
                     <td>
-                      <input
-                        value={reasonById[u._id] || ''}
-                        onChange={(e) => setReasonById((p) => ({ ...p, [u._id]: e.target.value }))}
-                        placeholder="Motif (min 5)"
-                        disabled={isLoading}
-                      />
-                      {newPasswordById[u._id] ? (
-                        <div className="pwd-row">
-                          <code className="pwd-code">{newPasswordById[u._id]}</code>
-                          <button className="icon-btn" type="button" onClick={() => copyPassword(u._id)} title="Copier" disabled={isLoading}>
-                            <Copy size={16} />
+                      <div className="sessions-cell">
+                        <strong>{u.activeSessionsCount || 0}</strong>
+                        {(u.activeSessionsCount || 0) > 0 ? (
+                          <button className="link-btn" type="button" onClick={() => navigate(`/admin/sessions?user=${encodeURIComponent(u._id)}`)}>
+                            Voir sessions
                           </button>
-                        </div>
-                      ) : null}
-                    </td>
-                    <td className="actions">
-                      <button className="admin-btn small" type="button" onClick={() => toggleStatus(u)} disabled={isLoading}>
-                        {u.status === 'active' ? <Ban size={16} /> : <CheckCircle2 size={16} />}
-                        <span>{u.status === 'active' ? 'Bloquer' : 'Activer'}</span>
-                      </button>
-                      <div className="role-edit">
-                        <select
-                          value={roleDraftById[u._id] || u.role}
-                          onChange={(e) => setRoleDraftById((p) => ({ ...p, [u._id]: e.target.value }))}
-                          disabled={isLoading}
-                        >
-                          {ROLES.map((r) => <option key={r.id} value={r.id}>{r.label}</option>)}
-                        </select>
-                        <button className="icon-btn" type="button" onClick={() => updateRole(u)} title="Appliquer rôle" disabled={isLoading}>
-                          <RotateCcw size={16} />
-                        </button>
+                        ) : (
+                          <span className="muted">Aucune session active</span>
+                        )}
                       </div>
-                      <button className="admin-btn small" type="button" onClick={() => resetPassword(u)} disabled={isLoading}>
-                        <RotateCcw size={16} />
-                        <span>Reset MDP</span>
-                      </button>
-                      <button className="admin-btn small" type="button" onClick={() => revokeSessions(u)} disabled={isLoading}>
-                        <KeyRound size={16} />
-                        <span>Révoquer</span>
-                      </button>
+                    </td>
+                    <td className="muted">{formatDateTime(u.lastActivityAt || u.last_login)}</td>
+                    <td style={{ textAlign: 'right' }}>
+                      <div className="row-actions">
+                        <button className="admin-btn small" type="button" onClick={() => openDetail(u._id)} disabled={isLoading}>
+                          <Eye size={16} />
+                          <span>Voir détail</span>
+                        </button>
+                        <div className="menu-wrap" onClick={(e) => e.stopPropagation()}>
+                          <button
+                            className="admin-btn small"
+                            type="button"
+                            aria-label="Actions"
+                            onClick={() => setMenuOpenForId((p) => (p === u._id ? null : u._id))}
+                            disabled={isLoading}
+                          >
+                            <MoreVertical size={16} />
+                            <span>Actions</span>
+                          </button>
+                          {menuOpenForId === u._id ? (
+                            <div className="actions-menu" role="menu">
+                              <button type="button" className="menu-item" onClick={() => openDetail(u._id)}>
+                                <Eye size={16} />
+                                <span>Voir détail</span>
+                              </button>
+                              <button type="button" className="menu-item" onClick={() => openEdit(u._id)}>
+                                <Pencil size={16} />
+                                <span>Modifier</span>
+                              </button>
+                              <button type="button" className="menu-item" onClick={() => openReason('change_role', u._id, u.role)}>
+                                <KeyRound size={16} />
+                                <span>Changer rôle</span>
+                              </button>
+                              <button type="button" className="menu-item" onClick={() => openReason('reset_password', u._id)}>
+                                <RotateCcw size={16} />
+                                <span>Réinitialiser mot de passe</span>
+                              </button>
+                              <button type="button" className="menu-item" onClick={() => navigate(`/admin/sessions?user=${encodeURIComponent(u._id)}`)}>
+                                <Monitor size={16} />
+                                <span>Voir sessions</span>
+                              </button>
+                              <div className="menu-sep" />
+                              <button type="button" className="menu-item danger" onClick={() => openReason('revoke_sessions', u._id)}>
+                                <Monitor size={16} />
+                                <span>Révoquer sessions</span>
+                              </button>
+                              <button type="button" className="menu-item danger" onClick={() => openReason('toggle_status', u._id)}>
+                                {u.status === 'active' ? <Ban size={16} /> : <CheckCircle2 size={16} />}
+                                <span>{u.status === 'active' ? 'Bloquer' : 'Débloquer'}</span>
+                              </button>
+                            </div>
+                          ) : null}
+                        </div>
+                      </div>
                     </td>
                   </tr>
                 ))}
-                {!items.length && (
+                {!!emptyText && (
                   <tr>
-                    <td colSpan={9} className="empty">Aucun utilisateur.</td>
+                    <td colSpan={6} className="empty">{emptyText}</td>
                   </tr>
                 )}
               </tbody>
             </table>
           </div>
+
+          {createOpen ? (
+            <div className="admin-drawer-backdrop" role="dialog" aria-modal="true" onClick={closeDrawer}>
+              <div className="admin-drawer" onClick={(e) => e.stopPropagation()}>
+                <div className="drawer-header">
+                  <div>
+                    <strong>Nouvel utilisateur</strong>
+                    <div className="muted">Création compte + rôle + accès</div>
+                  </div>
+                  <button className="icon-btn" type="button" onClick={closeDrawer} disabled={isLoading} aria-label="Fermer">
+                    <X size={18} />
+                  </button>
+                </div>
+                <div className="drawer-body">
+                  <div className="form-grid">
+                    <label>
+                      Username *
+                      <input value={createDraft.username} onChange={(e) => setCreateDraft((p) => ({ ...p, username: e.target.value }))} disabled={isLoading} maxLength={60} />
+                    </label>
+                    <label>
+                      Email *
+                      <input type="email" value={createDraft.email} onChange={(e) => setCreateDraft((p) => ({ ...p, email: e.target.value }))} disabled={isLoading} maxLength={120} />
+                    </label>
+                    <label>
+                      Téléphone *
+                      <input inputMode="tel" value={createDraft.telephone} onChange={(e) => setCreateDraft((p) => ({ ...p, telephone: e.target.value }))} disabled={isLoading} maxLength={22} placeholder="+21698123456" />
+                    </label>
+                    <label>
+                      Rôle *
+                      <select value={createDraft.role} onChange={(e) => setCreateDraft((p) => ({ ...p, role: e.target.value }))} disabled={isLoading}>
+                        {ROLES.map((r) => <option key={r.id} value={r.id}>{r.label}</option>)}
+                      </select>
+                    </label>
+                    {createDraft.role === 'demandeur' ? (
+                      <>
+                        <label>
+                          Profil catalogue
+                          <select value={createDraft.demandeur_profile} onChange={(e) => setCreateDraft((p) => ({ ...p, demandeur_profile: e.target.value }))} disabled={isLoading}>
+                            {CATALOG_PROFILES_CREATE.map((p) => <option key={p.id} value={p.id}>{p.label}</option>)}
+                          </select>
+                          <div className="helper-text">Choisir “Auto” pour mapper le profil depuis le service/direction.</div>
+                        </label>
+                        <label>
+                          Service / Direction
+                          <input value={createDraft.service_direction} onChange={(e) => setCreateDraft((p) => ({ ...p, service_direction: e.target.value }))} disabled={isLoading} maxLength={80} placeholder="RH, Finance, HSE..." />
+                        </label>
+                      </>
+                    ) : null}
+                    <label className="span-2">
+                      Mot de passe temporaire *
+                      <input type="password" value={createDraft.password} onChange={(e) => setCreateDraft((p) => ({ ...p, password: e.target.value }))} disabled={isLoading} maxLength={64} placeholder="Temporaire (min 8)" />
+                      <div className={`pwd-hint ${createDraft.password ? (isStrongPassword(createDraft.password) ? 'ok' : 'bad') : ''}`}>{PASSWORD_HINT}</div>
+                      <div className="helper-text">Le mot de passe temporaire devra être changé après la première connexion.</div>
+                    </label>
+                  </div>
+                </div>
+                <div className="drawer-footer">
+                  <button className="admin-btn" type="button" onClick={closeDrawer} disabled={isLoading}>Annuler</button>
+                  <button className="admin-btn primary" type="button" onClick={createUser} disabled={isLoading}>
+                    <UserPlus size={16} />
+                    <span>Créer</span>
+                  </button>
+                </div>
+              </div>
+            </div>
+          ) : null}
+
+          {detailUserId && selectedUser ? (
+            <div className="admin-drawer-backdrop" role="dialog" aria-modal="true" onClick={closeDrawer}>
+              <div className="admin-drawer" onClick={(e) => e.stopPropagation()}>
+                <div className="drawer-header">
+                  <div>
+                    <strong>Détail utilisateur</strong>
+                    <div className="muted">{selectedUser.username}</div>
+                  </div>
+                  <button className="icon-btn" type="button" onClick={closeDrawer} disabled={isLoading} aria-label="Fermer">
+                    <X size={18} />
+                  </button>
+                </div>
+                <div className="drawer-body">
+                  <div className="detail-block">
+                    <div><span>Email</span><strong>{selectedUser.email || '—'}</strong></div>
+                    <div><span>Téléphone</span><strong>{selectedUser.telephone || '—'}</strong></div>
+                    <div><span>Rôle</span><strong>{roleLabel(selectedUser.role)}</strong></div>
+                    <div><span>Statut</span><strong>{statusLabel(selectedUser.status)}</strong></div>
+                    <div><span>Service / Direction</span><strong>{safeStr(selectedUser.service_direction) || '—'}</strong></div>
+                    <div><span>Profil catalogue</span><strong>{selectedUser.role === 'demandeur' ? (safeStr(selectedUser.demandeur_profile) || 'bureautique') : '—'}</strong></div>
+                    <div><span>Sessions actives</span><strong>{selectedUser.activeSessionsCount || 0}</strong></div>
+                    <div><span>Dernière activité</span><strong>{formatDateTime(selectedUser.lastActivityAt || selectedUser.last_login)}</strong></div>
+                  </div>
+
+                  {newPasswordById[selectedUser._id] ? (
+                    <div className="admin-card" style={{ marginTop: 12 }}>
+                      <div className="admin-card-title"><KeyRound size={18} /> Mot de passe temporaire</div>
+                      <div className="pwd-row">
+                        <code className="pwd-code">{newPasswordById[selectedUser._id]}</code>
+                        <button className="icon-btn" type="button" onClick={() => copyPassword(selectedUser._id)} title="Copier" disabled={isLoading}>
+                          <Copy size={16} />
+                        </button>
+                      </div>
+                      <div className="admin-note">À communiquer de manière sécurisée. Changement requis à la première connexion.</div>
+                    </div>
+                  ) : null}
+                </div>
+                <div className="drawer-footer">
+                  <button className="admin-btn" type="button" onClick={() => openEdit(selectedUser._id)} disabled={isLoading}>
+                    <Pencil size={16} />
+                    <span>Modifier</span>
+                  </button>
+                  <button className="admin-btn" type="button" onClick={() => openReason('change_role', selectedUser._id, selectedUser.role)} disabled={isLoading}>
+                    <KeyRound size={16} />
+                    <span>Changer rôle</span>
+                  </button>
+                  <button className="admin-btn" type="button" onClick={() => navigate(`/admin/sessions?user=${encodeURIComponent(selectedUser._id)}`)} disabled={isLoading}>
+                    <Monitor size={16} />
+                    <span>Voir sessions</span>
+                  </button>
+                  <button className="admin-btn danger" type="button" onClick={() => openReason('toggle_status', selectedUser._id)} disabled={isLoading}>
+                    {selectedUser.status === 'active' ? <Ban size={16} /> : <CheckCircle2 size={16} />}
+                    <span>{selectedUser.status === 'active' ? 'Bloquer' : 'Débloquer'}</span>
+                  </button>
+                </div>
+              </div>
+            </div>
+          ) : null}
+
+          {editUserId && selectedUser ? (
+            <div className="admin-drawer-backdrop" role="dialog" aria-modal="true" onClick={closeDrawer}>
+              <div className="admin-drawer" onClick={(e) => e.stopPropagation()}>
+                <div className="drawer-header">
+                  <div>
+                    <strong>Modifier utilisateur</strong>
+                    <div className="muted">{selectedUser.username}</div>
+                  </div>
+                  <button className="icon-btn" type="button" onClick={closeDrawer} disabled={isLoading} aria-label="Fermer">
+                    <X size={18} />
+                  </button>
+                </div>
+                <div className="drawer-body">
+                  {selectedUser.role === 'demandeur' ? (
+                    <div className="form-grid">
+                      <label>
+                        Service / Direction
+                        <input value={editDraft.service_direction} onChange={(e) => setEditDraft((p) => ({ ...p, service_direction: e.target.value }))} disabled={isLoading} maxLength={80} />
+                      </label>
+                      <label>
+                        Profil catalogue
+                        <select value={editDraft.demandeur_profile} onChange={(e) => setEditDraft((p) => ({ ...p, demandeur_profile: e.target.value }))} disabled={isLoading}>
+                          {CATALOG_PROFILES.map((p) => <option key={p.id} value={p.id}>{p.label}</option>)}
+                        </select>
+                      </label>
+                    </div>
+                  ) : (
+                    <div className="admin-note">Aucune modification disponible ici pour ce rôle (service/profil concerne les demandeurs).</div>
+                  )}
+                </div>
+                <div className="drawer-footer">
+                  <button className="admin-btn" type="button" onClick={closeDrawer} disabled={isLoading}>Annuler</button>
+                  <button className="admin-btn primary" type="button" onClick={saveEdit} disabled={isLoading}>
+                    <Pencil size={16} />
+                    <span>Enregistrer</span>
+                  </button>
+                </div>
+              </div>
+            </div>
+          ) : null}
+
+          {reasonDialog.open ? (
+            <div className="admin-confirm-backdrop" role="dialog" aria-modal="true" onClick={closeReason}>
+              <div className="admin-confirm" onClick={(e) => e.stopPropagation()}>
+                <div className="confirm-header">
+                  <strong>Confirmer l’action</strong>
+                  <button className="icon-btn" type="button" onClick={closeReason} disabled={isLoading} aria-label="Fermer">
+                    <X size={18} />
+                  </button>
+                </div>
+                {reasonDialog.kind === 'change_role' ? (
+                  <div className="confirm-body">
+                    <div className="confirm-text">Veuillez sélectionner le rôle cible et saisir le motif de cette action.</div>
+                    <label className="confirm-label">
+                      Rôle *
+                      <select value={reasonDialog.nextRole} onChange={(e) => setReasonDialog((p) => ({ ...p, nextRole: e.target.value }))} disabled={isLoading}>
+                        {ROLES.map((r) => <option key={r.id} value={r.id}>{r.label}</option>)}
+                      </select>
+                    </label>
+                    <label className="confirm-label">
+                      Motif de l’action *
+                      <textarea value={reasonText} onChange={(e) => setReasonText(e.target.value)} placeholder="Motif (min 5 caractères)" disabled={isLoading} rows={3} />
+                    </label>
+                  </div>
+                ) : (
+                  <div className="confirm-body">
+                    <div className="confirm-text">Veuillez saisir le motif de cette action.</div>
+                    <label className="confirm-label">
+                      Motif de l’action *
+                      <textarea value={reasonText} onChange={(e) => setReasonText(e.target.value)} placeholder="Motif (min 5 caractères)" disabled={isLoading} rows={3} />
+                    </label>
+                  </div>
+                )}
+                <div className="confirm-footer">
+                  <button className="admin-btn" type="button" onClick={closeReason} disabled={isLoading}>Annuler</button>
+                  <button className="admin-btn primary" type="button" onClick={confirmReason} disabled={isLoading}>
+                    <KeyRound size={16} />
+                    <span>Confirmer</span>
+                  </button>
+                </div>
+              </div>
+            </div>
+          ) : null}
         </div>
       </div>
     </div>
   );
-};
+}
 
-export default AdminUsers;

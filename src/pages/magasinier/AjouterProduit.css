@@ -86,6 +86,26 @@
   font-size: 0.85rem;
 }
 
+.doublon-actions {
+  margin-top: 0.5rem;
+}
+
+.doublon-link {
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font-weight: 700;
+  padding: 0;
+  cursor: pointer;
+  text-decoration: underline;
+}
+
+.doublon-warning.name-doublon {
+  background: rgba(245, 158, 11, 0.12);
+  border: 1px solid rgba(245, 158, 11, 0.35);
+  color: #92400e;
+}
+
 .doublon-warning button {
   background: none;
   border: none;
@@ -102,6 +122,7 @@
 
 .ajouter-form {
   padding: 1.5rem;
+  padding-bottom: 6rem;
 }
 
 .form-mode-toggle {
@@ -302,8 +323,28 @@
   display: flex;
   gap: 1rem;
   justify-content: flex-end;
-  padding-top: 1.5rem;
+  align-items: center;
+  position: sticky;
+  bottom: 0;
+  z-index: 5;
+  background: var(--color-bg-primary);
+  padding: 0.9rem 1.5rem;
+  margin: 1.25rem -1.5rem -1.5rem;
   border-top: 1px solid var(--color-border);
+}
+
+.form-summary {
+  margin-right: auto;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  font-size: 0.8rem;
+  color: var(--color-text-secondary);
+  max-width: 55%;
+}
+
+.form-summary strong {
+  color: var(--color-text-primary);
 }
 
 .btn-cancel,
@@ -369,6 +410,11 @@
 
   .form-actions {
     flex-direction: column;
+    align-items: stretch;
+  }
+
+  .form-summary {
+    max-width: 100%;
   }
 
   .btn-cancel,

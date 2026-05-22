@@ -123,11 +123,38 @@ function ensureAdmin(req, res) {
   return true;
 }
 
+async function logAiAdminAction(req, { action, result, details, meta } = {}) {
+  try {
+    if (!req?.user?.id) return;
+    const cleanAction = String(action || '').trim() || 'Action IA';
+    const cleanResult = String(result || '').trim() || 'success';
+    const cleanDetails = details ? String(details).slice(0, 800) : null;
+    const context = {
+      action: cleanAction,
+      result: cleanResult,
+      details: cleanDetails,
+      ...(meta && typeof meta === 'object' ? meta : {}),
+    };
+
+    await History.create({
+      action_type: 'ai_admin',
+      user: req.user.id,
+      source: 'ia',
+      description: cleanAction,
+      actor_role: req.user.role,
+      tags: ['ai', 'admin', cleanAction],
+      context,
+    });
+  } catch (_) {
+    // observability should never block admin actions
+  }
+}
+
 function ensureAiPredictionsEnabled(config, res) {
   if (config?.predictionsEnabled !== false) return true;
   res.status(409).json({
     error: 'Predictions IA desactivees',
-    details: 'Activez "Predictions de rupture" dans Parametres > Intelligence Artificielle.',
+    details: 'Activez "Predictions de rupture" dans Paramètres > Intelligence Artificielle.',
   });
   return false;
 }
@@ -250,7 +277,7 @@ function ensureConsumptionAnalysisEnabled(config, res) {
   if (config?.analyseConsommation !== false) return true;
   res.status(409).json({
     error: 'Analyse de consommation desactivee',
-    details: 'Activez "Analyse de consommation" dans Parametres > Intelligence Artificielle.',
+    details: 'Activez "Analyse de consommation" dans Paramètres > Intelligence Artificielle.',
   });
   return false;
 }
@@ -361,7 +388,7 @@ router.post('/alerts/refresh', requireAuth, strictBody(['window_days', 'max_prod
       return res.status(409).json({
         ok: false,
         error: 'Alertes IA desactivees',
-        details: 'Activez "Alertes automatiques" dans Parametres > Intelligence Artificielle.',
+        details: 'Activez "Alertes automatiques" dans Paramètres > Intelligence Artificielle.',
       });
     }
 
@@ -389,9 +416,85 @@ router.post('/alerts/rebuild', requireAuth, async (req, res) => {
     if (!ensureAdmin(req, res)) return;
     const maxProducts = Number(req.body?.max_products || 300);
     const summary = await rebuildAiAlerts({ max_products: maxProducts });
+    await logAiAdminAction(req, {
+      action: 'Alertes recalculées',
+      result: 'success',
+      meta: { max_products: maxProducts },
+    });
     return res.json(summary);
   } catch (err) {
+    await logAiAdminAction(req, {
+      action: 'Alertes recalculées',
+      result: 'error',
+      details: err.message,
+    });
     return res.status(500).json({ error: 'Failed to rebuild AI alerts', details: err.message });
+  }
+});
+
+router.get('/admin/kpis', requireAuth, async (req, res) => {
+  try {
+    if (!ensureAdmin(req, res)) return;
+
+    const [registry, aiConfig, alertsCount, predictionsCount] = await Promise.all([
+      getSettingValue('ai_models_registry_v2', null),
+      getAiConfig(),
+      AIAlert.countDocuments({}),
+      AIPrediction.countDocuments({}),
+    ]);
+
+    const productsAnalyzed = Number.isFinite(Number(registry?.stats?.products_count))
+      ? Number(registry.stats.products_count)
+      : null;
+
+    const predictionsAvailable = aiConfig?.predictionsEnabled === false
+      ? false
+      : (Boolean(registry?.trained_at) || predictionsCount > 0 ? true : null);
+
+    const sinceDays = Math.max(1, Math.min(90, Number(req.query?.errors_window_days || 7)));
+    const since = new Date(Date.now() - sinceDays * 24 * 60 * 60 * 1000);
+    const errorsAi = await History.countDocuments({
+      action_type: 'ai_admin',
+      date_action: { $gte: since },
+      'context.result': 'error',
+    });
+
+    return res.json({
+      ok: true,
+      products_analyzed: productsAnalyzed,
+      alerts_generated: Number(alertsCount || 0),
+      predictions_available: predictionsAvailable,
+      errors_ai: Number(errorsAi || 0),
+      generated_at: new Date().toISOString(),
+    });
+  } catch (err) {
+    return res.status(500).json({ error: 'Failed to fetch AI KPIs', details: err.message });
+  }
+});
+
+router.get('/admin/recent-actions', requireAuth, async (req, res) => {
+  try {
+    if (!ensureAdmin(req, res)) return;
+
+    const limit = Math.max(1, Math.min(20, Number(req.query?.limit || 8)));
+    const rows = await History.find({ action_type: 'ai_admin' })
+      .sort({ date_action: -1, createdAt: -1 })
+      .limit(limit)
+      .populate('user', 'username role')
+      .lean();
+
+    const items = (rows || []).map((h) => ({
+      id: String(h._id),
+      date: h.date_action || h.createdAt || null,
+      action: h.context?.action || h.description || 'Action IA',
+      result: h.context?.result || 'success',
+      user: h.user?.username || 'Admin',
+      details: h.context?.details || null,
+    }));
+
+    return res.json({ ok: true, items });
+  } catch (err) {
+    return res.status(500).json({ error: 'Failed to fetch recent AI actions', details: err.message });
   }
 });
 
@@ -614,6 +717,12 @@ router.post('/models/train', requireAuth, strictBody(['lookback_days', 'force'])
     await setSettingValue('ai_models_backtesting_v2', backtesting, req.user.id);
     await appendVersionSnapshot(registry, metrics, backtesting, req.user.id);
 
+    await logAiAdminAction(req, {
+      action: 'Entraînement lancé',
+      result: 'success',
+      meta: { lookback_days: lookbackDays, forced: Boolean(force) },
+    });
+
     return res.json({
       ok: true,
       message: 'Modeles IA entraines + datasets exportes + metrics/backtesting enregistres.',
@@ -622,6 +731,11 @@ router.post('/models/train', requireAuth, strictBody(['lookback_days', 'force'])
       backtesting,
     });
   } catch (err) {
+    await logAiAdminAction(req, {
+      action: 'Entraînement lancé',
+      result: 'error',
+      details: err.message,
+    });
     return res.status(500).json({ error: 'Failed to train models', details: err.message });
   }
 });
@@ -1522,7 +1636,7 @@ router.get('/magasinier-inbox', requireAuth, async (req, res) => {
         .populate('assigned_by', 'username role')
         .lean(),
       Request.find({ status: { $in: ['validated', 'accepted', 'preparing'] } })
-        .select('_id status quantity_requested date_request demandeur direction_laboratory note createdAt priority')
+        .select('_id status quantity_requested date_request demandeur direction_laboratory note createdAt priority validated_at prepared_at date_served updatedAt')
         .populate('product', 'name code_product quantity_current seuil_minimum')
         .populate('demandeur', 'username role')
         .sort({ updatedAt: -1, date_request: -1, createdAt: -1 })
@@ -1577,11 +1691,14 @@ router.get('/magasinier-inbox', requireAuth, async (req, res) => {
         },
         quantity_requested: Number(r.quantity_requested || 0),
         demandeur: r.demandeur?.username || 'Demandeur',
+        demandeur_id: String(r.demandeur?._id || ''),
         direction_laboratory: r.direction_laboratory || '-',
         note: r.note || '',
         priority,
         priority_label: priority === 'critical' ? 'TRES URGENT' : priority === 'urgent' ? 'URGENT' : 'NORMAL',
         created_at: r.date_request || r.createdAt || null,
+        validated_at: r.validated_at || null,
+        prepared_at: r.prepared_at || null,
       };
     });
 

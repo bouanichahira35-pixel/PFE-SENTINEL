@@ -50,11 +50,17 @@ const ParametresDem = ({ userName, onLogout }) => {
   });
 
   const tabs = useMemo(() => ([
-    { id: 'profil', label: ({ fr: 'Profil', en: 'Profile', ar: 'Profil' }[uiLanguage]), icon: User },
-    { id: 'securite', label: ({ fr: 'Securite', en: 'Security', ar: 'Securite' }[uiLanguage]), icon: Lock },
-    { id: 'notifications', label: ({ fr: 'Notifications', en: 'Notifications', ar: 'Notifications' }[uiLanguage]), icon: Bell },
-    { id: 'langue', label: ({ fr: 'Langue', en: 'Language', ar: 'Langue' }[uiLanguage]), icon: Globe },
+    { id: 'profil', label: ({ fr: 'Profil', en: 'Profile', ar: 'الملف الشخصي' }[uiLanguage]), icon: User },
+    { id: 'securite', label: ({ fr: 'Sécurité', en: 'Security', ar: 'الأمان' }[uiLanguage]), icon: Lock },
+    { id: 'notifications', label: ({ fr: 'Notifications', en: 'Notifications', ar: 'الإشعارات' }[uiLanguage]), icon: Bell },
+    { id: 'langue', label: ({ fr: 'Langue', en: 'Language', ar: 'اللغة' }[uiLanguage]), icon: Globe },
   ]), [uiLanguage]);
+
+  const i18n = useMemo(() => ({
+    fr: { title: 'Paramètres', securityTitle: 'Sécurité', languageTitle: 'Langue' },
+    en: { title: 'Settings', securityTitle: 'Security', languageTitle: 'Language' },
+    ar: { title: 'الإعدادات', securityTitle: 'الأمان', languageTitle: 'اللغة' },
+  }[uiLanguage] || { title: 'Paramètres', securityTitle: 'Sécurité', languageTitle: 'Langue' }), [uiLanguage]);
 
   const avatarUrl = useProtectedFileUrl(profileData.imageProfile);
   const displayAvatarUrl = avatarPreviewUrl || avatarUrl;
@@ -91,7 +97,7 @@ const ParametresDem = ({ userName, onLogout }) => {
       setLangue(nextLang);
       setUiLanguage(nextLang);
     } catch (err) {
-      toast.error(err.message || 'Erreur chargement parametres');
+      toast.error(err.message || 'Erreur chargement paramètres');
     } finally {
       setIsLoading(false);
     }
@@ -119,7 +125,7 @@ const ParametresDem = ({ userName, onLogout }) => {
     try {
       let imageProfile = profileData.imageProfile;
       if (avatarFile) {
-        const uploaded = await uploadFile('/files/upload', avatarFile);
+        const uploaded = await uploadFile('/settings/me/avatar', avatarFile);
         imageProfile = uploaded?.file_url || imageProfile;
       }
 
@@ -159,13 +165,16 @@ const ParametresDem = ({ userName, onLogout }) => {
     }
     setIsSaving(true);
     try {
-      await patch('/settings/me/password', {
+      const res = await patch('/settings/me/password', {
         current_password: securityData.currentPassword,
         new_password: securityData.newPassword,
         confirm_password: securityData.confirmPassword,
       });
       setSecurityData({ currentPassword: '', newPassword: '', confirmPassword: '' });
-      toast.success('Mot de passe mis a jour');
+      toast.success(res?.message || 'Mot de passe modifié. Reconnexion requise.');
+      if (res?.logout_required && onLogout) {
+        onLogout('Mot de passe modifié. Veuillez vous reconnecter.', { remote: false });
+      }
     } catch (err) {
       toast.error(err.message || 'Erreur modification mot de passe');
     } finally {
@@ -180,9 +189,9 @@ const ParametresDem = ({ userName, onLogout }) => {
         language: next.language || langue,
         notifications: next.notifications || notifications,
       });
-      toast.success('Preferences enregistrees');
+      toast.success('Préférences enregistrées');
     } catch (err) {
-      toast.error(err.message || 'Erreur enregistrement preferences');
+      toast.error(err.message || 'Erreur enregistrement préférences');
     } finally {
       setIsSaving(false);
     }
@@ -214,7 +223,7 @@ const ParametresDem = ({ userName, onLogout }) => {
       <div className="main-container">
         <HeaderPage
           userName={userName}
-          title="Parametres"
+          title={i18n.title}
           showSearch={false}
           onMenuClick={() => setSidebarCollapsed((prev) => !prev)}
         />
@@ -286,7 +295,7 @@ const ParametresDem = ({ userName, onLogout }) => {
 
               {activeTab === 'securite' && (
                 <div className="param-section">
-                  <h2>Securite</h2>
+                  <h2>{i18n.securityTitle}</h2>
                   <div className="security-form">
                     <div className="form-group">
                       <label>Mot de passe actuel</label>
@@ -382,10 +391,13 @@ const ParametresDem = ({ userName, onLogout }) => {
 
               {activeTab === 'langue' && (
                 <div className="param-section">
-                  <h2>Langue</h2>
+                  <h2>{i18n.languageTitle}</h2>
                   <div className="langue-selector">
                     <button className={`langue-option ${langue === 'fr' ? 'active' : ''}`} type="button" onClick={() => saveLanguage('fr')}>
                       Francais
+                    </button>
+                    <button className={`langue-option ${langue === 'ar' ? 'active' : ''}`} type="button" onClick={() => saveLanguage('ar')}>
+                      العربية
                     </button>
                     <button className={`langue-option ${langue === 'en' ? 'active' : ''}`} type="button" onClick={() => saveLanguage('en')}>
                       English

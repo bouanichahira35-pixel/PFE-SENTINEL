@@ -20,7 +20,7 @@ function computeStockBadge(quantity, seuil) {
 
 function categoryIconNode(categoryName) {
   const name = String(categoryName || '').toLowerCase();
-  const commonStyle = { width: 18, height: 18, color: '#334155' };
+  const commonStyle = { width: 18, height: 18 };
   if (name.includes('info')) return <Monitor {...commonStyle} />;
   if (name.includes('outil')) return <Wrench {...commonStyle} />;
   if (name.includes('chim') || name.includes('gaz') || name.includes('labo')) return <FlaskConical {...commonStyle} />;
@@ -245,13 +245,13 @@ const ProduitsDem = ({ userName, onLogout }) => {
         <main className="main-content"> 
           {isLoadingProducts && <LoadingSpinner overlay text="Chargement des produits..." />} 
           <div className="products-dem-page"> 
-            <div style={{ display: 'flex', gap: 12, alignItems: 'center', flexWrap: 'wrap', marginBottom: 14 }}>
-              <div style={{ fontSize: 12, fontWeight: 900, color: '#64748b' }}>Categorie:</div>
+            <div className="products-dem-toolbar">
+              <div className="products-dem-filter-label">Categorie:</div>
               <select
                 value={selectedCategory}
                 onChange={(e) => setSelectedCategory(e.target.value)}
                 disabled={isLoadingCategories || isLoadingProducts}
-                style={{ padding: '10px 12px', borderRadius: 12, border: '1px solid #e2e8f0', fontWeight: 900, minWidth: 220 }}
+                className="products-dem-select"
               >
                 <option value="all">Toutes</option>
                 {categories.map((c) => (
@@ -260,8 +260,8 @@ const ProduitsDem = ({ userName, onLogout }) => {
                   </option>
                 ))}
               </select>
-              {isLoadingCategories && <div style={{ fontSize: 12, fontWeight: 800, color: '#64748b' }}>Chargement categories...</div>}
-              <div style={{ marginLeft: 'auto', fontSize: 12, fontWeight: 900, color: '#0f172a', background: '#eef2ff', padding: '6px 10px', borderRadius: 999 }}>
+              {isLoadingCategories && <div className="products-dem-loading">Chargement categories...</div>}
+              <div className="products-dem-profile-badge">
                 Profil catalogue: {PROFILE_LABELS[demandeurProfile] || 'Bureautique'}
               </div>
             </div>

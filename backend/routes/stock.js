@@ -269,6 +269,46 @@ async function getNextEntryNumber() {
   return `BE-${year}-${String(counter.seq).padStart(5, '0')}`;
 }
 
+function formatYYYYMMDD(date) {
+  const d = date instanceof Date ? date : new Date(date);
+  const yyyy = d.getFullYear();
+  const mm = String(d.getMonth() + 1).padStart(2, '0');
+  const dd = String(d.getDate()).padStart(2, '0');
+  return `${yyyy}${mm}${dd}`;
+}
+
+async function getNextLotNumber(dateEntry) {
+  const yyyymmdd = formatYYYYMMDD(dateEntry || new Date());
+  const counterName = `stock_lot_${yyyymmdd}`;
+
+  // Bootstrap the counter from existing data (avoid duplicates when migrating older datasets).
+  const existingCounter = await Sequence.findOne({ counter_name: counterName }).select('_id seq').lean();
+  if (!existingCounter) {
+    const regex = new RegExp(`^LOT-${yyyymmdd}-(\\d{3})$`);
+    const existingLots = await StockEntry.find({ lot_number: { $regex: regex } }).select('lot_number').lean();
+    let maxSeq = 0;
+    for (const row of existingLots) {
+      const lot = String(row?.lot_number || '');
+      const m = lot.match(regex);
+      const n = m ? Number(m[1]) : 0;
+      if (Number.isFinite(n) && n > maxSeq) maxSeq = n;
+    }
+    await Sequence.updateOne(
+      { counter_name: counterName },
+      { $setOnInsert: { seq: maxSeq } },
+      { upsert: true }
+    );
+  }
+
+  const counter = await Sequence.findOneAndUpdate(
+    { counter_name: counterName },
+    { $inc: { seq: 1 } },
+    { returnDocument: 'after', upsert: true }
+  );
+
+  return `LOT-${yyyymmdd}-${String(counter.seq).padStart(3, '0')}`;
+}
+
 async function getNextExitNumber() {
   const year = new Date().getFullYear();
   const counterName = `stock_exit_${year}`;
@@ -834,6 +874,7 @@ router.post(
     if (deliveryDate === null) errors.push('delivery_date invalide');
     const dateEntry = asDate(req.body.date_entry);
     if (dateEntry === null) errors.push('date_entry invalide');
+    if (dateEntry === undefined) errors.push('date_entry obligatoire');
     const unitPrice = asNonNegativeNumber(req.body.unit_price);
     if (Number.isNaN(unitPrice)) errors.push('unit_price doit etre un nombre >= 0');
     const submissionDurationMs = sanitizeDurationMs(req.body.submission_duration_ms);
@@ -842,13 +883,13 @@ router.post(
     // Optional text fields: keep them safe & bounded (no < >, no control chars).
     const purchaseOrderNumber = validateOptionalText(errors, 'purchase_order_number', req.body.purchase_order_number, { min: 0, max: 80 });
     const purchaseVoucherNumber = validateOptionalText(errors, 'purchase_voucher_number', req.body.purchase_voucher_number, { min: 0, max: 80 });
-    const deliveryNoteNumberRaw = validateOptionalText(errors, 'delivery_note_number', req.body.delivery_note_number, { min: 0, max: 80 });
+    const deliveryNoteNumberRaw = validateOptionalText(errors, 'delivery_note_number', req.body.delivery_note_number, { min: 1, max: 80 });
     const serviceRequester = validateOptionalText(errors, 'service_requester', req.body.service_requester, { min: 0, max: 80 });
-    const supplier = validateOptionalText(errors, 'supplier', req.body.supplier, { min: 0, max: 90 });
+    const supplier = validateOptionalText(errors, 'supplier', req.body.supplier, { min: 1, max: 90 });
     const commercialName = validateOptionalText(errors, 'commercial_name', req.body.commercial_name, { min: 0, max: 140 });
     const referenceCode = validateOptionalText(errors, 'reference_code', req.body.reference_code, { min: 0, max: 80 });
-    const lotNumber = validateOptionalText(errors, 'lot_number', req.body.lot_number, { min: 0, max: 80 });
-    const lotQrValue = validateOptionalText(errors, 'lot_qr_value', req.body.lot_qr_value, { min: 0, max: 140 });
+    const lotNumberIncoming = validateOptionalText(errors, 'lot_number', req.body.lot_number, { min: 0, max: 80 });
+    const lotQrValueIncoming = validateOptionalText(errors, 'lot_qr_value', req.body.lot_qr_value, { min: 0, max: 140 });
     const inventoryNumber = validateOptionalText(errors, 'inventory_number', req.body.inventory_number, { min: 0, max: 80 });
     const patrimoineNumber = validateOptionalText(errors, 'patrimoine_number', req.body.patrimoine_number, { min: 0, max: 80 });
     const beneficiary = validateOptionalText(errors, 'beneficiary', req.body.beneficiary, { min: 0, max: 80 });
@@ -861,6 +902,9 @@ router.post(
     const attachments = sanitizeAttachments(req.body.attachments);
     const expiryDate = req.body.expiry_date !== undefined ? asDate(req.body.expiry_date) : undefined;
     if (expiryDate === null) errors.push('expiry_date invalide');
+
+    if (!deliveryNoteNumberRaw) errors.push('delivery_note_number obligatoire');
+    if (!supplier) errors.push('supplier obligatoire');
 
     if (errors.length > 0) {
       return res.status(400).json({ error: 'Validation failed', details: errors });
@@ -875,6 +919,11 @@ router.post(
     }
 
     const deliveryNoteNumber = deliveryNoteNumberRaw;
+
+    // Business rule: lot is mandatory, but not manually entered by the magasinier UI.
+    // If no lot is provided (UI path), the system generates a unique business lot number.
+    const lotNumber = lotNumberIncoming || await getNextLotNumber(dateEntry);
+    const lotQrValue = lotQrValueIncoming || lotNumber;
 
     if (deliveryNoteNumber && supplier) {
       const normalizedSupplier = normalizeHumanText(supplier);
@@ -941,7 +990,7 @@ router.post(
         contract_number: contractNumber,
         observation,
         attachments,
-        date_entry: dateEntry || new Date(),
+        date_entry: dateEntry,
         magasinier: req.user.id,
       };
 
@@ -975,6 +1024,15 @@ router.post(
         quantity,
         source: 'ui',
         description: `Bon d'entree cree (${entry.entry_number})`,
+        actor_role: req.user.role,
+        tags: ['entry', 'stock_entry'],
+        context: {
+          entry_id: String(entry._id),
+          entry_number: entry.entry_number,
+          lot_number: entry.lot_number || null,
+          delivery_note_number: entry.delivery_note_number || null,
+          supplier: entry.supplier || null,
+        },
       };
       if (session) await History.create([historyPayload], { session });
       else await History.create(historyPayload);
@@ -1533,7 +1591,7 @@ router.post(
       let remaining = quantity;
       const consumedLots = [];
 
-      for (const lot of lots) {
+      for (const lot of sortedLots) {
         if (remaining <= 0) break;
         const take = Math.min(remaining, Number(lot.quantity_available || 0));
         if (take <= 0) continue;

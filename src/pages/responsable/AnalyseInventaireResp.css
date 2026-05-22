@@ -437,3 +437,32 @@
 @media (max-width: 640px) {
   .inv-an-search input { width: 220px; }
 }
+
+/* Quick filters (Tous / Écarts / Critiques / OK) */
+.inv-an-filters {
+  display: inline-flex;
+  gap: 8px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.inv-filter {
+  border: 1px solid hsl(var(--border));
+  background: #fff;
+  color: #0f172a;
+  border-radius: 999px;
+  padding: 8px 12px;
+  font-weight: 900;
+  cursor: pointer;
+  transition: transform 140ms ease;
+}
+
+.inv-filter:hover {
+  transform: translateY(-1px);
+}
+
+.inv-filter.active {
+  border: 0;
+  color: #fff;
+  background: linear-gradient(135deg, var(--color-primary-dark), var(--color-primary));
+}

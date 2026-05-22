@@ -159,7 +159,7 @@ const AdminSettings = ({ userName, onLogout }) => {
         userName={userName}
       />
       <div className={`admin-main ${sidebarCollapsed ? 'collapsed' : ''}`}>
-        <HeaderPage title="Parametres Admin" subtitle="Configuration technique (optionnelle)" icon={<Settings size={24} />} />
+        <HeaderPage title="Paramètres Admin" subtitle="Configuration technique (optionnelle)" icon={<Settings size={24} />} />
         {(isLoading || isSaving) && <LoadingSpinner overlay text={isSaving ? 'Enregistrement...' : 'Chargement...'} />}
         <div className="admin-page">
           <div className="admin-toolbar">

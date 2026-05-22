@@ -7,7 +7,8 @@ const STOCK_RULES_DEFAULT = Object.freeze({
   activerAlertesAutomatiques: true,
 
   // Validation rules
-  validationObligatoireNouveauxProduits: true,
+  // Feature removed: new products are always usable immediately (no responsable validation).
+  validationObligatoireNouveauxProduits: false,
   validationApresModificationSeuil: false,
   validationApresChangementCategorie: false,
   produitsIncompletsEnAverifier: true,
@@ -43,15 +44,8 @@ function sanitizeStockRulesConfig(input) {
   next.bloquerSortiesStockInsuffisant = asBool(raw.bloquerSortiesStockInsuffisant, next.bloquerSortiesStockInsuffisant);
   next.activerAlertesAutomatiques = asBool(raw.activerAlertesAutomatiques, next.activerAlertesAutomatiques);
 
-  // Backward compat: old key used by the UI
-  if (raw.validationObligatoire !== undefined) {
-    next.validationObligatoireNouveauxProduits = Boolean(raw.validationObligatoire);
-  } else {
-    next.validationObligatoireNouveauxProduits = asBool(
-      raw.validationObligatoireNouveauxProduits,
-      next.validationObligatoireNouveauxProduits
-    );
-  }
+  // Feature removed: never require responsable validation on new product creation.
+  next.validationObligatoireNouveauxProduits = false;
 
   next.validationApresModificationSeuil = asBool(raw.validationApresModificationSeuil, next.validationApresModificationSeuil);
   next.validationApresChangementCategorie = asBool(raw.validationApresChangementCategorie, next.validationApresChangementCategorie);
@@ -91,4 +85,3 @@ module.exports = {
   sanitizeStockRulesConfig,
   diffStockRules,
 };
-

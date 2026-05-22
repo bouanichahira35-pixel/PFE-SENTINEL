@@ -65,30 +65,30 @@ const AdminDashboard = ({ userName, onLogout }) => {
   const [isLoading, setIsLoading] = useState(false);
   const [health, setHealth] = useState(null);
   const [assistantStatus, setAssistantStatus] = useState(null);
-  const [geminiStatus, setGeminiStatus] = useState(null);
   const [overview, setOverview] = useState(null);
   const [perf, setPerf] = useState(null);
   const [supportSummary, setSupportSummary] = useState(null);
+  const [weeklyAiSummary, setWeeklyAiSummary] = useState(null);
   const [lastRefreshAt, setLastRefreshAt] = useState(null);
   const [showPerfDetails, setShowPerfDetails] = useState(false);
 
   const loadAll = useCallback(async () => {
     setIsLoading(true);
     try {
-      const [h, assistant, gemini, ov, pf, sup] = await Promise.all([
+      const [h, assistant, ov, pf, sup, weekly] = await Promise.all([
         get('/health').catch(() => null),
         get('/ai/assistant/status').catch(() => null),
-        get('/ai/gemini/status').catch(() => null),
         get('/admin/overview').catch(() => null),
         get('/admin/perf?window_ms=900000&limit=6').catch(() => null),
         get('/admin/support/summary').catch(() => null),
+        get('/admin/ai/weekly-summary?days=7&limit=6').catch(() => null),
       ]);
       setHealth(h);
       setAssistantStatus(assistant);
-      setGeminiStatus(gemini);
       setOverview(ov);
       setPerf(pf);
       setSupportSummary(sup);
+      setWeeklyAiSummary(weekly);
       setLastRefreshAt(new Date().toISOString());
     } catch (err) {
       toast.error(err.message || 'Erreur chargement console admin');
@@ -160,6 +160,11 @@ const AdminDashboard = ({ userName, onLogout }) => {
   const systemSummary = useMemo(() => {
     const mongodbOk = Boolean(security.signals?.mongodb_ok ?? (health?.mongodb?.ready_state === 1));
     const assistantOk = Boolean(assistantStatus?.ok);
+    const predictionsEnabled = Boolean(assistantStatus?.ai_config?.predictionsEnabled);
+    const geminiConfigured = Boolean(assistantStatus?.gemini?.configured);
+    const geminiModel = String(assistantStatus?.gemini?.model_default || '').trim();
+    const modelsTrained = Boolean(assistantStatus?.models?.trained);
+    const modelVersion = String(assistantStatus?.models?.model_version || '').trim();
     const criticalCount = healthIssues.critical.length;
 
     const appLine = systemState.label === 'opérationnel'
@@ -171,11 +176,37 @@ const AdminDashboard = ({ userName, onLogout }) => {
           : 'État global indisponible pour le moment.'));
 
     const dbLine = mongodbOk ? 'La base de données est connectée.' : 'La base de données doit être vérifiée.';
-    const aiLine = assistantOk ? 'L’assistant IA est disponible.' : 'L’assistant IA est indisponible.';
+    let aiLine = assistantOk ? 'L’assistant IA est disponible.' : 'L’assistant IA est indisponible.';
+    if (assistantOk) {
+      if (!predictionsEnabled) {
+        aiLine = "IA désactivée dans la configuration (prédictions OFF).";
+      } else {
+        const parts = [];
+        parts.push(geminiConfigured ? 'Gemini: OK' : 'Gemini: à configurer');
+        if (geminiModel) parts.push(`modèle: ${geminiModel}`);
+        parts.push(modelsTrained ? 'modèles: entraînés' : 'modèles: à entraîner');
+        if (modelVersion) parts.push(`version: ${modelVersion}`);
+        aiLine = `IA — ${parts.join(' • ')}`;
+      }
+    }
     const incidentsLine = criticalCount === 0 ? 'Aucun incident critique détecté.' : `${criticalCount} problème(s) critique(s) détecté(s).`;
 
     return { appLine, dbLine, aiLine, incidentsLine };
   }, [assistantStatus, health, healthIssues.critical.length, security.signals, systemState.label]);
+
+  const weeklyReport = useMemo(() => {
+    const text = String(weeklyAiSummary?.report?.text || '').trim();
+    return {
+      ok: Boolean(weeklyAiSummary?.ok) && Boolean(text),
+      text,
+      generatedAt: weeklyAiSummary?.generated_at || null,
+      cached: Boolean(weeklyAiSummary?.cached),
+      source: weeklyAiSummary?.report?.source || null,
+      chatbotReady: Boolean(weeklyAiSummary?.stats?.chatbot?.ready),
+      geminiConfigured: Boolean(weeklyAiSummary?.stats?.chatbot?.gemini_configured),
+      pythonState: weeklyAiSummary?.stats?.chatbot?.python?.state || null,
+    };
+  }, [weeklyAiSummary]);
 
   return (
     <div className="admin-layout">
@@ -231,6 +262,45 @@ const AdminDashboard = ({ userName, onLogout }) => {
               </div>
             </div>
 
+            <div className="admin-card admin-card-wide admin-ai-weekly">
+              <div className="admin-card-title"><Sparkles size={18} /> Résumé IA (hebdo)</div>
+
+              <div className="admin-ai-weekly-strip">
+                <div className="admin-ai-weekly-strip-icon">
+                  <Sparkles size={18} />
+                </div>
+                <div className="admin-ai-weekly-strip-body">
+                  <div className="admin-ai-weekly-strip-title">Petit rapport génératif sur les 7 derniers jours</div>
+                  <div className="admin-ai-weekly-strip-meta">
+                    {weeklyReport.generatedAt ? `Généré : ${formatDateTime(weeklyReport.generatedAt)}` : 'Génération en attente'}
+                    {weeklyReport.cached ? ' • cache' : ''}
+                    {weeklyReport.source ? ` • source : ${weeklyReport.source}` : ''}
+                  </div>
+                </div>
+                <div className="admin-ai-weekly-strip-right">
+                  <span className={`admin-pill ${weeklyReport.chatbotReady ? 'ok' : 'warn'}`}>
+                    Chatbot : {weeklyReport.chatbotReady ? 'OK' : 'À vérifier'}
+                  </span>
+                </div>
+              </div>
+
+              {weeklyReport.ok ? (
+                <div className="admin-ai-weekly-report" aria-label="Résumé IA hebdomadaire">
+                  {weeklyReport.text}
+                </div>
+              ) : (
+                <div className="admin-warn">
+                  Résumé IA indisponible pour le moment. Cliquez sur « Actualiser » pour réessayer.
+                </div>
+              )}
+
+              {!weeklyReport.chatbotReady ? (
+                <div className="admin-note" style={{ marginTop: 10 }}>
+                  Détails : Gemini {weeklyReport.geminiConfigured ? 'configuré' : 'non configuré'} • Python {weeklyReport.pythonState || 'inconnu'}.
+                </div>
+              ) : null}
+            </div>
+
             <div className="admin-card">
               <div className="admin-card-title"><LifeBuoy size={18} /> Support utilisateurs</div>
               <div className="admin-kv">
@@ -273,19 +343,6 @@ const AdminDashboard = ({ userName, onLogout }) => {
               </div>
               <div className="admin-note">
                 Ces options peuvent être activées plus tard pour les notifications.
-              </div>
-            </div>
-
-            <div className="admin-card">
-              <div className="admin-card-title"><Sparkles size={18} /> Assistant IA</div>
-              <div className="admin-kv">
-                <div><span>État</span><strong>{assistantStatus?.ok ? 'disponible' : 'indisponible'}</strong></div>
-                <div><span>Service IA</span><strong>{geminiStatus?.configured ? 'connecté' : 'non connecté'}</strong></div>
-                <div><span>Dernier test</span><strong>Aujourd’hui</strong></div>
-                <div><span>Problèmes détectés</span><strong>{assistantStatus?.ok ? 0 : 1}</strong></div>
-              </div>
-              <div className="admin-note">
-                Permet de vérifier que l’assistant est bien disponible pour les responsables.
               </div>
             </div>
 

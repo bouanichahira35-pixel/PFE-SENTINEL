@@ -2,19 +2,14 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   AlertTriangle,
   ShieldAlert,
-  CheckCircle2,
-  Package,
   Clock,
-  CheckCircle,
-  XCircle,
-  Edit3,
 } from 'lucide-react';
 import SidebarResp from '../../components/responsable/SidebarResp';
 import HeaderPage from '../../components/shared/HeaderPage';
 import ProtectedPage from '../../components/shared/ProtectedPage';
 import LoadingSpinner from '../../components/shared/LoadingSpinner';
 import { useToast } from '../../components/shared/Toast';
-import { get, post, put } from '../../services/api';
+import { post } from '../../services/api';
 import './SurveillanceResp.css';
 
 function levelFromRisk(probability, underThreshold) {
@@ -28,12 +23,9 @@ const SurveillanceResp = ({ userName, onLogout }) => {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(() => (typeof window !== 'undefined' ? window.innerWidth <= 768 : false));
   const [isLoading, setIsLoading] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [pendingProducts, setPendingProducts] = useState([]);
   const [aiStockout, setAiStockout] = useState([]);
   const [aiCopilot, setAiCopilot] = useState(null);
   const [aiAnomaly, setAiAnomaly] = useState([]);
-  const [editingSeuilId, setEditingSeuilId] = useState(null);
-  const [editedSeuil, setEditedSeuil] = useState('');
 
   const loadData = useCallback(async () => {
     setIsLoading(true);
@@ -43,7 +35,6 @@ const SurveillanceResp = ({ userName, onLogout }) => {
         post('/ai/copilot/recommendations', { horizon_days: 14, top_n: 10, simulations: [] }).catch(() => null),
         post('/ai/predict/anomaly', {}).catch(() => ({ predictions: [] })),
       ]);
-      setPendingProducts([]);
       setAiStockout(Array.isArray(stockoutRes?.predictions) ? stockoutRes.predictions : []);
       setAiCopilot(copilotRes || null);
       setAiAnomaly(Array.isArray(anomalyRes?.predictions) ? anomalyRes.predictions : []);
@@ -105,81 +96,6 @@ const SurveillanceResp = ({ userName, onLogout }) => {
     };
   }, [topRiskRows]);
 
-  const mappedPendingProducts = useMemo(() => (
-    pendingProducts.map((p) => ({
-      id: p._id,
-      code: p.code_product,
-      nom: p.name,
-      categorie: p.category?.name || '-',
-      unite: p.unite || 'Unite',
-      seuilMinimum: Number(p.seuil_minimum || 0),
-      description: p.description || '',
-      magasinier: p.created_by?.username || '-',
-      dateSoumission: p.createdAt ? new Date(p.createdAt).toLocaleString('fr-FR') : '-',
-    }))
-  ), [pendingProducts]);
-
-  const startEditSeuil = (id, currentSeuil) => {
-    setEditingSeuilId(id);
-    setEditedSeuil(String(currentSeuil));
-  };
-
-  const cancelEditSeuil = () => {
-    setEditingSeuilId(null);
-    setEditedSeuil('');
-  };
-
-  const saveEditedSeuil = async (id) => {
-    const newSeuil = Number.parseInt(editedSeuil, 10);
-    if (!Number.isFinite(newSeuil) || newSeuil < 0) {
-      toast.error('Seuil minimum invalide');
-      return;
-    }
-    setIsSubmitting(true);
-    try {
-      await put(`/products/${id}`, { seuil_minimum: newSeuil });
-      await loadData();
-      toast.success('Seuil minimum mis a jour');
-      cancelEditSeuil();
-    } catch (err) {
-      toast.error(err.message || 'Echec mise a jour seuil');
-    } finally {
-      setIsSubmitting(false);
-    }
-  };
-
-  const handleValidate = async (id) => {
-    setIsSubmitting(true);
-    try {
-      const pending = mappedPendingProducts.find((p) => p.id === id);
-      const seuilToSave = editingSeuilId === id ? Number.parseInt(editedSeuil, 10) : pending?.seuilMinimum;
-      if (!Number.isFinite(seuilToSave) || seuilToSave < 0) {
-        toast.error('Seuil minimum invalide');
-        return;
-      }
-      await put(`/products/${id}`, { seuil_minimum: seuilToSave });
-      await loadData();
-      toast.success('Produit mis a jour');
-      cancelEditSeuil();
-    } catch (err) {
-      toast.error(err.message || 'Echec mise a jour produit');
-    } finally {
-      setIsSubmitting(false);
-    }
-  };
-
-  const handleReject = async (id) => {
-    setIsSubmitting(true);
-    try {
-      toast.warning("Rejet/validation des produits desactivee: un produit cree est utilisable immediatement.");
-      cancelEditSeuil();
-    } catch (err) {
-      toast.error(err.message || 'Echec rejet produit');
-    } finally {
-      setIsSubmitting(false);
-    }
-  };
-
   return (
     <ProtectedPage userName={userName}>
       <div className="app-layout">
@@ -215,7 +131,7 @@ const SurveillanceResp = ({ userName, onLogout }) => {
                 </div>
                 <div className="surv-kpi">
                   <Clock size={18} />
-                  <div><span>Produits a traiter</span><strong>{mappedPendingProducts.length}</strong></div> 
+                  <div><span>Produits analysés</span><strong>{topRiskRows.length}</strong></div> 
                 </div> 
               </div> 
 
@@ -305,62 +221,6 @@ const SurveillanceResp = ({ userName, onLogout }) => {
                 </div> 
               </div> 
 
-              <div className="surv-card pending-card">
-                <div className="surv-card-head">
-                  <h3><Package size={18} /> Produits en attente de validation</h3>
-                </div>
-                {!mappedPendingProducts.length ? (
-                  <div className="pending-empty">
-                    <CheckCircle2 size={20} />
-                    <p>Aucun produit en attente.</p>
-                  </div>
-                ) : (
-                  <div className="pending-list">
-                    {mappedPendingProducts.map((product) => (
-                      <div key={product.id} className="pending-item">
-                        <div className="pending-top">
-                          <div className="pending-title">
-                            <strong>{product.nom}</strong>
-                            <span>{product.code}</span>
-                          </div>
-                          <span className="pending-meta">{product.dateSoumission}</span>
-                        </div>
-
-                        <div className="pending-meta-grid">
-                          <div><label>Categorie</label><span>{product.categorie}</span></div>
-                          <div><label>Unite</label><span>{product.unite}</span></div>
-                          <div>
-                            <label>Seuil min</label>
-                            {editingSeuilId === product.id ? (
-                              <div className="seuil-edit-group">
-                                <input type="number" min="0" value={editedSeuil} onChange={(e) => setEditedSeuil(e.target.value)} />
-                                <button className="icon-btn" onClick={() => saveEditedSeuil(product.id)}><CheckCircle size={14} /></button>
-                                <button className="icon-btn danger" onClick={cancelEditSeuil}><XCircle size={14} /></button>
-                              </div>
-                            ) : (
-                              <span className="seuil-display" onClick={() => startEditSeuil(product.id, product.seuilMinimum)}>
-                                {product.seuilMinimum} <Edit3 size={12} />
-                              </span>
-                            )}
-                          </div>
-                          <div><label>Magasinier</label><span>{product.magasinier}</span></div>
-                        </div>
-
-                        {product.description && <p className="pending-desc">{product.description}</p>}
-
-                        <div className="pending-actions">
-                          <button className="pending-btn ok" onClick={() => handleValidate(product.id)}>
-                            <CheckCircle size={15} /> Valider
-                          </button>
-                          <button className="pending-btn no" onClick={() => handleReject(product.id)}>
-                            <XCircle size={15} /> Rejeter
-                          </button>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
             </div>
           </main>
         </div>

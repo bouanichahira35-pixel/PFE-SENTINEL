@@ -1,6 +1,6 @@
-import { useState, useCallback, useEffect, useRef } from 'react';
+import { useCallback, useMemo, useRef, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
-import { Package, ArrowDownToLine, Save, X, ScanLine, Calendar, Truck, Hash } from 'lucide-react';
+import { ArrowDownToLine, Calendar, Hash, Info, Package, Save, ScanLine, Truck, X } from 'lucide-react';
 import SidebarMag from '../../components/magasinier/SidebarMag';
 import HeaderPage from '../../components/shared/HeaderPage';
 import LoadingSpinner from '../../components/shared/LoadingSpinner';
@@ -8,205 +8,150 @@ import InlineQrScanner from '../../components/shared/InlineQrScanner';
 import { useToast } from '../../components/shared/Toast';
 import { get, post, uploadFile } from '../../services/api';
 import { asPositiveInt, isSafeText, sanitizeText } from '../../utils/formGuards';
+import { loadRecentList, saveRecentValue } from '../../utils/recentInputs';
 import './EntreeStock.css';
 
-function parseSupplierDeliveryQr(raw) {
-  const value = String(raw || '').trim();
-  if (!value) return null;
-
-  const result = {
-    raw: value,
-    delivery_note_number: '',
-    supplier: '',
-    delivery_date: '',
-    purchase_order_number: '',
-    purchase_voucher_number: '',
-    service_requester: '',
-  };
-
-  const setIfPresent = (key, incoming) => {
-    if (incoming !== undefined && incoming !== null && String(incoming).trim()) {
-      result[key] = String(incoming).trim();
-    }
-  };
-
-  if (value.startsWith('{') && value.endsWith('}')) {
-    try {
-      const parsed = JSON.parse(value);
-      setIfPresent('delivery_note_number', parsed.delivery_note_number || parsed.bl || parsed.delivery_note);
-      setIfPresent('supplier', parsed.supplier || parsed.fournisseur || parsed.vendor);
-      setIfPresent('delivery_date', parsed.delivery_date || parsed.date_livraison || parsed.date);
-      setIfPresent('purchase_order_number', parsed.purchase_order_number || parsed.bc || parsed.po);
-      setIfPresent('purchase_voucher_number', parsed.purchase_voucher_number || parsed.ba || parsed.invoice);
-      setIfPresent('service_requester', parsed.service_requester || parsed.service || parsed.department);
-      return result;
-    } catch {
-      // fallback parser
-    }
-  }
-
-  const map = {};
-  value.split(/[|;]+/).forEach((chunk) => {
-    const part = String(chunk || '').trim();
-    if (!part) return;
-    const [k, ...rest] = part.split(/[:=]/);
-    if (!k || !rest.length) return;
-    map[k.trim().toLowerCase()] = rest.join(':').trim();
-  });
-
-  setIfPresent('delivery_note_number', map.delivery_note_number || map.delivery_note || map.bl || map.bonlivraison || map.bande);
-  setIfPresent('supplier', map.supplier || map.fournisseur || map.vendor);
-  setIfPresent('delivery_date', map.delivery_date || map.date_livraison || map.date);
-  setIfPresent('purchase_order_number', map.purchase_order_number || map.bc || map.po);
-  setIfPresent('purchase_voucher_number', map.purchase_voucher_number || map.ba || map.invoice);
-  setIfPresent('service_requester', map.service_requester || map.service || map.department);
-
-  if (!result.delivery_note_number && !value.includes('|') && !value.includes(';')) {
-    result.delivery_note_number = value;
-  }
-
-  return result;
+function todayIso() {
+  return new Date().toISOString().split('T')[0];
 }
 
 const EntreeStock = ({ userName, onLogout }) => {
   const location = useLocation();
   const navigate = useNavigate();
   const toast = useToast();
+
   const [sidebarCollapsed, setSidebarCollapsed] = useState(() => (typeof window !== 'undefined' ? window.innerWidth <= 768 : false));
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isLoadingProducts, setIsLoadingProducts] = useState(false);
-  const initialProduct = location.state?.product || null;
 
-  const [formData, setFormData] = useState({
+  const initialProduct = location.state?.product || null;
+  const [productInfo, setProductInfo] = useState(() => (initialProduct ? initialProduct : null));
+  const [scanTarget, setScanTarget] = useState('');
+  const [attachmentFile, setAttachmentFile] = useState(null);
+  const [errors, setErrors] = useState({});
+  const formOpenedAtRef = useRef(Date.now());
+
+  const [recentSuppliers, setRecentSuppliers] = useState(() => loadRecentList('mag_recent_suppliers_v1'));
+  const [recentDeliveryNotes, setRecentDeliveryNotes] = useState(() => loadRecentList('mag_recent_delivery_notes_v1'));
+
+  const [formData, setFormData] = useState(() => ({
     codeBarres: initialProduct?.code || '',
     quantite: '',
-    provenance: '',
-    numeroLot: '',
-    lotQrCode: '',
-    dateEntree: new Date().toISOString().split('T')[0],
-    modeLivraison: 'manual',
-    fournisseurQrRaw: '',
-    numeroBonCommande: '',
-    numeroBonAchat: '',
+    dateEntree: todayIso(),
     numeroBonLivraison: '',
-    dateLivraison: '',
+    provenance: '',
     serviceDemandeur: '',
-    beneficiaire: '',
+    commentaire: '',
+
+    // Champs sensibles (affichés seulement si produit chimique/gaz)
     datePeremption: '',
     statutChimique: 'Utilisable',
     attestationProduitDangereux: '',
     numeroContratGaz: '',
-    commentaire: ''
-  });
+  }));
 
-  const [productsIndex, setProductsIndex] = useState([]);
-  const [productInfo, setProductInfo] = useState(initialProduct || null);
-  const [errors, setErrors] = useState({});
-  const [attachmentFile, setAttachmentFile] = useState(null);
-  const [attachmentLabel, setAttachmentLabel] = useState('Bon de livraison');
-  const [scanTarget, setScanTarget] = useState('');
-  const formOpenedAtRef = useRef(Date.now());
+  const mapProductFromLookup = useCallback((p) => ({
+    id: p?._id,
+    code: p?.code_product,
+    nom: p?.name,
+    categorie: p?.category?.name || '-',
+    quantite: Number(p?.quantity_current || 0),
+    unite: p?.unite || 'Unite',
+    family: p?.family || '',
+  }), []);
 
-  const mapProduct = (p) => ({
-    id: p._id,
-    code: p.code_product,
-    nom: p.name,
-    categorie: p.category?.name || '-',
-    quantite: Number(p.quantity_current || 0),
-    seuil: Number(p.seuil_minimum || 0),
-    unite: p.unite || 'Unite'
-  });
+  const isChemicalProduct = useMemo(() => String(productInfo?.family || '').toLowerCase() === 'produit_chimique', [productInfo?.family]);
+  const isGasProduct = useMemo(() => String(productInfo?.family || '').toLowerCase() === 'gaz', [productInfo?.family]);
 
-  useEffect(() => {
-    const loadProducts = async () => {
-      setIsLoadingProducts(true);
-      try {
-        const products = await get('/products');
-        setProductsIndex(products.map(mapProduct));
-      } catch (err) {
-        toast.error(err.message || 'Chargement produits echoue');
-      } finally {
-        setIsLoadingProducts(false);
+  const lookupAndSetProduct = useCallback(async (rawCode, options = {}) => {
+    const code = String(rawCode || '').trim();
+    if (!code) {
+      setProductInfo(null);
+      setErrors((prev) => ({ ...prev, product: 'Code produit requis' }));
+      return null;
+    }
+
+    setIsLoadingProducts(true);
+    try {
+      const payload = await get(`/products/lookup?code=${encodeURIComponent(code)}`);
+      const p = payload?.product;
+      if (!p?._id) {
+        setProductInfo(null);
+        setErrors((prev) => ({ ...prev, product: 'Produit introuvable' }));
+        if (!options.silent) toast.error('Produit introuvable');
+        return null;
       }
-    };
-    loadProducts();
-  }, [toast]);
-
-  const detectProductByCode = useCallback((code) => {
-    const normalized = String(code || '').trim().toLowerCase();
-    if (!normalized) return null;
-    return productsIndex.find((p) => p.code.toLowerCase() === normalized) || null;
-  }, [productsIndex]);
+      const mapped = mapProductFromLookup(p);
+      setProductInfo(mapped);
+      setErrors((prev) => ({ ...prev, product: undefined }));
+      if (!options.silent) toast.success('Produit identifié');
+      return mapped;
+    } catch (err) {
+      setProductInfo(null);
+      setErrors((prev) => ({ ...prev, product: 'Produit introuvable' }));
+      if (!options.silent) toast.error(err.message || 'Produit introuvable');
+      return null;
+    } finally {
+      setIsLoadingProducts(false);
+    }
+  }, [mapProductFromLookup, toast]);
 
   const handleScanBarcode = useCallback(() => {
-    const found = detectProductByCode(formData.codeBarres);
-    if (!found) {
-      toast.error('Produit introuvable pour ce code');
-      return;
-    }
-    setProductInfo(found);
-    toast.success('Produit identifie');
-  }, [detectProductByCode, formData.codeBarres, toast]);
+    lookupAndSetProduct(formData.codeBarres);
+  }, [formData.codeBarres, lookupAndSetProduct]);
 
   const handleDetectedQr = useCallback((value) => {
     if (!value) return;
-    if (scanTarget === 'codeBarres') {
-      setFormData((prev) => ({ ...prev, codeBarres: value }));
-      const found = detectProductByCode(value);
-      if (found) {
-        setProductInfo(found);
-        toast.success('Produit identifie depuis le QR');
-      }
-      return;
-    }
-    if (scanTarget === 'lotQrCode') {
-      setFormData((prev) => ({ ...prev, lotQrCode: value }));
-      toast.success('QR lot detecte');
-      return;
-    }
-    if (scanTarget === 'deliveryDocument') {
-      const parsed = parseSupplierDeliveryQr(value);
-      if (!parsed) {
-        toast.error('QR bande de livraison invalide');
-        return;
-      }
-      setFormData((prev) => ({
-        ...prev,
-        modeLivraison: 'scan',
-        fournisseurQrRaw: parsed.raw || value,
-        numeroBonLivraison: parsed.delivery_note_number || prev.numeroBonLivraison,
-        provenance: parsed.supplier || prev.provenance,
-        dateLivraison: parsed.delivery_date || prev.dateLivraison,
-        numeroBonCommande: parsed.purchase_order_number || prev.numeroBonCommande,
-        numeroBonAchat: parsed.purchase_voucher_number || prev.numeroBonAchat,
-        serviceDemandeur: parsed.service_requester || prev.serviceDemandeur,
-      }));
-      toast.success('Bande de livraison scannee et champs pre-remplis');
-    }
-  }, [detectProductByCode, scanTarget, toast]);
+    if (scanTarget !== 'codeBarres') return;
+
+    setFormData((prev) => ({ ...prev, codeBarres: value }));
+    lookupAndSetProduct(value);
+  }, [lookupAndSetProduct, scanTarget]);
 
   const validateForm = useCallback(() => {
-    const newErrors = {};
-    if (!productInfo?.id) newErrors.product = 'Produit requis';
+    const next = {};
+
+    if (!productInfo?.id) next.product = 'Produit introuvable';
+
     const qty = asPositiveInt(formData.quantite, { min: 1, max: 1000000000 });
-    if (!Number.isFinite(qty)) {
-      newErrors.quantite = 'Quantite valide requise';
+    if (!Number.isFinite(qty)) next.quantite = 'Quantité invalide';
+
+    if (!formData.dateEntree || Number.isNaN(new Date(formData.dateEntree).getTime())) next.dateEntree = "Date d'entrée invalide";
+
+    if (!isSafeText(formData.numeroBonLivraison, { min: 1, max: 60 })) next.numeroBonLivraison = 'Le bon de livraison est obligatoire';
+    if (!isSafeText(formData.provenance, { min: 1, max: 80 })) next.provenance = 'Le nom du livreur ou la provenance est obligatoire';
+
+    if (formData.serviceDemandeur && !isSafeText(formData.serviceDemandeur, { min: 0, max: 80 })) next.serviceDemandeur = 'Service demandeur invalide';
+    if (formData.commentaire && !isSafeText(formData.commentaire, { min: 0, max: 600 })) next.commentaire = 'Commentaire trop long (max 600)';
+
+    if (isChemicalProduct) {
+      if (formData.attestationProduitDangereux && !isSafeText(formData.attestationProduitDangereux, { min: 0, max: 120 })) {
+        next.attestationProduitDangereux = 'Attestation invalide';
+      }
     }
-    if (!isSafeText(formData.provenance, { min: 2, max: 80 })) {
-      newErrors.provenance = 'Fournisseur / provenance requis (2-80, sans < >)';
+
+    if (isGasProduct) {
+      if (formData.numeroContratGaz && !isSafeText(formData.numeroContratGaz, { min: 0, max: 60 })) {
+        next.numeroContratGaz = 'Numéro de contrat invalide';
+      }
     }
-    if (!isSafeText(formData.numeroBonLivraison, { min: 2, max: 60 })) {
-      newErrors.numeroBonLivraison = 'Numero bande de livraison requis (2-60)';
-    }
-    if (formData.modeLivraison === 'scan' && !formData.fournisseurQrRaw.trim()) {
-      newErrors.modeLivraison = 'Scannez la bande livraison fournisseur';
-    }
-    if (formData.commentaire && !isSafeText(formData.commentaire, { min: 0, max: 600 })) {
-      newErrors.commentaire = 'Commentaire trop long (max 600)';
-    }
-    setErrors(newErrors);
-    return Object.keys(newErrors).length === 0;
-  }, [productInfo, formData]);
+
+    setErrors(next);
+    return Object.keys(next).length === 0;
+  }, [formData, isChemicalProduct, isGasProduct, productInfo?.id]);
+
+  const canSubmit = useMemo(() => {
+    const qty = asPositiveInt(formData.quantite, { min: 1, max: 1000000000 });
+    return Boolean(
+      productInfo?.id
+      && Number.isFinite(qty)
+      && String(formData.numeroBonLivraison || '').trim()
+      && String(formData.provenance || '').trim()
+      && formData.dateEntree
+      && !Number.isNaN(new Date(formData.dateEntree).getTime())
+      && !isSubmitting
+    );
+  }, [formData, isSubmitting, productInfo?.id]);
 
   const handleSubmit = useCallback(async (e) => {
     e.preventDefault();
@@ -221,54 +166,47 @@ const EntreeStock = ({ userName, onLogout }) => {
       if (attachmentFile) {
         const uploaded = await uploadFile('/files/upload', attachmentFile);
         attachments.push({
-          label: attachmentLabel || 'Document',
+          label: 'Bon de livraison',
           file_name: uploaded.file_name,
           file_url: uploaded.file_url,
         });
       }
 
-      await post('/stock/entries', {
+      const created = await post('/stock/entries', {
         product: productInfo.id,
         quantity: Number(asPositiveInt(formData.quantite, { min: 1, max: 1000000000 })),
-        submission_duration_ms: Math.max(0, Date.now() - formOpenedAtRef.current),
-        supplier: sanitizeText(formData.provenance, { maxLen: 80 }),
-        lot_number: sanitizeText(formData.numeroLot, { maxLen: 60 }) || undefined,
-        lot_qr_value: sanitizeText(formData.lotQrCode, { maxLen: 220 }) || undefined,
         date_entry: formData.dateEntree,
-        purchase_order_number: sanitizeText(formData.numeroBonCommande, { maxLen: 60 }) || undefined,
-        purchase_voucher_number: sanitizeText(formData.numeroBonAchat, { maxLen: 60 }) || undefined,
         delivery_note_number: sanitizeText(formData.numeroBonLivraison, { maxLen: 60 }),
-        supplier_doc_qr_value: formData.modeLivraison === 'scan'
-          ? sanitizeText(formData.fournisseurQrRaw || formData.numeroBonLivraison, { maxLen: 800 })
-          : undefined,
-        entry_mode: formData.modeLivraison === 'scan'
-          ? 'supplier_qr'
-          : formData.modeLivraison === 'manual'
-            ? 'manual'
-            : 'supplier_number',
-        delivery_date: formData.dateLivraison || undefined,
+        supplier: sanitizeText(formData.provenance, { maxLen: 80 }),
+        entry_mode: 'supplier_number',
         service_requester: sanitizeText(formData.serviceDemandeur, { maxLen: 80 }) || undefined,
-        reference_code: sanitizeText(formData.codeBarres, { maxLen: 80 }) || undefined,
-        commercial_name: productInfo.nom,
-        beneficiary: sanitizeText(formData.beneficiaire, { maxLen: 80 }) || undefined,
-        expiry_date: formData.datePeremption || undefined,
-        chemical_status: sanitizeText(formData.statutChimique, { maxLen: 40 }) || undefined,
-        dangerous_product_attestation: sanitizeText(formData.attestationProduitDangereux, { maxLen: 80 }) || undefined,
-        contract_number: sanitizeText(formData.numeroContratGaz, { maxLen: 60 }) || undefined,
         observation: sanitizeText(formData.commentaire, { maxLen: 600 }) || undefined,
+        expiry_date: isChemicalProduct ? (formData.datePeremption || undefined) : undefined,
+        chemical_status: isChemicalProduct ? (sanitizeText(formData.statutChimique, { maxLen: 40 }) || undefined) : undefined,
+        dangerous_product_attestation: isChemicalProduct ? (sanitizeText(formData.attestationProduitDangereux, { maxLen: 120 }) || undefined) : undefined,
+        contract_number: isGasProduct ? (sanitizeText(formData.numeroContratGaz, { maxLen: 60 }) || undefined) : undefined,
         attachments,
+        submission_duration_ms: Math.max(0, Date.now() - formOpenedAtRef.current),
       });
 
-      toast.success("Entree de stock enregistree avec succes");
+      saveRecentValue('mag_recent_suppliers_v1', formData.provenance);
+      saveRecentValue('mag_recent_delivery_notes_v1', formData.numeroBonLivraison);
+      setRecentSuppliers(loadRecentList('mag_recent_suppliers_v1'));
+      setRecentDeliveryNotes(loadRecentList('mag_recent_delivery_notes_v1'));
+
+      const lotNumber = created?.lot_number || created?.lotNumber || '';
+      toast.success(
+        lotNumber
+          ? `Entrée enregistrée avec succès. Numéro de lot généré : ${lotNumber}`
+          : 'Entrée de stock enregistrée avec succès.'
+      );
       navigate('/magasinier');
     } catch (err) {
-      toast.error(err.message || "Echec enregistrement entree");
+      toast.error(err.message || "Échec de l'enregistrement");
     } finally {
       setIsSubmitting(false);
     }
-  }, [attachmentFile, attachmentLabel, formData, productInfo, validateForm, navigate, toast]);
-
-  const newQuantity = productInfo ? productInfo.quantite + (parseInt(formData.quantite, 10) || 0) : 0;
+  }, [attachmentFile, formData, isChemicalProduct, isGasProduct, navigate, productInfo?.id, toast, validateForm]);
 
   return (
     <div className="app-layout">
@@ -286,7 +224,7 @@ const EntreeStock = ({ userName, onLogout }) => {
       <div className="main-container">
         <HeaderPage
           userName={userName}
-          title="Entree de Stock"
+          title="Entrée de stock"
           showSearch={false}
           onMenuClick={() => setSidebarCollapsed((prev) => !prev)}
         />
@@ -298,38 +236,45 @@ const EntreeStock = ({ userName, onLogout }) => {
             <div className="operation-card">
               <div className="operation-header entry">
                 <ArrowDownToLine size={24} />
-                <h2>Nouvelle entree de stock</h2>
+                <div className="operation-header-text">
+                  <h2>Nouvelle entrée de stock</h2>
+                  <p className="operation-subtitle">Enregistrer une réception de produit</p>
+                </div>
               </div>
 
               <form onSubmit={handleSubmit} className="operation-form" noValidate>
                 <div className="form-section">
                   <h3>Identification du produit</h3>
-                  <div className="barcode-input-group">
-                    <div className="form-group flex-1">
-                      <label htmlFor="codeBarres">
-                        <ScanLine size={16} />
-                        Code-barres / Code produit
-                      </label>
-                      <div className="input-with-btn">
-                        <input
-                          id="codeBarres"
-                          type="text"
-                          maxLength={80}
-                          value={formData.codeBarres}
-                          onChange={(e) => setFormData({ ...formData, codeBarres: e.target.value })}
-                          placeholder="Scanner ou saisir le code"
-                        />
-                        <button type="button" className="scan-btn" onClick={handleScanBarcode}>
-                          <ScanLine size={18} />
-                          Scanner
-                        </button>
-                        <button type="button" className="scan-btn" onClick={() => setScanTarget('codeBarres')}>
-                          <ScanLine size={18} />
-                          Camera
-                        </button>
-                      </div>
-                      {errors.product && <span className="error-text" role="alert">{errors.product}</span>}
+                  <div className="form-group">
+                    <label htmlFor="codeBarres">
+                      <ScanLine size={16} />
+                      Code-barres / Code produit
+                    </label>
+                    <div className="input-with-btn">
+                      <input
+                        id="codeBarres"
+                        type="text"
+                        maxLength={80}
+                        value={formData.codeBarres}
+                        onChange={(e) => setFormData((prev) => ({ ...prev, codeBarres: e.target.value }))}
+                        placeholder="Scanner ou saisir le code"
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') {
+                            e.preventDefault();
+                            handleScanBarcode();
+                          }
+                        }}
+                      />
+                      <button type="button" className="scan-btn" onClick={handleScanBarcode}>
+                        <ScanLine size={18} />
+                        Scanner
+                      </button>
+                      <button type="button" className="scan-btn" onClick={() => setScanTarget('codeBarres')}>
+                        <ScanLine size={18} />
+                        Caméra
+                      </button>
                     </div>
+                    {errors.product && <span className="error-text" role="alert">{errors.product}</span>}
                   </div>
                 </div>
 
@@ -337,63 +282,16 @@ const EntreeStock = ({ userName, onLogout }) => {
                   <div className="product-info-card">
                     <div className="product-info-header">
                       <Package size={20} />
-                      <span>Produit identifie</span>
+                      <span>Produit identifié</span>
                     </div>
                     <div className="product-info-details">
                       <div className="info-item"><span className="info-label">Nom</span><span className="info-value">{productInfo.nom}</span></div>
                       <div className="info-item"><span className="info-label">Code</span><span className="info-value code">{productInfo.code}</span></div>
+                      <div className="info-item"><span className="info-label">Catégorie</span><span className="info-value">{productInfo.categorie}</span></div>
                       <div className="info-item"><span className="info-label">Stock actuel</span><span className="info-value">{productInfo.quantite} {productInfo.unite}</span></div>
-                      <div className="info-item"><span className="info-label">Categorie</span><span className="info-value">{productInfo.categorie}</span></div>
                     </div>
                   </div>
                 )}
-
-                <div className="form-section">
-                  <h3>Quantite a entrer</h3>
-                  <div className="form-row">
-                    <div className="form-group">
-                      <label htmlFor="quantite"><Hash size={16} />Quantite</label>
-                      <input
-                        id="quantite"
-                        type="number"
-                        min="1"
-                        max="1000000000"
-                        step="1"
-                        value={formData.quantite}
-                        onChange={(e) => setFormData({ ...formData, quantite: e.target.value })}
-                        placeholder="0"
-                        className={errors.quantite ? 'error' : ''}
-                      />
-                      {errors.quantite && <span className="error-text" role="alert">{errors.quantite}</span>}
-                    </div>
-                    <div className="form-group">
-                      <label htmlFor="numeroLot"><Hash size={16} />Numero de lot</label>
-                      <input
-                        id="numeroLot"
-                        type="text"
-                        maxLength={80}
-                        value={formData.numeroLot}
-                        onChange={(e) => setFormData({ ...formData, numeroLot: e.target.value })}
-                        placeholder="LOT-2026-001"
-                      />
-                    </div>
-                    <div className="form-group">
-                      <label htmlFor="lotQrCode"><ScanLine size={16} />QR lot</label>
-                      <input
-                        id="lotQrCode"
-                        type="text"
-                        maxLength={180}
-                        value={formData.lotQrCode}
-                        onChange={(e) => setFormData({ ...formData, lotQrCode: e.target.value })}
-                        placeholder="Scanner le QR du lot"
-                      />
-                      <button type="button" className="scan-btn" onClick={() => setScanTarget('lotQrCode')}>
-                        <ScanLine size={18} />
-                        Camera
-                      </button>
-                    </div>
-                  </div>
-                </div>
 
                 {scanTarget && (
                   <InlineQrScanner
@@ -403,193 +301,199 @@ const EntreeStock = ({ userName, onLogout }) => {
                 )}
 
                 <div className="form-section">
-                  <h3>Pieces / documents</h3>
+                  <h3>Informations de l'entrée</h3>
+
                   <div className="form-row">
                     <div className="form-group">
-                      <label htmlFor="modeLivraison">Mode bande livraison fournisseur</label>
-                      <select
-                        id="modeLivraison"
-                        value={formData.modeLivraison}
-                        onChange={(e) => setFormData({ ...formData, modeLivraison: e.target.value })}
-                        className={errors.modeLivraison ? 'error' : ''}
-                      >
-                        <option value="manual">Saisie manuelle numero fournisseur</option>
-                        <option value="scan">Scan QR bande fournisseur</option>
-                      </select>
-                      {errors.modeLivraison && <span className="error-text" role="alert">{errors.modeLivraison}</span>}
-                    </div>
-                    <div className="form-group">
-                      <label htmlFor="fournisseurQrRaw">Valeur QR fournisseur (optionnel en manuel)</label>
-                      <div className="input-with-btn">
+                      <label htmlFor="quantite"><Hash size={16} />Quantité entrée</label>
+                      <div className="input-with-unit">
                         <input
-                          id="fournisseurQrRaw"
-                          type="text"
-                          maxLength={180}
-                          value={formData.fournisseurQrRaw}
-                          onChange={(e) => setFormData({ ...formData, fournisseurQrRaw: e.target.value, modeLivraison: 'scan' })}
-                          placeholder="Scanner la bande de livraison"
+                          id="quantite"
+                          type="number"
+                          min="1"
+                          max="1000000000"
+                          step="1"
+                          value={formData.quantite}
+                          onChange={(e) => setFormData((prev) => ({ ...prev, quantite: e.target.value }))}
+                          placeholder="Ex : 10"
+                          className={errors.quantite ? 'error' : ''}
+                          inputMode="numeric"
                         />
-                        <button type="button" className="scan-btn" onClick={() => setScanTarget('deliveryDocument')}>
-                          <ScanLine size={18} />
-                          Scanner BL
-                        </button>
+                        <span className="unit-pill" aria-label="Unité">
+                          {productInfo?.unite || 'Unité'}
+                        </span>
                       </div>
+                      {errors.quantite && <span className="error-text" role="alert">{errors.quantite}</span>}
+                    </div>
+
+                    <div className="form-group">
+                      <label htmlFor="dateEntree"><Calendar size={16} />Date d'entrée</label>
+                      <input
+                        id="dateEntree"
+                        type="date"
+                        value={formData.dateEntree}
+                        onChange={(e) => setFormData((prev) => ({ ...prev, dateEntree: e.target.value }))}
+                        className={errors.dateEntree ? 'error' : ''}
+                      />
+                      {errors.dateEntree && <span className="error-text" role="alert">{errors.dateEntree}</span>}
                     </div>
                   </div>
+
                   <div className="form-row">
                     <div className="form-group">
-                      <label htmlFor="numeroBonCommande">Numero bon de commande</label>
-                      <input id="numeroBonCommande" type="text" maxLength={80} value={formData.numeroBonCommande} onChange={(e) => setFormData({ ...formData, numeroBonCommande: e.target.value })} />
-                    </div>
-                    <div className="form-group">
-                      <label htmlFor="numeroBonAchat">Numero bon d'achat</label>
-                      <input id="numeroBonAchat" type="text" maxLength={80} value={formData.numeroBonAchat} onChange={(e) => setFormData({ ...formData, numeroBonAchat: e.target.value })} />
-                    </div>
-                    <div className="form-group">
-                      <label htmlFor="numeroBonLivraison">Numero bon de livraison</label>
+                      <label htmlFor="numeroBonLivraison">Bon de livraison</label>
                       <input
                         id="numeroBonLivraison"
                         type="text"
-                        maxLength={80}
+                        maxLength={60}
+                        list="recentDeliveryNotes"
                         value={formData.numeroBonLivraison}
-                        onChange={(e) => setFormData({ ...formData, numeroBonLivraison: e.target.value })}
+                        onChange={(e) => setFormData((prev) => ({ ...prev, numeroBonLivraison: e.target.value }))}
+                        placeholder="Ex : BL-2026-001"
                         className={errors.numeroBonLivraison ? 'error' : ''}
                       />
+                      <datalist id="recentDeliveryNotes">
+                        {recentDeliveryNotes.map((v) => <option key={v} value={v} />)}
+                      </datalist>
                       {errors.numeroBonLivraison && <span className="error-text" role="alert">{errors.numeroBonLivraison}</span>}
                     </div>
-                    <div className="form-group">
-                      <label htmlFor="dateLivraison">Date de livraison</label>
-                      <input
-                        id="dateLivraison"
-                        type="date"
-                        value={formData.dateLivraison}
-                        onChange={(e) => setFormData({ ...formData, dateLivraison: e.target.value })}
-                      />
-                    </div>
-                  </div>
-                  <div className="form-row">
-                    <div className="form-group">
-                      <label htmlFor="attachmentLabel">Type de piece</label>
-                      <input
-                        id="attachmentLabel"
-                        type="text"
-                        value={attachmentLabel}
-                        onChange={(e) => setAttachmentLabel(e.target.value)}
-                        placeholder="Ex: Bon de livraison"
-                      />
-                    </div>
-                    <div className="form-group">
-                      <label htmlFor="pieceJointe">Fichier joint (optionnel)</label>
-                      <input
-                        id="pieceJointe"
-                        type="file"
-                        accept=".pdf,.png,.jpg,.jpeg,.webp,.txt,.docx,.xlsx"
-                        onChange={(e) => setAttachmentFile(e.target.files?.[0] || null)}
-                      />
-                    </div>
-                  </div>
-                </div>
 
-                <div className="form-section">
-                  <h3>Informations supplementaires</h3>
-                  <div className="form-row">
                     <div className="form-group">
-                      <label htmlFor="provenance"><Truck size={16} />Fournisseur / Provenance</label>
+                      <label htmlFor="provenance"><Truck size={16} />Livré par / Provenance</label>
                       <input
                         id="provenance"
                         type="text"
+                        maxLength={80}
+                        list="recentSuppliers"
                         value={formData.provenance}
-                        onChange={(e) => setFormData({ ...formData, provenance: e.target.value })}
+                        onChange={(e) => setFormData((prev) => ({ ...prev, provenance: e.target.value }))}
+                        placeholder="Nom du livreur ou provenance"
                         className={errors.provenance ? 'error' : ''}
                       />
+                      <datalist id="recentSuppliers">
+                        {recentSuppliers.map((v) => <option key={v} value={v} />)}
+                      </datalist>
                       {errors.provenance && <span className="error-text" role="alert">{errors.provenance}</span>}
                     </div>
-                    <div className="form-group">
-                      <label htmlFor="serviceDemandeur">Service demandeur</label>
-                      <input id="serviceDemandeur" type="text" maxLength={80} value={formData.serviceDemandeur} onChange={(e) => setFormData({ ...formData, serviceDemandeur: e.target.value })} />
-                    </div>
-                    <div className="form-group">
-                      <label htmlFor="beneficiaire">Beneficiaire</label>
-                      <input
-                        id="beneficiaire"
-                        type="text"
-                        value={formData.beneficiaire}
-                        onChange={(e) => setFormData({ ...formData, beneficiaire: e.target.value })}
-                        placeholder="Nom du beneficiaire"
-                      />
-                    </div>
-                    <div className="form-group">
-                      <label htmlFor="dateEntree"><Calendar size={16} />Date d'entree</label>
-                      <input id="dateEntree" type="date" value={formData.dateEntree} onChange={(e) => setFormData({ ...formData, dateEntree: e.target.value })} />
-                    </div>
                   </div>
+
                   <div className="form-row">
                     <div className="form-group">
-                      <label htmlFor="datePeremption">Date de peremption</label>
+                      <label htmlFor="serviceDemandeur">Service demandeur</label>
                       <input
-                        id="datePeremption"
-                        type="date"
-                        value={formData.datePeremption}
-                        onChange={(e) => setFormData({ ...formData, datePeremption: e.target.value })}
-                      />
-                    </div>
-                    <div className="form-group">
-                      <label htmlFor="statutChimique">Statut chimique</label>
-                      <select
-                        id="statutChimique"
-                        value={formData.statutChimique}
-                        onChange={(e) => setFormData({ ...formData, statutChimique: e.target.value })}
-                      >
-                        <option value="Utilisable">Utilisable</option>
-                        <option value="Perime">Perime</option>
-                      </select>
-                    </div>
-                    <div className="form-group">
-                      <label htmlFor="numeroContratGaz">Numero contrat (gaz)</label>
-                      <input
-                        id="numeroContratGaz"
+                        id="serviceDemandeur"
                         type="text"
-                        value={formData.numeroContratGaz}
-                        onChange={(e) => setFormData({ ...formData, numeroContratGaz: e.target.value })}
-                        placeholder="Ex: CTR-GAZ-2026-001"
+                        maxLength={80}
+                        value={formData.serviceDemandeur}
+                        onChange={(e) => setFormData((prev) => ({ ...prev, serviceDemandeur: e.target.value }))}
+                        placeholder="Optionnel"
+                        className={errors.serviceDemandeur ? 'error' : ''}
                       />
+                      {errors.serviceDemandeur && <span className="error-text" role="alert">{errors.serviceDemandeur}</span>}
                     </div>
-                  </div>
-                  <div className="form-group">
-                    <label htmlFor="attestationProduitDangereux">Attestation produit dangereux (reference)</label>
-                    <input
-                      id="attestationProduitDangereux"
-                      type="text"
-                      value={formData.attestationProduitDangereux}
-                      onChange={(e) => setFormData({ ...formData, attestationProduitDangereux: e.target.value })}
-                      placeholder="Ex: ATT-PD-2026-001"
-                    />
-                  </div>
-                  <div className="form-group">
-                    <label htmlFor="commentaire">Commentaire (optionnel)</label>
-                    <textarea id="commentaire" maxLength={600} value={formData.commentaire} onChange={(e) => setFormData({ ...formData, commentaire: e.target.value })} rows={3} />
-                  </div>
-                </div>
 
-                {productInfo && formData.quantite && (
-                  <div className="operation-summary entry">
-                    <h3>Resume de l'operation</h3>
-                    <div className="summary-grid">
-                      <div className="summary-item"><span className="summary-label">Stock avant</span><span className="summary-value">{productInfo.quantite}</span></div>
-                      <div className="summary-item highlight"><span className="summary-label">Quantite entree</span><span className="summary-value">+{formData.quantite}</span></div>
-                      <div className="summary-item result"><span className="summary-label">Stock apres</span><span className="summary-value">{newQuantity}</span></div>
+                    <div className="form-group">
+                      <label htmlFor="pieceJointe">Fichier bon de livraison (optionnel)</label>
+                      <input
+                        id="pieceJointe"
+                        type="file"
+                        accept=".pdf,.png,.jpg,.jpeg,.webp"
+                        onChange={(e) => setAttachmentFile(e.target.files?.[0] || null)}
+                      />
+                      <span className="field-hint">Formats : PDF, PNG, JPG</span>
                     </div>
                   </div>
-                )}
+
+                  <div className="form-group">
+                    <label htmlFor="commentaire">Commentaire</label>
+                    <textarea
+                      id="commentaire"
+                      maxLength={600}
+                      value={formData.commentaire}
+                      onChange={(e) => setFormData((prev) => ({ ...prev, commentaire: e.target.value }))}
+                      rows={3}
+                      placeholder="Optionnel"
+                      className={errors.commentaire ? 'error' : ''}
+                    />
+                    {errors.commentaire && <span className="error-text" role="alert">{errors.commentaire}</span>}
+                  </div>
+
+                  <div className="lot-info-line" role="note" aria-label="Lot">
+                    <Info size={16} />
+                    <span>Le numéro de lot sera généré automatiquement après validation.</span>
+                  </div>
+
+                  {(isChemicalProduct || isGasProduct) && (
+                    <div className="sensitive-block">
+                      <div className="sensitive-title">Champs spécifiques (si nécessaire)</div>
+
+                      {isChemicalProduct && (
+                        <div className="form-row">
+                          <div className="form-group">
+                            <label htmlFor="datePeremption">Date de péremption</label>
+                            <input
+                              id="datePeremption"
+                              type="date"
+                              value={formData.datePeremption}
+                              onChange={(e) => setFormData((prev) => ({ ...prev, datePeremption: e.target.value }))}
+                            />
+                          </div>
+                          <div className="form-group">
+                            <label htmlFor="statutChimique">Statut chimique</label>
+                            <select
+                              id="statutChimique"
+                              value={formData.statutChimique}
+                              onChange={(e) => setFormData((prev) => ({ ...prev, statutChimique: e.target.value }))}
+                            >
+                              <option value="Utilisable">Utilisable</option>
+                              <option value="Perime">Perime</option>
+                            </select>
+                          </div>
+                          <div className="form-group">
+                            <label htmlFor="attestationProduitDangereux">Réf. attestation produit dangereux</label>
+                            <input
+                              id="attestationProduitDangereux"
+                              type="text"
+                              maxLength={120}
+                              value={formData.attestationProduitDangereux}
+                              onChange={(e) => setFormData((prev) => ({ ...prev, attestationProduitDangereux: e.target.value }))}
+                              placeholder="Optionnel"
+                              className={errors.attestationProduitDangereux ? 'error' : ''}
+                            />
+                            {errors.attestationProduitDangereux && <span className="error-text" role="alert">{errors.attestationProduitDangereux}</span>}
+                          </div>
+                        </div>
+                      )}
+
+                      {isGasProduct && (
+                        <div className="form-row">
+                          <div className="form-group">
+                            <label htmlFor="numeroContratGaz">Numéro de contrat (gaz)</label>
+                            <input
+                              id="numeroContratGaz"
+                              type="text"
+                              maxLength={60}
+                              value={formData.numeroContratGaz}
+                              onChange={(e) => setFormData((prev) => ({ ...prev, numeroContratGaz: e.target.value }))}
+                              placeholder="Optionnel"
+                              className={errors.numeroContratGaz ? 'error' : ''}
+                            />
+                            {errors.numeroContratGaz && <span className="error-text" role="alert">{errors.numeroContratGaz}</span>}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
 
                 <div className="form-actions">
                   <button type="button" className="btn-cancel" onClick={() => navigate('/magasinier')} disabled={isSubmitting}>
                     <X size={18} />
                     Annuler
                   </button>
-                  <button type="submit" className="btn-submit entry" disabled={!productInfo || !formData.quantite || isSubmitting}>
+                  <button type="submit" className="btn-submit entry" disabled={!canSubmit}>
                     <Save size={18} />
-                    Confirmer l'entree
+                    Confirmer l'entrée
                   </button>
                 </div>
               </form>

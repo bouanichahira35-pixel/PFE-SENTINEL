@@ -40,6 +40,9 @@ const ProduitsMag = ({ userName, onLogout }) => {
   const [currentPage, setCurrentPage] = useState(1);
   const [isLoading, setIsLoading] = useState(false);
   const [products, setProducts] = useState([]);
+  const [categoriesList, setCategoriesList] = useState([]);
+  const [totalProducts, setTotalProducts] = useState(0);
+  const [statusCounts, setStatusCounts] = useState({ all: 0, disponible: 0, 'sous-seuil': 0, rupture: 0 });
   const [previewImage, setPreviewImage] = useState(null);
   const i18n = {
     fr: {
@@ -56,12 +59,8 @@ const ProduitsMag = ({ userName, onLogout }) => {
       category: 'Categorie',
       qty: 'Quantite',
       min: 'Seuil Min.',
-      validation: 'Validation',
       state: 'Etat',
       actions: 'Actions',
-      validated: 'Valide',
-      rejected: 'Rejete',
-      pending: 'En attente',
       noProducts: 'Aucun produit trouve',
       updated: 'Liste des produits actualisee',
       prev: 'Page precedente',
@@ -88,12 +87,8 @@ const ProduitsMag = ({ userName, onLogout }) => {
       category: 'Category',
       qty: 'Quantity',
       min: 'Min Threshold',
-      validation: 'Validation',
       state: 'Status',
       actions: 'Actions',
-      validated: 'Approved',
-      rejected: 'Rejected',
-      pending: 'Pending',
       noProducts: 'No product found',
       updated: 'Product list refreshed',
       prev: 'Previous page',
@@ -140,18 +135,55 @@ const ProduitsMag = ({ userName, onLogout }) => {
     },
   }[lang];
 
-  const loadProducts = useCallback(async () => {
+  const loadCategories = useCallback(async () => {
+    try {
+      const data = await get('/categories');
+      const items = Array.isArray(data) ? data : [];
+      setCategoriesList(items.map((c) => ({ id: c._id, name: c.name })));
+    } catch {
+      setCategoriesList([]);
+    }
+  }, []);
+
+  const loadProducts = useCallback(async (options = {}) => {
     setIsLoading(true);
     try {
-      const data = await get('/products');
-      const mapped = data.map((p) => ({
+      const q = typeof options.q === 'string' ? options.q : searchQuery;
+      const page = Number.isFinite(Number(options.page)) ? Number(options.page) : currentPage;
+      const status = typeof options.status === 'string' ? options.status : statusFilter;
+      const category = typeof options.category === 'string' ? options.category : categoryFilter;
+
+      const params = new URLSearchParams();
+      if (q && q.trim()) params.set('q', q.trim());
+      params.set('page', String(Math.max(1, page || 1)));
+      params.set('limit', String(ITEMS_PER_PAGE));
+      if (status && status !== 'all') {
+        // UI: disponible|sous-seuil|rupture -> API: ok|sous_seuil|rupture
+        params.set('status', status === 'disponible' ? 'ok' : (status === 'sous-seuil' ? 'sous_seuil' : status));
+      }
+      if (category && category !== 'all') params.set('category', category);
+
+      const payload = await get(`/products/catalog?${params.toString()}`);
+      const items = Array.isArray(payload?.items) ? payload.items : [];
+      setTotalProducts(Number(payload?.total || 0));
+
+      const counts = payload?.counts || {};
+      setStatusCounts({
+        all: Number(counts.all || 0),
+        disponible: Number(counts.ok || 0),
+        'sous-seuil': Number(counts.sous_seuil || 0),
+        rupture: Number(counts.rupture || 0),
+      });
+
+      const mapped = items.map((p) => ({
         id: p._id,
         code: p.code_product,
         nom: p.name,
         categorie: p.category?.name || '-',
+        categoryId: p.category?._id || '',
         quantite: Number(p.quantity_current || 0),
         seuilMin: Number(p.seuil_minimum || 0),
-        validationStatus: p.validation_status || 'pending',
+        computedStatus: p.computed_status || '',
         image: p.image_product || '',
         unite: p.unite || 'Unite',
       }));
@@ -161,18 +193,12 @@ const ProduitsMag = ({ userName, onLogout }) => {
     } finally {
       setIsLoading(false);
     }
-  }, [toast]);
+  }, [categoryFilter, currentPage, searchQuery, statusFilter, toast]);
 
   useEffect(() => {
+    loadCategories();
     loadProducts();
-  }, [loadProducts]);
-
-  useEffect(() => {
-    const timer = setInterval(() => {
-      loadProducts();
-    }, 10000);
-    return () => clearInterval(timer);
-  }, [loadProducts]);
+  }, [loadCategories, loadProducts]);
 
   const getProductStatus = useCallback((quantite, seuilMin) => {
     if (quantite === 0) return 'rupture';
@@ -180,38 +206,22 @@ const ProduitsMag = ({ userName, onLogout }) => {
     return 'disponible';
   }, []);
 
-  const filteredProducts = useMemo(() => {
-    return products.filter(product => {
-      const matchesSearch = 
-        product.nom.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        product.code.toLowerCase().includes(searchQuery.toLowerCase());
-      
-      const matchesCategory = categoryFilter === 'all' || product.categorie === categoryFilter;
-      
-      const status = getProductStatus(product.quantite, product.seuilMin);
-      const matchesStatus = statusFilter === 'all' || status === statusFilter;
+  const totalPages = useMemo(() => Math.max(1, Math.ceil((totalProducts || 0) / ITEMS_PER_PAGE)), [totalProducts]);
+  const paginatedProducts = products;
 
-      return matchesSearch && matchesCategory && matchesStatus;
-    });
-  }, [products, searchQuery, categoryFilter, statusFilter, getProductStatus]);
+  // Debounced reload on search/filter changes
+  useEffect(() => {
+    const t = setTimeout(() => {
+      setCurrentPage(1);
+      loadProducts({ page: 1 });
+    }, 250);
+    return () => clearTimeout(t);
+  }, [categoryFilter, loadProducts, searchQuery, statusFilter]);
 
-  const statusCounts = useMemo(() => ({
-    all: products.length,
-    disponible: products.filter(p => getProductStatus(p.quantite, p.seuilMin) === 'disponible').length,
-    'sous-seuil': products.filter(p => getProductStatus(p.quantite, p.seuilMin) === 'sous-seuil').length,
-    rupture: products.filter(p => getProductStatus(p.quantite, p.seuilMin) === 'rupture').length,
-  }), [products, getProductStatus]);
-
-  const categories = useMemo(
-    () => Array.from(new Set(products.map((p) => p.categorie).filter(Boolean))),
-    [products]
-  );
-
-  const totalPages = Math.ceil(filteredProducts.length / ITEMS_PER_PAGE);
-  const paginatedProducts = useMemo(() => {
-    const start = (currentPage - 1) * ITEMS_PER_PAGE;
-    return filteredProducts.slice(start, start + ITEMS_PER_PAGE);
-  }, [filteredProducts, currentPage]);
+  // Load the requested page when pagination changes
+  useEffect(() => {
+    loadProducts({ page: currentPage });
+  }, [currentPage, loadProducts]);
 
   const handleRefresh = useCallback(async () => {
     await loadProducts();
@@ -233,12 +243,6 @@ const ProduitsMag = ({ userName, onLogout }) => {
   const handleVoirDetails = useCallback((product) => {
     navigate('/magasinier/voir-details', { state: { product } });
   }, [navigate]);
-
-  const getValidationLabel = useCallback((status) => {
-    if (status === 'approved') return { label: 'Valide', className: 'approved' };
-    if (status === 'rejected') return { label: 'Rejete', className: 'rejected' };
-    return { label: 'En attente', className: 'pending' };
-  }, []);
 
   return (
     <div className="app-layout">
@@ -307,8 +311,8 @@ const ProduitsMag = ({ userName, onLogout }) => {
                   aria-label={i18n.filterCat}
                 >
                   <option value="all">{i18n.allCats}</option>
-                  {categories.map(cat => (
-                    <option key={cat} value={cat}>{cat}</option>
+                  {categoriesList.map((cat) => (
+                    <option key={cat.id} value={cat.id}>{cat.name}</option>
                   ))}
                 </select>
 
@@ -325,7 +329,7 @@ const ProduitsMag = ({ userName, onLogout }) => {
 
             {isMobile ? (
               <>
-                {filteredProducts.length === 0 ? (
+                {paginatedProducts.length === 0 ? (
                   <div className="empty-state">
                     <Package size={48} />
                     <p>{i18n.noProducts}</p>
@@ -334,9 +338,7 @@ const ProduitsMag = ({ userName, onLogout }) => {
                   <div className="mobile-card-list">
                     {paginatedProducts.map((product) => {
                       const status = getProductStatus(product.quantite, product.seuilMin);
-                      const validation = getValidationLabel(product.validationStatus);
                       const statusLabel = status === 'disponible' ? i18n.available : status === 'sous-seuil' ? i18n.low : i18n.out;
-                      const validationLabel = validation.label === 'Valide' ? i18n.validated : validation.label === 'Rejete' ? i18n.rejected : i18n.pending;
 
                       return (
                         <div key={product.id} className="mobile-card">
@@ -377,12 +379,6 @@ const ProduitsMag = ({ userName, onLogout }) => {
                               <div className="mobile-kv-label">{i18n.min}</div>
                               <div className="mobile-kv-value">{product.seuilMin}</div>
                             </div>
-                            <div className="mobile-kv">
-                              <div className="mobile-kv-label">{i18n.validation}</div>
-                              <div className="mobile-kv-value">
-                                <span className={`validation-badge ${validation.className}`}>{validationLabel}</span>
-                              </div>
-                            </div>
                           </div>
 
                           <div className="mobile-card-actions three">
@@ -418,7 +414,6 @@ const ProduitsMag = ({ userName, onLogout }) => {
                       <th scope="col">{i18n.category}</th>
                       <th scope="col">{i18n.qty}</th>
                       <th scope="col">{i18n.min}</th>
-                      <th scope="col">{i18n.validation}</th>
                       <th scope="col">{i18n.state}</th>
                       <th scope="col">{i18n.actions}</th>
                     </tr>
@@ -451,16 +446,6 @@ const ProduitsMag = ({ userName, onLogout }) => {
                           </td>
                           <td className="quantity-cell">{product.quantite}</td>
                           <td className="seuil-cell">{product.seuilMin}</td>
-                          <td>
-                            {(() => {
-                              const validation = getValidationLabel(product.validationStatus);
-                              return (
-                                <span className={`validation-badge ${validation.className}`}>
-                                  {validation.label === 'Valide' ? i18n.validated : validation.label === 'Rejete' ? i18n.rejected : i18n.pending}
-                                </span>
-                              );
-                            })()}
-                          </td>
                           <td>
                             <span className={`status-badge ${status}`}>
                               {status === 'disponible' ? i18n.available :
@@ -502,7 +487,7 @@ const ProduitsMag = ({ userName, onLogout }) => {
                   </tbody>
                 </table>
 
-                {filteredProducts.length === 0 && (
+                {paginatedProducts.length === 0 && (
                   <div className="empty-state">
                     <Package size={48} />
                     <p>{i18n.noProducts}</p>
@@ -514,7 +499,7 @@ const ProduitsMag = ({ userName, onLogout }) => {
             {totalPages > 1 && (
               <div className="pagination">
                 <span className="pagination-info">
-                  {((currentPage - 1) * ITEMS_PER_PAGE) + 1} - {Math.min(currentPage * ITEMS_PER_PAGE, filteredProducts.length)} sur {filteredProducts.length}
+                  {totalProducts > 0 ? (((currentPage - 1) * ITEMS_PER_PAGE) + 1) : 0} - {Math.min(currentPage * ITEMS_PER_PAGE, totalProducts)} sur {totalProducts}
                 </span>
                 <div className="pagination-buttons">
                   <button 

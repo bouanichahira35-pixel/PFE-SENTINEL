@@ -9,7 +9,8 @@ export const STOCK_RULES_DEFAULT = Object.freeze({
   activerAlertesAutomatiques: true,
 
   // Validation rules
-  validationObligatoireNouveauxProduits: true,
+  // Feature removed: new products are always usable immediately (no responsable validation).
+  validationObligatoireNouveauxProduits: false,
   validationApresModificationSeuil: false,
   validationApresChangementCategorie: false,
   produitsIncompletsEnAverifier: true,
@@ -48,15 +49,8 @@ export function sanitizeStockRulesConfig(input) {
   );
   next.activerAlertesAutomatiques = coerceBool(raw.activerAlertesAutomatiques, next.activerAlertesAutomatiques);
 
-  // Backward compat: old key used by previous UI
-  if (raw.validationObligatoire !== undefined) {
-    next.validationObligatoireNouveauxProduits = Boolean(raw.validationObligatoire);
-  } else {
-    next.validationObligatoireNouveauxProduits = coerceBool(
-      raw.validationObligatoireNouveauxProduits,
-      next.validationObligatoireNouveauxProduits
-    );
-  }
+  // Feature removed: never require responsable validation on new product creation.
+  next.validationObligatoireNouveauxProduits = false;
 
   next.validationApresModificationSeuil = coerceBool(raw.validationApresModificationSeuil, next.validationApresModificationSeuil);
   next.validationApresChangementCategorie = coerceBool(raw.validationApresChangementCategorie, next.validationApresChangementCategorie);
@@ -127,4 +121,3 @@ export async function loadStockRulesHistory({ limit = 50 } = {}) {
   const items = Array.isArray(res?.items) ? res.items : [];
   return { ok: true, items };
 }
-

@@ -38,7 +38,9 @@ const ACTORS = [
   },
   {
     role: 'responsable',
-    legacyRole: 'admin_app',
+    // Legacy datasets sometimes used different labels, but `admin_app` maps to `admin`
+    // (not `responsable`). Keep this actor consistent with the expected role.
+    legacyRole: 'responsable',
     identifier: getTestEnv('TEST_RESPONSABLE_EMAIL', 'responsable@example.local'),
     basePassword: getTestEnv('TEST_RESPONSABLE_PASSWORD', 'ChangeMe_Responsable_123'),
   },
@@ -171,6 +173,11 @@ async function runForgotPasswordCycle(client, actor, index) {
 }
 
 async function run() {
+  const ready = await mongoose.waitForMongoReady({ timeoutMs: 15_000 });
+  if (!ready.ok) {
+    throw new Error(`Mongo not ready: ${ready.reason || 'unknown'}`);
+  }
+
   seedUsersOrThrow();
   await applyLegacyRolesAndStatus();
 

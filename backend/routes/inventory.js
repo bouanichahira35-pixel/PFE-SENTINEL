@@ -97,6 +97,19 @@ const MOTIFS_ECART = [
 
 const CRITICAL_FAMILIES = new Set(['gaz', 'produit_chimique']);
 
+// Simple discrepancy levels for UI badges.
+// Tunable later via AppSetting if needed.
+const DELTA_MINOR_ABS_MAX = 2;
+
+function computeDeltaBadge(delta) {
+  if (delta === null || delta === undefined) return null;
+  const n = Number(delta);
+  if (!Number.isFinite(n)) return null;
+  if (n === 0) return 'OK';
+  if (Math.abs(n) <= DELTA_MINOR_ABS_MAX) return 'MINEUR';
+  return 'CRITIQUE';
+}
+
 function normalizeFamily(value) {
   if (!value) return null;
   const key = String(value).trim().toLowerCase();
@@ -148,12 +161,38 @@ function sanitizeInventoryForMagasinier(inv) {
     categorie_id: inv.categorie_id,
     responsable_id: inv.responsable_id,
     magasinier_id: inv.magasinier_id,
+    magasinier_ids: Array.isArray(inv.magasinier_ids) ? inv.magasinier_ids : [],
     date_lancement: inv.date_lancement,
     date_prevue: inv.date_prevue,
     commentaire: inv.commentaire || '',
     createdAt: inv.createdAt,
     updatedAt: inv.updatedAt,
   };
+}
+
+function isAssignedMagasinier(inv, userId) {
+  const uid = String(userId || '');
+  if (!uid) return false;
+
+  const primary = inv?.magasinier_id?._id || inv?.magasinier_id || null;
+  if (primary && String(primary) === uid) return true;
+
+  const list = Array.isArray(inv?.magasinier_ids) ? inv.magasinier_ids : [];
+  return list.some((id) => String(id?._id || id) === uid);
+}
+
+function listAssignedMagasinierIds(inv) {
+  const out = new Set();
+  const primary = inv?.magasinier_id?._id || inv?.magasinier_id || null;
+  if (primary) out.add(String(primary));
+
+  const list = Array.isArray(inv?.magasinier_ids) ? inv.magasinier_ids : [];
+  for (const id of list) {
+    const key = id?._id || id;
+    if (key) out.add(String(key));
+  }
+
+  return Array.from(out);
 }
 
 function sanitizeInventoryForResponsable(inv) {
@@ -528,18 +567,17 @@ router.post(
           mongoSession ? { session: mongoSession } : undefined
         );
 
-        await Notification.create(
-          [
-            {
-              user: inv.magasinier_id,
-              title: 'Recomptage demandé',
-              message: `Le responsable demande un recomptage pour l'inventaire ${inv.reference}. Motif : ${motif}`,
-              type: 'warning',
-              is_read: false,
-              event_type: 'RECOUNT_REQUESTED',
-              inventory_id: inv._id,
-            },
-          ],
+        const targets = listAssignedMagasinierIds(inv);
+        await Notification.insertMany(
+          targets.map((userId) => ({
+            user: userId,
+            title: 'Recomptage demandé',
+            message: `Le responsable demande un recomptage pour l'inventaire ${inv.reference}. Motif : ${motif}`,
+            type: 'warning',
+            is_read: false,
+            event_type: 'RECOUNT_REQUESTED',
+            inventory_id: inv._id,
+          })),
           mongoSession ? { session: mongoSession } : undefined
         );
       });
@@ -595,18 +633,17 @@ router.post(
           mongoSession ? { session: mongoSession } : undefined
         );
 
-        await Notification.create(
-          [
-            {
-              user: inv.magasinier_id,
-              title: 'Inventaire rejeté',
-              message: `Votre inventaire ${inv.reference} a été rejeté. Motif : ${motif}`,
-              type: 'alert',
-              is_read: false,
-              event_type: 'INVENTORY_REJECTED',
-              inventory_id: inv._id,
-            },
-          ],
+        const targets = listAssignedMagasinierIds(inv);
+        await Notification.insertMany(
+          targets.map((userId) => ({
+            user: userId,
+            title: 'Inventaire rejeté',
+            message: `Votre inventaire ${inv.reference} a été rejeté. Motif : ${motif}`,
+            type: 'alert',
+            is_read: false,
+            event_type: 'INVENTORY_REJECTED',
+            inventory_id: inv._id,
+          })),
           mongoSession ? { session: mongoSession } : undefined
         );
       });
@@ -737,18 +774,17 @@ router.post('/responsable/inventories/:id/validate', async (req, res) => {
         mongoOpts
       );
 
-      await Notification.create(
-        [
-          {
-            user: inv.magasinier_id,
-            title: 'Inventaire validé',
-            message: `Votre inventaire ${inv.reference} a été validé par le responsable.`,
-            type: 'info',
-            is_read: false,
-            event_type: 'INVENTORY_VALIDATED',
-            inventory_id: inv._id,
-          },
-        ],
+      const targets = listAssignedMagasinierIds(inv);
+      await Notification.insertMany(
+        targets.map((userId) => ({
+          user: userId,
+          title: 'Inventaire validé',
+          message: `Votre inventaire ${inv.reference} a été validé par le responsable.`,
+          type: 'info',
+          is_read: false,
+          event_type: 'INVENTORY_VALIDATED',
+          inventory_id: inv._id,
+        })),
         mongoOpts
       );
     });
@@ -766,7 +802,7 @@ router.get('/magasinier/missions', async (req, res) => {
     if (!ensureRole(req, res, ['magasinier'])) return;
 
     const q = {
-      magasinier_id: req.user.id,
+      $or: [{ magasinier_id: req.user.id }, { magasinier_ids: req.user.id }],
       status: { $in: ['A_FAIRE', 'EN_COURS', 'A_RECOMPTER', 'A_VALIDER', 'VALIDE', 'REJETE'] },
     };
 
@@ -807,7 +843,7 @@ router.get('/magasinier/missions', async (req, res) => {
 });
 
 // GET /api/inventory/magasinier/inventories/:id
-// Counting sheet for magasinier (NO theoretical/system quantities in response).
+// Counting sheet for magasinier.
 router.get('/magasinier/inventories/:id', async (req, res) => {
   try {
     if (!ensureRole(req, res, ['magasinier'])) return;
@@ -819,17 +855,22 @@ router.get('/magasinier/inventories/:id', async (req, res) => {
       .populate('categorie_id', 'name')
       .populate('responsable_id', 'username role')
       .populate('magasinier_id', 'username role')
+      .populate('magasinier_ids', 'username role')
       .lean();
 
     if (!inv) return res.status(404).json({ error: 'Inventaire introuvable' });
-    if (String(inv.magasinier_id?._id || inv.magasinier_id) !== String(req.user.id)) return res.status(403).json({ error: 'Acces refuse' });
+    if (!isAssignedMagasinier(inv, req.user.id)) return res.status(403).json({ error: 'Acces refuse' });
 
     const linesRaw = await InventoryLine.find({ inventory_id: inv._id })
       .populate('product_id', '_id code_product name unite emplacement qr_code_value')
       .sort({ is_counted: 1, updatedAt: -1 })
       .lean();
 
-    const lines = linesRaw.map((l) => ({
+    const lines = linesRaw.map((l) => {
+      const theo = Math.max(0, Math.floor(Number(l.quantite_theorique_initiale || 0)));
+      const counted = l.quantite_comptee === null || l.quantite_comptee === undefined ? null : Math.max(0, Math.floor(Number(l.quantite_comptee || 0)));
+      const delta = counted === null ? null : (counted - theo);
+      return ({
       _id: l._id,
       product: {
         _id: l.product_id?._id,
@@ -839,14 +880,20 @@ router.get('/magasinier/inventories/:id', async (req, res) => {
         qr_code_value: l.product_id?.qr_code_value || '',
         emplacement: l.emplacement_id || l.product_id?.emplacement || '',
       },
-      quantite_comptee: l.quantite_comptee === null || l.quantite_comptee === undefined ? null : Number(l.quantite_comptee || 0),
+      lot: l.stock_id || '',
+      quantite_theorique_initiale: theo,
+      quantite_comptee: counted,
+      ecart: delta,
+      ecart_badge: computeDeltaBadge(delta),
       observation_magasinier: l.observation_magasinier || '',
       // For recount scenario: allow showing responsable note/motif, not quantities.
       motif_recompte: l.observation_responsable || '',
       requires_recount: Boolean(l.requires_recount),
       is_counted: Boolean(l.is_counted),
+      is_verified_by_magasinier: Boolean(l.is_verified_by_magasinier),
       updatedAt: l.updatedAt,
-    }));
+      });
+    });
 
     const total = linesRaw.length;
     const counted = linesRaw.reduce((acc, l) => acc + (l.is_counted ? 1 : 0), 0);
@@ -862,6 +909,53 @@ router.get('/magasinier/inventories/:id', async (req, res) => {
   }
 });
 
+// POST /api/inventory/magasinier/inventories/:id/lines/:lineId/verify
+router.post(
+  '/magasinier/inventories/:id/lines/:lineId/verify',
+  strictBody(['verified']),
+  async (req, res) => {
+    try {
+      if (!ensureRole(req, res, ['magasinier'])) return;
+      if (!isValidObjectIdLike(req.params.id)) return res.status(400).json({ error: 'id invalide' });
+      if (!isValidObjectIdLike(req.params.lineId)) return res.status(400).json({ error: 'lineId invalide' });
+
+      const verified = Boolean(req.body?.verified);
+
+      const inv = await Inventory.findById(req.params.id).select('_id status magasinier_id magasinier_ids reference').lean();
+      if (!inv) return res.status(404).json({ error: 'Inventaire introuvable' });
+      if (!isAssignedMagasinier(inv, req.user.id)) return res.status(403).json({ error: 'Acces refuse' });
+      if (!['EN_COURS', 'A_RECOMPTER'].includes(String(inv.status))) return res.status(409).json({ error: 'Inventaire non modifiable' });
+
+      const line = await InventoryLine.findOne({ _id: req.params.lineId, inventory_id: inv._id });
+      if (!line) return res.status(404).json({ error: 'Ligne introuvable' });
+      if (verified && (line.quantite_comptee === null || line.quantite_comptee === undefined)) {
+        return res.status(409).json({ error: 'Impossible de verifier une ligne non comptee' });
+      }
+
+      line.is_verified_by_magasinier = verified;
+      await line.save();
+
+      if (verified) {
+        await History.create({
+          action_type: 'inventory',
+          user: req.user.id,
+          source: 'ui',
+          description: 'Le magasinier a marque une ligne comme verifiee.',
+          actor_role: req.user.role,
+          tags: ['inventory', 'line_verified', 'INVENTORY_LINE_VERIFIED'],
+          status_before: String(inv.status),
+          status_after: String(inv.status),
+          context: { event: 'INVENTORY_LINE_VERIFIED', inventory_id: String(inv._id), reference: inv.reference, line_id: String(line._id) },
+        });
+      }
+
+      return res.json({ ok: true, line: { _id: line._id, is_verified_by_magasinier: line.is_verified_by_magasinier } });
+    } catch (err) {
+      return res.status(500).json({ error: 'Failed to verify line', details: err.message });
+    }
+  }
+);
+
 // POST /api/inventory/magasinier/inventories/:id/start
 router.post('/magasinier/inventories/:id/start', async (req, res) => {
   try {
@@ -870,7 +964,7 @@ router.post('/magasinier/inventories/:id/start', async (req, res) => {
 
     const inv = await Inventory.findById(req.params.id);
     if (!inv) return res.status(404).json({ error: 'Inventaire introuvable' });
-    if (String(inv.magasinier_id) !== String(req.user.id)) return res.status(403).json({ error: 'Acces refuse' });
+    if (!isAssignedMagasinier(inv, req.user.id)) return res.status(403).json({ error: 'Acces refuse' });
     if (String(inv.status) !== 'A_FAIRE') return res.status(409).json({ error: 'Inventaire non demarrable' });
 
     inv.status = 'EN_COURS';
@@ -902,8 +996,8 @@ router.post('/magasinier/inventories/:id/save-progress', async (req, res) => {
 
     const inv = await Inventory.findById(req.params.id).lean();
     if (!inv) return res.status(404).json({ error: 'Inventaire introuvable' });
-    if (String(inv.magasinier_id) !== String(req.user.id)) return res.status(403).json({ error: 'Acces refuse' });
-    if (String(inv.status) !== 'EN_COURS') return res.status(409).json({ error: 'Progression non sauvegardable' });
+    if (!isAssignedMagasinier(inv, req.user.id)) return res.status(403).json({ error: 'Acces refuse' });
+    if (!['EN_COURS', 'A_RECOMPTER'].includes(String(inv.status))) return res.status(409).json({ error: 'Progression non sauvegardable' });
 
     await History.create({
       action_type: 'inventory',
@@ -912,8 +1006,8 @@ router.post('/magasinier/inventories/:id/save-progress', async (req, res) => {
       description: 'Le magasinier a sauvegarde la progression.',
       actor_role: req.user.role,
       tags: ['inventory', 'progress_saved', 'INVENTORY_PROGRESS_SAVED'],
-      status_before: 'EN_COURS',
-      status_after: 'EN_COURS',
+      status_before: String(inv.status),
+      status_after: String(inv.status),
       context: { event: 'INVENTORY_PROGRESS_SAVED', inventory_id: String(inv._id), reference: inv.reference },
     });
 
@@ -933,9 +1027,9 @@ router.patch(
       if (!isValidObjectIdLike(req.params.id)) return res.status(400).json({ error: 'id invalide' });
       if (!isValidObjectIdLike(req.params.lineId)) return res.status(400).json({ error: 'lineId invalide' });
 
-      const inv = await Inventory.findById(req.params.id).select('_id status magasinier_id recount_requested_at').lean();
+      const inv = await Inventory.findById(req.params.id).select('_id status magasinier_id magasinier_ids recount_requested_at').lean();
       if (!inv) return res.status(404).json({ error: 'Inventaire introuvable' });
-      if (String(inv.magasinier_id) !== String(req.user.id)) return res.status(403).json({ error: 'Acces refuse' });
+      if (!isAssignedMagasinier(inv, req.user.id)) return res.status(403).json({ error: 'Acces refuse' });
       if (!['EN_COURS', 'A_RECOMPTER'].includes(String(inv.status))) {
         return res.status(409).json({ error: 'Inventaire non modifiable' });
       }
@@ -971,6 +1065,7 @@ router.patch(
       line.quantite_comptee = countedQty;
       line.observation_magasinier = observation;
       line.is_counted = true;
+      line.is_verified_by_magasinier = false;
       await line.save();
 
       return res.json({
@@ -1002,7 +1097,7 @@ router.post(
 
       const inv = await Inventory.findById(req.params.id).lean();
       if (!inv) return res.status(404).json({ error: 'Inventaire introuvable' });
-      if (String(inv.magasinier_id) !== String(req.user.id)) return res.status(403).json({ error: 'Acces refuse' });
+      if (!isAssignedMagasinier(inv, req.user.id)) return res.status(403).json({ error: 'Acces refuse' });
       if (String(inv.type_inventaire) !== 'GLOBAL') return res.status(409).json({ error: 'Ajout article reserve a GLOBAL' });
       if (!['EN_COURS', 'A_RECOMPTER'].includes(String(inv.status))) return res.status(409).json({ error: 'Inventaire non modifiable' });
 
@@ -1054,7 +1149,7 @@ router.post('/magasinier/inventories/:id/submit', async (req, res) => {
 
     const inv = await Inventory.findById(req.params.id);
     if (!inv) return res.status(404).json({ error: 'Inventaire introuvable' });
-    if (String(inv.magasinier_id) !== String(req.user.id)) return res.status(403).json({ error: 'Acces refuse' });
+    if (!isAssignedMagasinier(inv, req.user.id)) return res.status(403).json({ error: 'Acces refuse' });
     if (!['EN_COURS', 'A_RECOMPTER'].includes(String(inv.status))) return res.status(409).json({ error: 'Inventaire non soumissible' });
 
     const lines = await InventoryLine.find({ inventory_id: inv._id }).select('_id is_counted quantite_comptee observation_magasinier quantite_theorique_initiale requires_recount last_recount_at').lean();
@@ -1146,7 +1241,7 @@ router.get('/inventories', async (req, res) => {
 
     const q = {};
     if (role === 'magasinier' && mine) {
-      q.magasinier_id = req.user.id;
+      q.$or = [{ magasinier_id: req.user.id }, { magasinier_ids: req.user.id }];
     }
 
     const status = asOptionalString(req.query?.status);
@@ -1159,6 +1254,7 @@ router.get('/inventories', async (req, res) => {
       .limit(120)
       .populate('responsable_id', 'username role')
       .populate('magasinier_id', 'username role')
+      .populate('magasinier_ids', 'username role')
       .populate('magasin_id', 'code name')
       .populate('zone_id', 'code name')
       .populate('categorie_id', 'name')
@@ -1180,6 +1276,7 @@ router.post(
     'famille_id',
     'categorie_id',
     'magasinier_id',
+    'magasinier_ids',
     'date_prevue',
     'commentaire',
     'bloquer_mouvements',
@@ -1207,7 +1304,23 @@ router.post(
       if (familleIdRaw && !familleId) errors.push('famille_id invalide');
 
       const magasinierId = asOptionalString(req.body?.magasinier_id);
-      if (!magasinierId || !isValidObjectIdLike(magasinierId)) errors.push('magasinier_id obligatoire');
+      const magasinierIdsRaw = Array.isArray(req.body?.magasinier_ids) ? req.body.magasinier_ids : [];
+      const candidates = [];
+      if (magasinierId) candidates.push(magasinierId);
+      for (const raw of magasinierIdsRaw) {
+        const id = asOptionalString(raw);
+        if (id) candidates.push(id);
+      }
+      const seen = new Set();
+      const magasinierIds = [];
+      for (const id of candidates) {
+        const key = String(id || '').trim();
+        if (!key || seen.has(key)) continue;
+        seen.add(key);
+        magasinierIds.push(key);
+      }
+      if (!magasinierIds.length) errors.push('magasinier obligatoire');
+      if (magasinierIds.some((id) => !isValidObjectIdLike(id))) errors.push('magasinier_id invalide');
 
       const datePrevue = asDate(req.body?.date_prevue);
       if (datePrevue === undefined) errors.push('date_prevue obligatoire');
@@ -1231,10 +1344,17 @@ router.post(
 
       if (errors.length) return res.status(400).json({ error: 'Validation failed', details: errors });
 
-      const magasinier = await User.findById(magasinierId).select('_id role status username').lean();
-      if (!magasinier) return res.status(404).json({ error: 'Magasinier introuvable' });
-      if (String(magasinier.role) !== 'magasinier') return res.status(400).json({ error: 'Utilisateur non magasinier' });
-      if (String(magasinier.status || 'active') !== 'active') return res.status(409).json({ error: 'Magasinier inactif/bloque' });
+      const magasinierRows = await User.find({ _id: { $in: magasinierIds } })
+        .select('_id role status username')
+        .lean();
+      const byId = new Map(magasinierRows.map((u) => [String(u._id), u]));
+      const orderedMagasiniers = magasinierIds.map((id) => byId.get(String(id))).filter(Boolean);
+      if (orderedMagasiniers.length !== magasinierIds.length) return res.status(404).json({ error: 'Magasinier introuvable' });
+      const nonMag = orderedMagasiniers.find((u) => String(u.role) !== 'magasinier');
+      if (nonMag) return res.status(400).json({ error: 'Utilisateur non magasinier' });
+      const blocked = orderedMagasiniers.find((u) => String(u.status || 'active') !== 'active');
+      if (blocked) return res.status(409).json({ error: 'Magasinier inactif/bloque' });
+      const primaryMagasinier = orderedMagasiniers[0];
 
       const existingActive = await Inventory.findOne({
         status: { $in: ACTIVE_INVENTORY_STATUSES },
@@ -1280,7 +1400,8 @@ router.post(
               famille_id: familleId,
               categorie_id: categorieId,
               responsable_id: req.user.id,
-              magasinier_id: magasinier._id,
+              magasinier_id: primaryMagasinier._id,
+              magasinier_ids: orderedMagasiniers.map((u) => u._id),
               date_lancement: dateLancement,
               date_prevue: datePrevue,
               bloquer_mouvements: bloquerMouvements,
@@ -1331,7 +1452,8 @@ router.post(
                 zone_id: zoneId ? String(zoneId) : null,
                 famille_id: familleId,
                 categorie_id: categorieId ? String(categorieId) : null,
-                magasinier_id: String(magasinier._id),
+                magasinier_id: String(primaryMagasinier._id),
+                magasinier_ids: orderedMagasiniers.map((u) => String(u._id)),
                 lines_count: lines.length,
                 movement_blocked: movementBlocked,
               },
@@ -1340,34 +1462,34 @@ router.post(
           mongoSession ? { session: mongoSession } : undefined
         );
 
-        let notification = null;
+        let notificationsCreated = 0;
         if (notificationsActives) {
           const typeLabel = typeInventaire === 'GLOBAL' ? 'GLOBAL' : 'TOURNANT';
-          notification = await Notification.create(
-            [
-              {
-                user: magasinier._id,
-                title: "Nouvelle mission d'inventaire",
-                message: `Une nouvelle mission d'inventaire ${typeLabel} vous a ete assignee (${reference}).`,
-                type: 'info',
-                is_read: false,
-                event_type: 'NEW_INVENTORY_MISSION',
-                inventory_id: inventory._id,
-              },
-            ],
+          const targets = orderedMagasiniers.map((u) => u._id);
+          await Notification.insertMany(
+            targets.map((userId) => ({
+              user: userId,
+              title: "Nouvelle mission d'inventaire",
+              message: `Une nouvelle mission d'inventaire ${typeLabel} vous a ete assignee (${reference}).`,
+              type: 'info',
+              is_read: false,
+              event_type: 'NEW_INVENTORY_MISSION',
+              inventory_id: inventory._id,
+            })),
             mongoSession ? { session: mongoSession } : undefined
           );
-          notification = notification?.[0] || null;
+          notificationsCreated = targets.length;
         }
 
-        return { inventory, notification, lines_count: lines.length };
+        return { inventory, notifications_created: notificationsCreated, lines_count: lines.length };
       });
 
       return res.status(201).json({
         ok: true,
         inventory: result.inventory,
         lines_count: result.lines_count,
-        notification_created: Boolean(result.notification),
+        notification_created: Number(result.notifications_created || 0) > 0,
+        notifications_created: Number(result.notifications_created || 0),
       });
     } catch (err) {
       return res.status(400).json({ error: 'Failed to launch inventory', details: err.message });

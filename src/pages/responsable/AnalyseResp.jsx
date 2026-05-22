@@ -151,7 +151,7 @@ const AnalyseResp = ({ userName, onLogout }) => {
   const runSimulation = async () => {
     const qty = Number(simulationQty);
     if (!simulationProductId || !Number.isFinite(qty) || qty < 0) {
-      toast.error('Parametres simulation invalides');
+      toast.error('Paramètres simulation invalides');
       return;
     }
     setIsSimulating(true);

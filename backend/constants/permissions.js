@@ -15,6 +15,7 @@ const PERMISSIONS = Object.freeze({
   REQUEST_CREATE: 'request.create',
   REQUEST_READ_OWN: 'request.read.own',
   REQUEST_READ_ALL: 'request.read.all',
+  REQUEST_UPDATE_OWN: 'request.update.own',
   REQUEST_VALIDATE: 'request.validate',
   SUPPLIER_MANAGE: 'supplier.manage',
   PURCHASE_ORDER_MANAGE: 'purchase_order.manage',
@@ -44,6 +45,7 @@ const PERMISSION_META = Object.freeze({
   [PERMISSIONS.REQUEST_CREATE]: { label: 'Créer demandes', area: 'demandes' },
   [PERMISSIONS.REQUEST_READ_OWN]: { label: 'Lire ses demandes', area: 'demandes' },
   [PERMISSIONS.REQUEST_READ_ALL]: { label: 'Lire toutes demandes', area: 'demandes' },
+  [PERMISSIONS.REQUEST_UPDATE_OWN]: { label: 'Modifier ses demandes', area: 'demandes' },
   [PERMISSIONS.REQUEST_VALIDATE]: { label: 'Valider/Rejeter demandes', area: 'demandes' },
   [PERMISSIONS.SUPPLIER_MANAGE]: { label: 'Gérer fournisseurs', area: 'fournisseurs' },
   [PERMISSIONS.PURCHASE_ORDER_MANAGE]: { label: 'Gérer commandes fournisseurs', area: 'fournisseurs' },
@@ -60,6 +62,7 @@ const ROLE_PERMISSIONS = Object.freeze({
     PERMISSIONS.PRODUCT_READ,
     PERMISSIONS.REQUEST_CREATE,
     PERMISSIONS.REQUEST_READ_OWN,
+    PERMISSIONS.REQUEST_UPDATE_OWN,
     PERMISSIONS.HISTORY_READ,
   ]),
   magasinier: new Set([

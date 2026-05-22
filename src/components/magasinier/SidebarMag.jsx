@@ -13,7 +13,7 @@ const SidebarMag = ({ collapsed, onToggle, onLogout, userName }) => {
   const avatarUrl = useProtectedFileUrl(profileImage);
 
   const labels = {
-    fr: { inbox: 'Centre d\u2019actions', produits: 'Produits', demandes: 'Suivi demandes', inventaire: 'Inventaire', historique: 'Historique', chat: 'Chat', parametres: 'Parametres', logout: 'Deconnexion' },
+    fr: { inbox: 'Centre de préparation', produits: 'Produits', demandes: 'Suivi demandes', inventaire: 'Inventaire', historique: 'Historique', chat: 'Chat', parametres: 'Paramètres', logout: 'Déconnexion' },
     en: { inbox: 'Inbox', produits: 'Products', demandes: 'Requests', inventaire: 'Inventory', historique: 'History', chat: 'Chat', parametres: 'Settings', logout: 'Logout' },
     ar: { inbox: 'Inbox', produits: 'المنتجات', demandes: 'الطلبات', historique: 'السجل', chat: 'الدردشة', parametres: 'الإعدادات', logout: 'تسجيل الخروج' },
   }[language] || {};

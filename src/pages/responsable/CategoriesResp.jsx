@@ -500,7 +500,7 @@ export default function CategoriesResp({ userName, onLogout }) {
   };
 
   const openProducts = (categoryId, { archivedOnly = false } = {}) => {
-    const base = `/responsable/produits?include_archived=1&category=${encodeURIComponent(categoryId)}`;
+    const base = `/responsable/produits?include_archived=1&category=${encodeURIComponent(categoryId)}&mode=assign`;
     navigate(archivedOnly ? `${base}&archived_only=1` : base);
   };
 

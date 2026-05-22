@@ -52,16 +52,16 @@ const ParametresMag = ({ userName, onLogout }) => {
 
   const tabs = [
     { id: 'profil', label: ({ fr: 'Profil', en: 'Profile', ar: 'الملف الشخصي' }[uiLanguage]), icon: User },
-    { id: 'securite', label: ({ fr: 'Securite', en: 'Security', ar: 'الأمان' }[uiLanguage]), icon: Lock },
+    { id: 'securite', label: ({ fr: 'Sécurité', en: 'Security', ar: 'الأمان' }[uiLanguage]), icon: Lock },
     { id: 'apparence', label: ({ fr: 'Apparence', en: 'Appearance', ar: 'المظهر' }[uiLanguage]), icon: Moon },
     { id: 'notifications', label: ({ fr: 'Notifications', en: 'Notifications', ar: 'الإشعارات' }[uiLanguage]), icon: Bell },
     { id: 'langue', label: ({ fr: 'Langue', en: 'Language', ar: 'اللغة' }[uiLanguage]), icon: Globe },
   ];
   const i18n = {
     fr: {
-      title: 'Parametres',
+      title: 'Paramètres',
       loading: 'Chargement...',
-      languageSaved: 'Langue enregistree',
+      languageSaved: 'Langue enregistrée',
     },
     en: {
       title: 'Settings',
@@ -131,7 +131,7 @@ const ParametresMag = ({ userName, onLogout }) => {
     try { 
       let imageProfile = profileData.imageProfile; 
       if (avatarFile) {
-        const uploaded = await uploadFile('/files/upload', avatarFile);
+        const uploaded = await uploadFile('/settings/me/avatar', avatarFile);
         imageProfile = uploaded.file_url;
       }
 
@@ -170,13 +170,16 @@ const ParametresMag = ({ userName, onLogout }) => {
 
     setIsSaving(true);
     try {
-      await patch('/settings/me/password', {
+      const res = await patch('/settings/me/password', {
         current_password: securityData.currentPassword,
         new_password: securityData.newPassword,
         confirm_password: securityData.confirmPassword,
       });
       setSecurityData({ currentPassword: '', newPassword: '', confirmPassword: '' });
-      toast.success('Mot de passe modifie');
+      toast.success(res?.message || 'Mot de passe modifié. Reconnexion requise.');
+      if (res?.logout_required && onLogout) {
+        onLogout('Mot de passe modifié. Veuillez vous reconnecter.', { remote: false });
+      }
     } catch (err) {
       toast.error(err.message || 'Erreur modification mot de passe');
     } finally {
@@ -336,7 +339,7 @@ const ParametresMag = ({ userName, onLogout }) => {
 
               {activeTab === 'securite' && (
                 <div className="param-section">
-                  <h2>Securite du compte</h2>
+                  <h2>Sécurité du compte</h2>
                   <div className="form-group">
                     <label>Mot de passe actuel</label>
                     <div className="password-input-wrap">

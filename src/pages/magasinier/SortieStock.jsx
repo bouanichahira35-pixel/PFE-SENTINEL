@@ -23,6 +23,7 @@ import InlineQrScanner from '../../components/shared/InlineQrScanner';
 import { useToast } from '../../components/shared/Toast';
 import { get, patch, post, uploadFile } from '../../services/api';
 import { asPositiveInt, isSafeText, sanitizeText } from '../../utils/formGuards';
+import { loadRecentList, saveRecentValue } from '../../utils/recentInputs';
 import './EntreeStock.css';
 
 const SortieStock = ({ userName, onLogout }) => {
@@ -37,7 +38,6 @@ const SortieStock = ({ userName, onLogout }) => {
   const initialProduct = location.state?.product || null;
   const demandeInfo = location.state?.demandeInfo || null;
 
-  const [productsIndex, setProductsIndex] = useState([]);
   const [productInfo, setProductInfo] = useState(initialProduct);
   const [errors, setErrors] = useState({});
   const [attachmentFile, setAttachmentFile] = useState(null);
@@ -51,6 +51,10 @@ const SortieStock = ({ userName, onLogout }) => {
   const [generatedBond, setGeneratedBond] = useState(null);
   const formOpenedAtRef = useRef(Date.now());
 
+  const [recentDirections, setRecentDirections] = useState(() => loadRecentList('mag_recent_directions_v1'));
+  const [recentBeneficiaries, setRecentBeneficiaries] = useState(() => loadRecentList('mag_recent_beneficiaries_v1'));
+  const [recentWithdrawalPapers, setRecentWithdrawalPapers] = useState(() => loadRecentList('mag_recent_withdrawal_papers_v1'));
+
   const [formData, setFormData] = useState({
     codeBarres: initialProduct?.code || '',
     quantite: demandeInfo?.quantite?.toString() || '',
@@ -63,31 +67,61 @@ const SortieStock = ({ userName, onLogout }) => {
     commentaire: '',
   });
 
-  const findProductByCode = useCallback(
-    (rawCode) => {
-      const normalized = String(rawCode || '').trim().toUpperCase();
-      if (!normalized) return null;
-      return productsIndex.find((p) => String(p.code || '').trim().toUpperCase() === normalized) || null;
-    },
-    [productsIndex]
-  );
+  const mapProductFromLookup = useCallback((p) => ({
+    id: p?._id,
+    code: p?.code_product,
+    nom: p?.name,
+    categorie: p?.category?.name || 'Sans categorie',
+    quantite: Number(p?.quantity_current || 0),
+    seuil: Number(p?.seuil_minimum || 0),
+    unite: p?.unite || 'Unite',
+  }), []);
+
+  const lookupAndSetProduct = useCallback(async (rawCode, options = {}) => {
+    const code = String(rawCode || '').trim();
+    if (!code) {
+      setProductInfo(null);
+      setErrors((prev) => ({ ...prev, product: 'Produit requis' }));
+      return null;
+    }
+
+    setIsLoadingProducts(true);
+    try {
+      const payload = await get(`/products/lookup?code=${encodeURIComponent(code)}`);
+      const p = payload?.product;
+      if (!p?._id) {
+        setProductInfo(null);
+        setErrors((prev) => ({ ...prev, product: 'Produit introuvable' }));
+        if (!options.silent) toast.error('Produit introuvable');
+        return null;
+      }
+      const mapped = mapProductFromLookup(p);
+      setProductInfo(mapped);
+      setErrors((prev) => ({ ...prev, product: undefined }));
+      if (!options.silent) toast.success(`Produit identifie: ${mapped.nom || mapped.code || ''}`);
+      return mapped;
+    } catch (err) {
+      setProductInfo(null);
+      setErrors((prev) => ({ ...prev, product: 'Produit introuvable' }));
+      if (!options.silent) toast.error(err.message || 'Produit introuvable');
+      return null;
+    } finally {
+      setIsLoadingProducts(false);
+    }
+  }, [mapProductFromLookup, toast]);
 
   const applyBondPayloadToForm = useCallback(
-    (payload, tokenValue) => {
+    async (payload, tokenValue) => {
       if (!payload || typeof payload !== 'object') return;
 
-      const mappedProduct = productsIndex.find(
-        (p) => String(p.id) === String(payload.product_id || '')
-          || String(p.code || '').trim().toUpperCase() === String(payload.product_code || '').trim().toUpperCase()
-      );
-
-      if (mappedProduct) {
-        setProductInfo(mappedProduct);
+      const productCode = String(payload.product_code || '').trim();
+      if (productCode) {
+        await lookupAndSetProduct(productCode, { silent: true });
       }
 
       setFormData((prev) => ({
         ...prev,
-        codeBarres: mappedProduct?.code || payload.product_code || prev.codeBarres,
+        codeBarres: productCode || prev.codeBarres,
         quantite: payload.quantity ? String(payload.quantity) : prev.quantite,
         numeroBonPrelevementPapier:
           prev.numeroBonPrelevementPapier || payload.withdrawal_paper_number || '',
@@ -99,7 +133,7 @@ const SortieStock = ({ userName, onLogout }) => {
         commentaire: prev.commentaire || payload.note || '',
       }));
     },
-    [productsIndex]
+    [lookupAndSetProduct]
   );
 
   const resolveInternalBond = useCallback(
@@ -129,7 +163,7 @@ const SortieStock = ({ userName, onLogout }) => {
           return resolved;
         }
 
-        applyBondPayloadToForm(resolved?.payload, qrValue);
+        await applyBondPayloadToForm(resolved?.payload, qrValue);
         setErrors((prev) => ({ ...prev, internalBondQr: undefined }));
         if (!silent) {
           toast.success(`Bon interne ${resolved?.payload?.bond_id || ''} verifie`);
@@ -148,42 +182,10 @@ const SortieStock = ({ userName, onLogout }) => {
   );
 
   useEffect(() => {
-    let ignore = false;
-
-    const loadProducts = async () => {
-      setIsLoadingProducts(true);
-      try {
-        const items = await get('/products');
-        if (ignore) return;
-
-        const mapped = items.map((p) => ({
-          id: p._id,
-          code: p.code_product,
-          nom: p.name,
-          categorie: p.category?.name || 'Sans categorie',
-          quantite: Number(p.quantity_current || 0),
-          seuil: Number(p.seuil_minimum || 0),
-          unite: 'Unite',
-        }));
-
-        setProductsIndex(mapped);
-
-        if (!initialProduct && formData.codeBarres) {
-          const found = mapped.find((x) => String(x.code || '').trim().toUpperCase() === formData.codeBarres.trim().toUpperCase());
-          if (found) setProductInfo(found);
-        }
-      } catch (err) {
-        toast.error(err.message || 'Impossible de charger les produits');
-      } finally {
-        if (!ignore) setIsLoadingProducts(false);
-      }
-    };
-
-    loadProducts();
-    return () => {
-      ignore = true;
-    };
-  }, [initialProduct, formData.codeBarres, toast]);
+    if (initialProduct) return;
+    if (!formData.codeBarres) return;
+    lookupAndSetProduct(formData.codeBarres, { silent: true });
+  }, [formData.codeBarres, initialProduct, lookupAndSetProduct]);
 
   useEffect(() => {
     let ignore = false;
@@ -255,16 +257,7 @@ const SortieStock = ({ userName, onLogout }) => {
       return;
     }
 
-    const found = findProductByCode(formData.codeBarres);
-    if (!found) {
-      setProductInfo(null);
-      toast.error('Produit introuvable pour ce code');
-      return;
-    }
-
-    setProductInfo(found);
-    setErrors((prev) => ({ ...prev, product: undefined }));
-    toast.success(`Produit identifie: ${found.nom}`);
+    lookupAndSetProduct(formData.codeBarres);
   };
 
   const handleDetectedQr = (value) => {
@@ -272,12 +265,7 @@ const SortieStock = ({ userName, onLogout }) => {
     if (!scanned) return;
     if (scanTarget === 'codeBarres') {
       setFormData((prev) => ({ ...prev, codeBarres: scanned }));
-      const found = findProductByCode(scanned);
-      if (found) {
-        setProductInfo(found);
-        setErrors((prev) => ({ ...prev, product: undefined }));
-        toast.success(`Produit identifie: ${found.nom}`);
-      }
+      lookupAndSetProduct(scanned);
       return;
     }
     if (scanTarget === 'lotQrCode') {
@@ -463,6 +451,14 @@ const SortieStock = ({ userName, onLogout }) => {
         }
       }
 
+      // UX: memoriser les valeurs frequentes pour limiter la saisie manuelle.
+      saveRecentValue('mag_recent_directions_v1', formData.directionLaboratoire);
+      saveRecentValue('mag_recent_beneficiaries_v1', formData.beneficiaire);
+      saveRecentValue('mag_recent_withdrawal_papers_v1', formData.numeroBonPrelevementPapier);
+      setRecentDirections(loadRecentList('mag_recent_directions_v1'));
+      setRecentBeneficiaries(loadRecentList('mag_recent_beneficiaries_v1'));
+      setRecentWithdrawalPapers(loadRecentList('mag_recent_withdrawal_papers_v1'));
+
       if (createdExit?.exit_number) {
         toast.success(`Bon de prelevement ${createdExit.exit_number} enregistre avec succes`);
       } else {
@@ -588,28 +584,43 @@ const SortieStock = ({ userName, onLogout }) => {
                         id="numeroBonPrelevementPapier"
                         type="text"
                         maxLength={80}
+                        list="recentWithdrawalPapers"
                         value={formData.numeroBonPrelevementPapier}
                         onChange={(e) => setFormData({ ...formData, numeroBonPrelevementPapier: e.target.value })}
                         placeholder="Ex: BP-CHIM-2026-001"
                       />
+                      <datalist id="recentWithdrawalPapers">
+                        {recentWithdrawalPapers.map((v) => <option key={v} value={v} />)}
+                      </datalist>
                     </div>
                     <div className="form-group">
                       <label htmlFor="lotQrCode">
                         <ScanLine size={16} />
                         QR lot FIFO (scan)
                       </label>
-                      <input
-                        id="lotQrCode"
-                        type="text"
-                        maxLength={180}
-                        value={formData.lotQrCode}
-                        onChange={(e) => setFormData({ ...formData, lotQrCode: e.target.value })}
-                        placeholder="Scanner le QR du premier lot"
-                      />
-                      <button type="button" className="scan-btn" onClick={() => setScanTarget('lotQrCode')}>
-                        <ScanLine size={18} />
-                        Camera
-                      </button>
+                      <div className="input-with-btn">
+                        <input
+                          id="lotQrCode"
+                          type="text"
+                          maxLength={180}
+                          value={formData.lotQrCode}
+                          onChange={(e) => setFormData({ ...formData, lotQrCode: e.target.value })}
+                          placeholder="Scanner le QR du premier lot"
+                        />
+                        <button type="button" className="scan-btn" onClick={() => setScanTarget('lotQrCode')}>
+                          <ScanLine size={18} />
+                          Caméra
+                        </button>
+                        <button
+                          type="button"
+                          className="scan-btn"
+                          onClick={() => setFormData((prev) => ({ ...prev, lotQrCode: '' }))}
+                          disabled={!String(formData.lotQrCode || '').trim()}
+                        >
+                          <X size={18} />
+                          Effacer
+                        </button>
+                      </div>
                       {errors.lotQrCode && (
                         <span className="error-text" role="alert">
                           {errors.lotQrCode}
@@ -667,7 +678,16 @@ const SortieStock = ({ userName, onLogout }) => {
                         />
                         <button type="button" className="scan-btn" onClick={() => setScanTarget('internalBondQr')}>
                           <ScanLine size={18} />
-                          Camera
+                          Caméra
+                        </button>
+                        <button
+                          type="button"
+                          className="scan-btn"
+                          onClick={() => setFormData((prev) => ({ ...prev, internalBondQr: '' }))}
+                          disabled={!formData.internalBondQr.trim() || isResolvingBond}
+                        >
+                          <X size={18} />
+                          Effacer
                         </button>
                         <button
                           type="button"
@@ -676,7 +696,7 @@ const SortieStock = ({ userName, onLogout }) => {
                           disabled={!formData.internalBondQr.trim() || isResolvingBond}
                         >
                           <RefreshCcw size={18} />
-                          Verifier
+                          Vérifier
                         </button>
                       </div>
                       {errors.internalBondQr && (
@@ -734,18 +754,23 @@ const SortieStock = ({ userName, onLogout }) => {
                         <Hash size={16} />
                         Quantite
                       </label>
-                      <input
-                        id="quantite"
-                        type="number"
-                        min="1"
-                        max={productInfo?.quantite || 9999}
-                        step="1"
-                        value={formData.quantite}
-                        onChange={(e) => setFormData({ ...formData, quantite: e.target.value })}
-                        placeholder="0"
-                        className={errors.quantite || isInsufficientStock ? 'error' : ''}
-                        aria-invalid={errors.quantite || isInsufficientStock ? 'true' : 'false'}
-                      />
+                      <div className="input-with-unit">
+                        <input
+                          id="quantite"
+                          type="number"
+                          min="1"
+                          max={productInfo?.quantite || 9999}
+                          step="1"
+                          value={formData.quantite}
+                          onChange={(e) => setFormData({ ...formData, quantite: e.target.value })}
+                          placeholder="Ex: 2"
+                          className={errors.quantite || isInsufficientStock ? 'error' : ''}
+                          aria-invalid={errors.quantite || isInsufficientStock ? 'true' : 'false'}
+                        />
+                        <span className="unit-pill" aria-label="Unité">
+                          {productInfo?.unite || 'Unité'}
+                        </span>
+                      </div>
                       {errors.quantite && (
                         <span className="error-text" role="alert">
                           {errors.quantite}
@@ -767,12 +792,16 @@ const SortieStock = ({ userName, onLogout }) => {
                         id="directionLaboratoire"
                         type="text"
                         maxLength={80}
+                        list="recentDirections"
                         value={formData.directionLaboratoire}
                         onChange={(e) => setFormData({ ...formData, directionLaboratoire: e.target.value })}
                         placeholder="Ex: DSP"
                         className={errors.directionLaboratoire ? 'error' : ''}
                         readOnly={Boolean(demandeInfo?.id)}
                       />
+                      <datalist id="recentDirections">
+                        {recentDirections.map((v) => <option key={v} value={v} />)}
+                      </datalist>
                       {errors.directionLaboratoire && (
                         <span className="error-text" role="alert">
                           {errors.directionLaboratoire}
@@ -790,12 +819,16 @@ const SortieStock = ({ userName, onLogout }) => {
                       id="beneficiaire"
                       type="text"
                       maxLength={80}
+                      list="recentBeneficiaries"
                       value={formData.beneficiaire}
                       onChange={(e) => setFormData({ ...formData, beneficiaire: e.target.value })}
                       placeholder="Nom de la personne"
                       className={errors.beneficiaire ? 'error' : ''}
                       readOnly={Boolean(demandeInfo?.id)}
                     />
+                    <datalist id="recentBeneficiaries">
+                      {recentBeneficiaries.map((v) => <option key={v} value={v} />)}
+                    </datalist>
                     {errors.beneficiaire && (
                       <span className="error-text" role="alert">
                         {errors.beneficiaire}

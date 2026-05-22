@@ -1,5 +1,5 @@
 require('./loadEnv');
-require('./db');
+const mongoose = require('./db');
 const bcrypt = require('bcryptjs');
 const User = require('./models/User');
 
@@ -15,10 +15,11 @@ function getTestEnv(name, fallbackForLocal) {
 }
 
 (async () => {
-  try {
-    await User.db?.asPromise?.();
-  } catch {
-    // best-effort: mongoose connection is initialized by ./db
+  const ready = await mongoose.waitForMongoReady({ timeoutMs: 15_000 });
+  if (!ready.ok) {
+    // eslint-disable-next-line no-console
+    console.error('MONGO_NOT_READY', ready.reason || 'unknown');
+    process.exit(1);
   }
 
   const users = [

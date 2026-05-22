@@ -1,15 +1,26 @@
 const router = require('express').Router(); 
 const bcrypt = require('bcryptjs'); 
+const fs = require('fs');
+const fsp = require('fs/promises');
+const path = require('path');
+const { randomUUID } = require('crypto');
+const multer = require('multer');
 const AppSetting = require('../models/AppSetting'); 
 const User = require('../models/User'); 
 const Product = require('../models/Product');
 const History = require('../models/History');
+const UserSession = require('../models/UserSession');
 const requireAuth = require('../middlewares/requireAuth'); 
+const strictBody = require('../middlewares/strictBody');
 const { enqueueMail } = require('../services/mailQueueService'); 
+const { logSecurityEvent } = require('../services/securityAuditService');
 const { isSafeText, normalizeEmail, isValidEmail, normalizePhone, isValidPhone } = require('../utils/validation');
 const { STOCK_RULES_DEFAULT, sanitizeStockRulesConfig, diffStockRules } = require('../constants/stockRules');
+const { validateFileType, hasBasicMalwareSignature, scanFileWithOptionalAntivirus } = require('../utils/fileSecurity');
 
 const BCRYPT_SALT_ROUNDS = Number(process.env.BCRYPT_SALT_ROUNDS || 12);
+const IS_PROD = String(process.env.NODE_ENV || '').trim().toLowerCase() === 'production';
+const REFRESH_COOKIE_NAME = String(process.env.REFRESH_COOKIE_NAME || 'sentinel_refresh').trim();
 const USER_PREFS_DEFAULT = Object.freeze({
   language: 'fr',
   dark_mode: false,
@@ -29,10 +40,35 @@ const AI_SETTINGS_DEFAULT = Object.freeze({
   analyseConsommation: true,
 });
 
+const MAX_AVATAR_SIZE_MB = Number(process.env.AVATAR_MAX_MB || 5);
+const MAX_AVATAR_SIZE_BYTES = MAX_AVATAR_SIZE_MB * 1024 * 1024;
+const AVATAR_ALLOWED_EXTENSIONS = new Set(['.png', '.jpg', '.jpeg', '.jfif', '.webp', '.heic', '.heif']);
+const UPLOAD_DIR = path.join(__dirname, '..', 'uploads');
+
+if (!fs.existsSync(UPLOAD_DIR)) {
+  fs.mkdirSync(UPLOAD_DIR, { recursive: true });
+}
+
+const avatarUpload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: MAX_AVATAR_SIZE_BYTES },
+}).single('file');
+
 function isStrongPassword(password) {
   if (typeof password !== 'string') return false;
   if (password.length < 8 || password.length > 64) return false;
   return /[a-z]/.test(password) && /[A-Z]/.test(password) && /\d/.test(password);
+}
+
+function getRefreshCookieOptions() {
+  const maxAge = 7 * 24 * 60 * 60 * 1000;
+  return {
+    httpOnly: true,
+    sameSite: 'lax',
+    secure: IS_PROD,
+    maxAge,
+    path: '/api/auth',
+  };
 }
 
 async function getAppSettingValue(settingKey, fallback) {
@@ -64,6 +100,60 @@ async function getUserPreferences(userId) {
 }
 
 router.use(requireAuth);
+
+router.post('/me/avatar', async (req, res) => {
+  avatarUpload(req, res, async (err) => {
+    try {
+      if (err) {
+        if (err instanceof multer.MulterError) {
+          if (err.code === 'LIMIT_FILE_SIZE') {
+            return res.status(413).json({ error: `Fichier trop volumineux (max ${MAX_AVATAR_SIZE_MB} MB)` });
+          }
+          return res.status(400).json({ error: `Upload invalide (${err.code})` });
+        }
+        return res.status(400).json({ error: err.message || 'Upload invalide' });
+      }
+
+      if (!req.file) return res.status(400).json({ error: 'Aucun fichier recu' });
+
+      const validation = validateFileType(req.file);
+      if (!validation.ok) {
+        return res.status(400).json({ error: validation.reason });
+      }
+
+      const ext = String(validation.ext || '').toLowerCase();
+      const mime = String(req.file.mimetype || '').toLowerCase();
+      const isImage = mime.startsWith('image/');
+      if (!isImage || !AVATAR_ALLOWED_EXTENSIONS.has(ext)) {
+        return res.status(400).json({ error: 'Format image non autorise pour la photo de profil' });
+      }
+
+      if (hasBasicMalwareSignature(req.file.buffer)) {
+        return res.status(400).json({ error: 'Signature malware detectee (scan basique)' });
+      }
+
+      const safeName = `avatar-${Date.now()}-${randomUUID()}${ext}`;
+      const fullPath = path.join(UPLOAD_DIR, safeName);
+      await fsp.writeFile(fullPath, req.file.buffer);
+
+      const avResult = await scanFileWithOptionalAntivirus(fullPath);
+      if (!avResult.ok) {
+        await fsp.unlink(fullPath).catch(() => {});
+        return res.status(400).json({ error: 'Fichier rejete par antivirus' });
+      }
+
+      return res.status(201).json({
+        file_name: req.file.originalname,
+        stored_name: safeName,
+        file_url: `/api/files/download/${safeName}`,
+        mime_type: req.file.mimetype,
+        size: req.file.size,
+      });
+    } catch (inner) {
+      return res.status(500).json({ error: 'Upload avatar failed', details: inner.message });
+    }
+  });
+});
 
 router.get('/me', async (req, res) => {
   try {
@@ -132,7 +222,7 @@ router.patch('/me/profile', async (req, res) => {
   }
 });
 
-router.patch('/me/password', async (req, res) => {
+router.patch('/me/password', strictBody(['current_password', 'new_password', 'confirm_password']), async (req, res) => {
   try {
     const currentPassword = String(req.body?.current_password || '');
     const newPassword = String(req.body?.new_password || '');
@@ -156,9 +246,41 @@ router.patch('/me/password', async (req, res) => {
     user.password_hash = await bcrypt.hash(newPassword, BCRYPT_SALT_ROUNDS);
     await user.save();
 
-    return res.json({ message: 'Mot de passe mis a jour' });
+    const now = new Date();
+    const revokeResult = await UserSession.updateMany(
+      { user: req.user.id, is_active: true },
+      { $set: { is_active: false, logout_time: now, revoked_reason: 'password_change' } }
+    );
+
+    await logSecurityEvent({
+      event_type: 'password_change',
+      user: req.user.id,
+      role: req.user.role,
+      ip_address: req.ip,
+      user_agent: req.headers['user-agent'] || '',
+      success: true,
+      details: `password_change sessions_revoked=${revokeResult?.modifiedCount ?? 0}`,
+    });
+
+    // Force refresh-cookie invalidation so the user must re-authenticate.
+    res.clearCookie(REFRESH_COOKIE_NAME, getRefreshCookieOptions());
+
+    return res.json({
+      message: 'Mot de passe mis a jour. Reconnexion requise.',
+      logout_required: true,
+      sessions_revoked: revokeResult?.modifiedCount ?? 0,
+    });
   } catch (err) {
-    return res.status(500).json({ error: 'Failed to update password' });
+    await logSecurityEvent({
+      event_type: 'password_change',
+      user: req.user?.id,
+      role: req.user?.role,
+      ip_address: req.ip,
+      user_agent: req.headers['user-agent'] || '',
+      success: false,
+      details: `password_change_failed: ${String(err?.message || 'unknown_error')}`.slice(0, 240),
+    });
+    return res.status(500).json({ error: 'Failed to update password', details: err.message });
   }
 });
 

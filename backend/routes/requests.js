@@ -636,6 +636,124 @@ router.patch(
 });
 
 router.patch(
+  '/:id/update',
+  requireAuth,
+  requirePermission(PERMISSIONS.REQUEST_UPDATE_OWN),
+  strictBody(['quantity_requested', 'direction_laboratory', 'note', 'priority']),
+  async (req, res) => {
+  try {
+    if (!isValidObjectIdLike(req.params.id)) {
+      return res.status(400).json({ error: 'request id invalide' });
+    }
+
+    const updated = await runInTransaction(async (session) => {
+      const reqDoc = await Request.findById(req.params.id)
+        .populate('product')
+        .populate('demandeur', SAFE_USER_FIELDS)
+        .session(session);
+      if (!reqDoc) throw new Error('Request not found');
+
+      const demandeurId = String(reqDoc.demandeur?._id || reqDoc.demandeur || '');
+      if (req.user.role !== 'demandeur' || demandeurId !== String(req.user.id)) {
+        throw new Error('Forbidden');
+      }
+
+      await canonicalizeLegacyStatusIfNeeded(reqDoc, session);
+      const current = normalizeRequestStatus(reqDoc.status);
+      if (current !== 'pending') throw new Error('Modification possible uniquement en attente');
+
+      const changes = {};
+
+      const quantityRequested = asPositiveNumber(req.body?.quantity_requested);
+      if (req.body?.quantity_requested !== undefined) {
+        if (Number.isNaN(quantityRequested) || quantityRequested === undefined) {
+          throw new Error('quantity_requested doit etre > 0');
+        }
+        if (Number(reqDoc.quantity_requested || 0) !== quantityRequested) {
+          changes.quantity_requested = { before: Number(reqDoc.quantity_requested || 0), after: quantityRequested };
+          reqDoc.quantity_requested = quantityRequested;
+        }
+      }
+
+      if (req.body?.direction_laboratory !== undefined) {
+        const directionLaboratory = asOptionalString(req.body.direction_laboratory);
+        if (!directionLaboratory || !isSafeText(directionLaboratory, { min: 2, max: 80 })) {
+          throw new Error('direction_laboratory obligatoire (2-80, sans < >)');
+        }
+        if (String(reqDoc.direction_laboratory || '') !== directionLaboratory) {
+          changes.direction_laboratory = { before: String(reqDoc.direction_laboratory || ''), after: directionLaboratory };
+          reqDoc.direction_laboratory = directionLaboratory;
+        }
+      }
+
+      if (req.body?.note !== undefined) {
+        const nextNote = asOptionalString(req.body.note);
+        if (nextNote && !isSafeText(nextNote, { min: 0, max: 600 })) {
+          throw new Error('note invalide (max 600, sans < >)');
+        }
+        const before = String(reqDoc.note || '');
+        const after = String(nextNote || '');
+        if (before !== after) {
+          changes.note = { before, after };
+          reqDoc.note = nextNote || undefined;
+        }
+      }
+
+      if (req.body?.priority !== undefined) {
+        const raw = String(req.body?.priority || '').trim().toLowerCase();
+        const nextPriority = raw === 'urgent'
+          ? 'urgent'
+          : (raw === 'critical' || raw === 'tres_urgent' || raw === 'tres_urgente')
+            ? 'critical'
+            : raw === 'normal'
+              ? 'normal'
+              : null;
+        if (!nextPriority) throw new Error('priority invalide');
+        const before = String(reqDoc.priority || 'normal').trim().toLowerCase() || 'normal';
+        if (before !== nextPriority) {
+          changes.priority = { before, after: nextPriority };
+          reqDoc.priority = nextPriority;
+        }
+      }
+
+      if (Object.keys(changes).length === 0) {
+        throw new Error('Aucune modification');
+      }
+
+      await reqDoc.save({ session });
+      const historyPayload = {
+        action_type: 'request',
+        user: req.user.id,
+        product: reqDoc.product?._id || reqDoc.product,
+        request: reqDoc._id,
+        quantity: reqDoc.quantity_requested,
+        source: 'ui',
+        description: 'Demande modifiee par demandeur (en attente)',
+        status_after: reqDoc.status,
+        actor_role: req.user.role,
+        tags: ['request', 'update', reqDoc.status],
+        context: { changes },
+        ai_features: {
+          quantity_requested: Number(reqDoc.quantity_requested || 0),
+          priority: String(reqDoc.priority || 'normal'),
+        },
+      };
+      if (session) await History.create([historyPayload], { session });
+      else await History.create(historyPayload);
+
+      return reqDoc;
+    });
+
+    return res.json(serializeRequest(updated));
+  } catch (err) {
+    const msg = String(err?.message || '');
+    if (msg.includes('not found')) return res.status(404).json({ error: err.message });
+    if (msg === 'Forbidden') return res.status(403).json({ error: 'Forbidden' });
+    return res.status(400).json({ error: 'Failed to update request', details: err.message });
+  }
+});
+
+router.patch(
   '/:id/cancel',
   requireAuth,
   requirePermission(PERMISSIONS.REQUEST_CREATE),

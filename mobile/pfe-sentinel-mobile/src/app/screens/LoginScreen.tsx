@@ -34,13 +34,13 @@ export function LoginScreen(props: {
       <Text style={styles.h1}>Connexion</Text>
       <Text style={styles.hint}>Même compte que l’application web.</Text>
 
-      <Input label="Identifiant (email/username/tel)" value={identifier} onChangeText={setIdentifier} placeholder="ex: user@etap.tn" />
+      <Input label="Identifiant" value={identifier} onChangeText={setIdentifier} placeholder="Adresse mail, nom ou téléphone" />
       <Input label="Mot de passe" value={password} onChangeText={setPassword} placeholder="••••••••" secureTextEntry />
 
       {error ? <Text style={styles.err}>{error}</Text> : null}
 
       <Button title="Se connecter" onPress={onSubmit} loading={loading} />
-      <Button title="Paramètres (URL backend)" onPress={props.onOpenSettings} variant="ghost" style={{ marginTop: 10 }} />
+      <Button title="Paramètres (adresse du PC)" onPress={props.onOpenSettings} variant="ghost" style={{ marginTop: 10 }} />
     </View>
   );
 }
@@ -51,4 +51,3 @@ const styles = StyleSheet.create({
   hint: { color: colors.muted, marginBottom: 16 },
   err: { color: colors.danger, marginBottom: 10, fontWeight: '700' },
 });
-

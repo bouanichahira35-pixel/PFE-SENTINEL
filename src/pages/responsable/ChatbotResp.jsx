@@ -48,6 +48,55 @@ function makeUserMessage(content) {
   };
 }
 
+function renderMessageContent(text) {
+  const raw = String(text || '');
+  const lines = raw.split('\n');
+  const blocks = [];
+
+  let pendingList = [];
+  const flushList = () => {
+    if (!pendingList.length) return;
+    blocks.push({ type: 'ul', items: pendingList });
+    pendingList = [];
+  };
+
+  for (const lineRaw of lines) {
+    const line = String(lineRaw || '');
+    const trimmed = line.trim();
+    if (!trimmed) {
+      flushList();
+      blocks.push({ type: 'br' });
+      continue;
+    }
+
+    const isBullet = /^[-*]\s+/.test(trimmed);
+    if (isBullet) {
+      pendingList.push(trimmed.replace(/^[-*]\s+/, ''));
+      continue;
+    }
+
+    flushList();
+    blocks.push({ type: 'p', text: line });
+  }
+  flushList();
+
+  return (
+    <div className="message-rich">
+      {blocks.map((b, idx) => {
+        if (b.type === 'br') return <div key={`br-${idx}`} className="message-rich__spacer" />;
+        if (b.type === 'ul') {
+          return (
+            <ul key={`ul-${idx}`} className="message-rich__ul">
+              {b.items.map((it, j) => <li key={`li-${idx}-${j}`}>{it}</li>)}
+            </ul>
+          );
+        }
+        return <p key={`p-${idx}`} className="message-rich__p">{b.text}</p>;
+      })}
+    </div>
+  );
+}
+
 const INITIAL_BOT_TEXT =
   "Bonjour. Je suis votre assistant stock. Posez-moi une question, dictez un message vocal, ou demandez un mini-rapport.";
 
@@ -70,6 +119,7 @@ const ChatbotResp = ({ userName, onLogout }) => {
   const [voiceUrl, setVoiceUrl] = useState('');
   const [isSendingVoice, setIsSendingVoice] = useState(false);
 
+  const localInfoShownRef = useRef(false);
   const messagesEndRef = useRef(null);
   const inputRef = useRef(null);
   const messagesRef = useRef(messages);
@@ -109,6 +159,10 @@ const ChatbotResp = ({ userName, onLogout }) => {
       return false;
     }
   }, []);
+
+  useEffect(() => {
+    refreshGeminiStatus();
+  }, [refreshGeminiStatus]);
 
   const normalizeForSpeech = useCallback((text) => (
     String(text || '')
@@ -200,19 +254,10 @@ const ChatbotResp = ({ userName, onLogout }) => {
 
     if (isListening) stopListening();
 
-    // Ensure we never answer in "mode local" silently: either Gemini is ON, or we show a clear action.
-    let geminiOk = geminiConfigured === true;
-    if (!geminiOk) geminiOk = await refreshGeminiStatus();
-    if (!geminiOk) {
-      toast.warning("Gemini n'est pas configure ou indisponible. Configurez la cle puis redemarrez le backend.");
-      setMessages((prev) => [
-        ...prev,
-        makeBotMessage(
-          "Gemini n'est pas disponible. Allez dans Parametres > IA pour verifier la configuration, puis reessayez.",
-          { source: '', mode }
-        ),
-      ]);
-      return null;
+    const currentGemini = geminiConfigured === true || (geminiConfigured === null && await refreshGeminiStatus());
+    if (!currentGemini && !localInfoShownRef.current) {
+      localInfoShownRef.current = true;
+      toast.info("Mode local actif (sans Gemini). Pour de meilleures réponses: Paramètres > IA.");
     }
 
     let historySnapshot = messagesRef.current;
@@ -228,7 +273,6 @@ const ChatbotResp = ({ userName, onLogout }) => {
         question,
         history: buildHistoryPayload(historySnapshot),
         mode,
-        force_gemini: true,
       });
       const answer = String(result?.answer || "Je n'ai pas pu generer une reponse.");
       const source = String(result?.source || 'fallback');
@@ -245,8 +289,8 @@ const ChatbotResp = ({ userName, onLogout }) => {
       setMessages((prev) => [
         ...prev,
         makeBotMessage(
-          "Je ne peux pas repondre maintenant (Gemini indisponible). Verifiez la cle, le quota/facturation, puis reessayez.",
-          { source: 'gemini', mode }
+          err?.message || "Je ne peux pas repondre maintenant. Reessayez dans quelques instants.",
+          { source: 'local', mode }
         ),
       ]);
       return null;
@@ -355,6 +399,10 @@ const ChatbotResp = ({ userName, onLogout }) => {
 
   const sendVoiceMessage = useCallback(async () => {
     if (!voiceBlob || isTyping || isSendingVoice) return;
+    if (geminiConfigured !== true) {
+      toast.warning("Le vocal serveur necessite Gemini (GEMINI_API_KEY). Utilisez 'Dicter' ou configurez Gemini.");
+      return;
+    }
     setIsSendingVoice(true);
     setIsTyping(true);
     try {
@@ -393,6 +441,7 @@ const ChatbotResp = ({ userName, onLogout }) => {
     blobToBase64,
     buildHistoryPayload,
     clearVoiceDraft,
+    geminiConfigured,
     isSendingVoice,
     isTyping,
     toast,
@@ -610,8 +659,8 @@ const ChatbotResp = ({ userName, onLogout }) => {
               <span className={`cap-pill ${ttsSupported ? 'ok' : 'off'}`}>
                 Vocal {ttsSupported ? 'disponible' : 'non supporte'}
               </span>
-              <span className={`cap-pill ${mediaRecorderSupported ? 'ok' : 'off'}`}> 
-                Envoi vocal {mediaRecorderSupported ? 'disponible' : 'non supporte'} 
+              <span className={`cap-pill ${(mediaRecorderSupported && geminiConfigured) ? 'ok' : (mediaRecorderSupported ? 'warn' : 'off')}`}> 
+                Envoi vocal {(mediaRecorderSupported && geminiConfigured) ? 'disponible' : (mediaRecorderSupported ? 'Gemini requis' : 'non supporte')} 
               </span> 
             </div> 
 
@@ -635,7 +684,7 @@ const ChatbotResp = ({ userName, onLogout }) => {
               <button
                 className={`tool-btn ${isRecording ? 'active record' : ''}`}
                 onClick={isRecording ? stopVoiceRecording : startVoiceRecording}
-                disabled={isTyping || isSendingVoice || !mediaRecorderSupported}
+                disabled={isTyping || isSendingVoice || !mediaRecorderSupported || geminiConfigured !== true}
               >
                 {isRecording ? <Square size={16} /> : <Circle size={16} />}
                 <span>{isRecording ? 'Stop enregistrement' : 'Enregistrer vocal'}</span>
@@ -665,7 +714,7 @@ const ChatbotResp = ({ userName, onLogout }) => {
                   <button
                     className="tool-btn primary"
                     onClick={sendVoiceMessage}
-                    disabled={!voiceBlob || isTyping || isSendingVoice}
+                    disabled={!voiceBlob || isTyping || isSendingVoice || geminiConfigured !== true}
                   >
                     <Upload size={16} />
                     <span>{isSendingVoice ? 'Envoi vocal...' : 'Envoyer le vocal'}</span>
@@ -692,7 +741,7 @@ const ChatbotResp = ({ userName, onLogout }) => {
                     {message.type === 'bot' ? <Bot size={18} /> : <User size={18} />}
                   </div>
                   <div className="message-content">
-                    <p className="message-text">{message.content}</p>
+                    <div className="message-text">{renderMessageContent(message.content)}</div>
                     <div className="message-meta">
                       <span className="message-time">{message.time}</span>
                       {message.type === 'bot' && ttsSupported && (

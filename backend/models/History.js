@@ -21,6 +21,7 @@ const historySchema = new mongoose.Schema(
         'stock_rules_update',
         'stock_rules_reset',
         'inventory',
+        'ai_admin',
       ],
       required: true,
       immutable: true,

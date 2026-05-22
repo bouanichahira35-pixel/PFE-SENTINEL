@@ -42,23 +42,34 @@ const LancerInventaireResp = ({ userName, onLogout }) => {
   const [zoneId, setZoneId] = useState('');
   const [familleId, setFamilleId] = useState('');
   const [categorieId, setCategorieId] = useState('');
-  const [magasinierId, setMagasinierId] = useState('');
+  const [magasinierIds, setMagasinierIds] = useState([]);
   const [datePrevue, setDatePrevue] = useState(() => toDateInputValue(new Date(Date.now() + 24 * 60 * 60 * 1000)));
   const [commentaire, setCommentaire] = useState('');
   const [bloquerMouvements, setBloquerMouvements] = useState(true);
   const [notificationsActives, setNotificationsActives] = useState(true);
   const [formErrors, setFormErrors] = useState([]);
+  const [magasinierQuery, setMagasinierQuery] = useState('');
 
   const loadOptions = useCallback(async () => {
     setIsLoading(true);
     try {
       const payload = await get('/inventory/launch/options');
+      const magasins = Array.isArray(payload?.magasins) ? payload.magasins : [];
       setOptions({
-        magasins: Array.isArray(payload?.magasins) ? payload.magasins : [],
+        magasins,
         zones: Array.isArray(payload?.zones) ? payload.zones : [],
         categories: Array.isArray(payload?.categories) ? payload.categories : [],
         familles: Array.isArray(payload?.familles) ? payload.familles : [],
         magasiniers: Array.isArray(payload?.magasiniers) ? payload.magasiniers : [],
+      });
+
+      setMagasinId((prev) => {
+        const current = String(prev || '');
+        const first = magasins?.[0]?._id ? String(magasins[0]._id) : '';
+        if (!first) return current;
+        if (!current) return first;
+        const stillExists = magasins.some((m) => String(m?._id) === current);
+        return stillExists ? current : first;
       });
     } catch (err) {
       toast.error(err.message || "Erreur chargement options d'inventaire");
@@ -89,22 +100,41 @@ const LancerInventaireResp = ({ userName, onLogout }) => {
     return item ? `${item.name || 'Magasin'} (${item.code || '-'})` : '';
   }, [magasinId, options.magasins]);
 
-  const canSubmitHint = useMemo(() => {
-    if (!typeInventaire) return 'Choisissez un type.';
-    if (!magasinId) return 'Choisissez un magasin.';
-    if (!magasinierId) return 'Assignez un magasinier.';
-    if (!datePrevue) return 'Saisissez une date prévue.';
-    if (typeInventaire === 'TOURNANT' && !zoneId && !familleId && !categorieId) {
-      return 'Pour TOURNANT, sélectionnez au moins une zone, une famille ou une catégorie.';
+  const magasinierChoices = useMemo(() => {
+    const items = Array.isArray(options.magasiniers) ? options.magasiniers : [];
+    const seen = new Set();
+    const unique = [];
+    for (const u of items) {
+      const id = String(u?._id || '');
+      if (!id || seen.has(id)) continue;
+      seen.add(id);
+      unique.push(u);
     }
-    return '';
-  }, [categorieId, datePrevue, familleId, magasinId, magasinierId, typeInventaire, zoneId]);
+
+    const q = String(magasinierQuery || '').trim().toLowerCase();
+    if (!q) return unique;
+    return unique.filter((u) => (
+      String(u?.username || '').toLowerCase().includes(q) ||
+      String(u?.email || '').toLowerCase().includes(q)
+    ));
+  }, [magasinierQuery, options.magasiniers]);
+
+  const toggleMagasinier = (id, checked) => {
+    const key = String(id || '');
+    if (!key) return;
+    setMagasinierIds((prev) => {
+      const set = new Set((Array.isArray(prev) ? prev : []).map((x) => String(x)));
+      if (checked) set.add(key);
+      else set.delete(key);
+      return Array.from(set);
+    });
+  };
 
   const validateForm = () => {
     const errs = [];
     if (!typeInventaire) errs.push('type_inventaire obligatoire');
     if (!magasinId) errs.push('magasin obligatoire');
-    if (!magasinierId) errs.push('magasinier obligatoire');
+    if (!magasinierIds.length) errs.push('magasinier(s) obligatoire(s)');
     if (!datePrevue) errs.push('date_prevue obligatoire');
 
     if (typeInventaire === 'TOURNANT' && !zoneId && !familleId && !categorieId) {
@@ -127,13 +157,15 @@ const LancerInventaireResp = ({ userName, onLogout }) => {
 
     setIsLoading(true);
     try {
+      const selectedMagasiniers = (Array.isArray(magasinierIds) ? magasinierIds : []).filter(Boolean);
       const payload = await post('/inventory/inventories', {
         type_inventaire: typeInventaire,
         magasin_id: magasinId,
         zone_id: zoneDisabled ? null : (zoneId || null),
         famille_id: familleDisabled ? null : (familleId || null),
         categorie_id: categorieDisabled ? null : (categorieId || null),
-        magasinier_id: magasinierId,
+        magasinier_ids: selectedMagasiniers,
+        magasinier_id: selectedMagasiniers[0] || '',
         date_prevue: datePrevue,
         commentaire,
         bloquer_mouvements: Boolean(bloquerMouvements),
@@ -181,7 +213,6 @@ const LancerInventaireResp = ({ userName, onLogout }) => {
               <section className="inv-launch-card">
                 <div className="inv-launch-card-head">
                   <strong>Paramètres</strong>
-                  {canSubmitHint ? <span className="inv-launch-hint">{canSubmitHint}</span> : null}
                 </div>
 
                 <div className="inv-launch-type">
@@ -226,14 +257,21 @@ const LancerInventaireResp = ({ userName, onLogout }) => {
                 <div className="inv-launch-form">
                   <div className="inv-launch-row">
                     <label>Magasin</label>
-                    <select value={magasinId} onChange={(e) => setMagasinId(e.target.value)}>
-                      <option value="">Choisir un magasin</option>
-                      {options.magasins.map((m) => (
-                        <option key={m._id} value={m._id}>
-                          {m.name} ({m.code})
-                        </option>
-                      ))}
-                    </select>
+                    {options.magasins.length <= 1 ? (
+                      <input
+                        value={magasinLabel || (options.magasins[0] ? `${options.magasins[0].name} (${options.magasins[0].code})` : '')}
+                        placeholder={options.magasins[0] ? '' : 'Aucun magasin'}
+                        disabled
+                      />
+                    ) : (
+                      <select value={magasinId} onChange={(e) => setMagasinId(e.target.value)}>
+                        {options.magasins.map((m) => (
+                          <option key={m._id} value={m._id}>
+                            {m.name} ({m.code})
+                          </option>
+                        ))}
+                      </select>
+                    )}
                   </div>
 
                   <div className="inv-launch-row two">
@@ -274,15 +312,57 @@ const LancerInventaireResp = ({ userName, onLogout }) => {
                       </select>
                     </div>
                     <div>
-                      <label>Magasinier assigné</label>
-                      <select value={magasinierId} onChange={(e) => setMagasinierId(e.target.value)}>
-                        <option value="">Choisir un magasinier</option>
-                        {options.magasiniers.map((u) => (
-                          <option key={u._id} value={u._id}>
-                            {u.username}
-                          </option>
-                        ))}
-                      </select>
+                      <label>Magasinier(s) assigné(s)</label>
+                      <div className="inv-launch-multi">
+                        <div className="inv-launch-multi-head">
+                          <input
+                            type="text"
+                            value={magasinierQuery}
+                            onChange={(e) => setMagasinierQuery(e.target.value)}
+                            placeholder="Rechercher un magasinier..."
+                          />
+                          <div className="inv-launch-multi-actions">
+                            <button
+                              type="button"
+                              className="inv-launch-btn ghost"
+                              onClick={() => setMagasinierIds(magasinierChoices.map((u) => String(u._id)))}
+                            >
+                              Tout
+                            </button>
+                            <button
+                              type="button"
+                              className="inv-launch-btn ghost"
+                              onClick={() => setMagasinierIds([])}
+                            >
+                              Aucun
+                            </button>
+                          </div>
+                        </div>
+
+                        <div className="inv-launch-multi-list" role="list">
+                          {magasinierChoices.map((u) => {
+                            const id = String(u._id);
+                            const checked = magasinierIds.includes(id);
+                            return (
+                              <label key={id} className="inv-launch-multi-item">
+                                <input
+                                  type="checkbox"
+                                  checked={checked}
+                                  onChange={(e) => toggleMagasinier(id, e.target.checked)}
+                                />
+                                <span>{u.username}</span>
+                              </label>
+                            );
+                          })}
+                          {!magasinierChoices.length ? (
+                            <div className="inv-launch-multi-empty">Aucun magasinier</div>
+                          ) : null}
+                        </div>
+
+                        <div className="inv-launch-multi-hint">
+                          Sélectionnez un ou plusieurs magasiniers. Les notifications seront envoyées à tous si activées.
+                        </div>
+                      </div>
                     </div>
                   </div>
 
@@ -374,4 +454,3 @@ const LancerInventaireResp = ({ userName, onLogout }) => {
 };
 
 export default LancerInventaireResp;
-

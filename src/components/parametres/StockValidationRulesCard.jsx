@@ -16,38 +16,27 @@ function ToggleRow({ label, desc, checked, onChange, disabled }) {
 }
 
 export default function StockValidationRulesCard({ config, onChange, disabled = false }) {
-  const mandatory = Boolean(config?.validationObligatoireNouveauxProduits);
-
   return (
     <div className="sr-card">
       <div className="sr-card-head">
         <div className="left">
           <CheckCircle2 size={18} />
-          <h3>Validation des produits</h3>
+          <h3>Contrôles du catalogue</h3>
         </div>
         <div className="sr-badges">
-          <span className={`sr-badge ${mandatory ? 'ok' : 'warn'}`}>
+          <span className="sr-badge ok">
             <ShieldAlert size={14} />
-            {mandatory ? 'Obligatoire' : 'Optionnel'}
+            Ajout direct
           </span>
         </div>
       </div>
 
       <div className="sr-card-body">
         <div className="sr-help">
-          {mandatory
-            ? "Impact: les produits ajoutés par le magasinier nécessiteront une validation du responsable."
-            : "Impact: les produits ajoutés seront directement utilisables dans le catalogue actif."}
+          Impact: les nouveaux produits ajoutés par le magasinier sont directement utilisables dans le catalogue actif.
         </div>
 
         <div className="toggle-list">
-          <ToggleRow
-            label="Validation obligatoire des nouveaux produits"
-            desc="Si activé: création magasinier → EN_ATTENTE_VALIDATION (pending)."
-            checked={config?.validationObligatoireNouveauxProduits}
-            disabled={disabled}
-            onChange={(v) => onChange({ ...config, validationObligatoireNouveauxProduits: v })}
-          />
           <ToggleRow
             label="Validation obligatoire après modification du seuil"
             desc="Si activé: changement du seuil_minimum par non-responsable → repasse en attente."
@@ -74,4 +63,3 @@ export default function StockValidationRulesCard({ config, onChange, disabled = 
     </div>
   );
 }
-

@@ -41,7 +41,6 @@ const ProduitsResp = ({ userName, onLogout }) => {
   const [search, setSearch] = useState('');
   const lastUrlQRef = useRef('');
   const [statusFilter, setStatusFilter] = useState('all'); // all | ok | sous_seuil | rupture
-  const [validationFilter, setValidationFilter] = useState('all'); // all | approved | pending | rejected
   const [products, setProducts] = useState([]);
   const [inactiveReasonFilter, setInactiveReasonFilter] = useState('all'); // all | rupture | no_demand
   const [inactiveDays, setInactiveDays] = useState(60);
@@ -53,6 +52,14 @@ const ProduitsResp = ({ userName, onLogout }) => {
     const params = new URLSearchParams(location.search || '');
     return String(params.get('category') || '').trim();
   }, [location.search]);
+
+  const assignMode = useMemo(() => {
+    const params = new URLSearchParams(location.search || '');
+    return String(params.get('mode') || '').trim().toLowerCase() === 'assign';
+  }, [location.search]);
+
+  const [showOnlyCategory, setShowOnlyCategory] = useState(false);
+  const [selectedIds, setSelectedIds] = useState([]);
 
   const urlQuery = useMemo(() => {
     const params = new URLSearchParams(location.search || '');
@@ -133,8 +140,8 @@ const ProduitsResp = ({ userName, onLogout }) => {
   }, [load]);
 
   useEffect(() => {
-    if (inactiveOnly) loadCategories();
-  }, [inactiveOnly, loadCategories]);
+    loadCategories();
+  }, [loadCategories]);
 
   const filtered = useMemo(() => {
     const q = String(search || '').trim().toLowerCase();
@@ -157,18 +164,15 @@ const ProduitsResp = ({ userName, onLogout }) => {
         : (statusFilter === 'all' || stockStatus === statusFilter);
       if (!matchesStatus) return false;
 
-      if (!inactiveOnly) {
-        const v = String(p?.validation_status || 'pending');
-        const matchesValidation = validationFilter === 'all' || v === validationFilter;
-        if (!matchesValidation) return false;
-      } else {
+      if (inactiveOnly) {
         const reason = String(p?.inactive_reason || '').trim();
         if (inactiveReasonFilter !== 'all' && reason !== inactiveReasonFilter) return false;
       }
 
       if (categoryFilterId) {
         const productCategoryId = p?.category?._id ? String(p.category._id) : '';
-        if (productCategoryId !== categoryFilterId) return false;
+        const shouldFilterByCategory = !assignMode || showOnlyCategory;
+        if (shouldFilterByCategory && productCategoryId !== categoryFilterId) return false;
       }
 
       return true;
@@ -177,12 +181,13 @@ const ProduitsResp = ({ userName, onLogout }) => {
     archivedOnly,
     categoryFilterId,
     criticalOnly,
+    assignMode,
     inactiveOnly,
     inactiveReasonFilter,
     products,
     search,
+    showOnlyCategory,
     statusFilter,
-    validationFilter,
   ]);
 
   const openEdit = useCallback((p) => {
@@ -205,6 +210,47 @@ const ProduitsResp = ({ userName, onLogout }) => {
     setEditModalOpen(false);
     setEditDraft(null);
   }, []);
+
+  const targetCategory = useMemo(() => {
+    if (!categoryFilterId) return null;
+    return (categories || []).find((c) => String(c?._id || '') === String(categoryFilterId)) || null;
+  }, [categories, categoryFilterId]);
+
+  const toggleSelected = useCallback((productId, checked) => {
+    const id = String(productId || '').trim();
+    if (!id) return;
+    setSelectedIds((prev) => {
+      const set = new Set((Array.isArray(prev) ? prev : []).map((x) => String(x)));
+      if (checked) set.add(id);
+      else set.delete(id);
+      return Array.from(set);
+    });
+  }, []);
+
+  const selectAllFiltered = useCallback(() => {
+    setSelectedIds((prev) => {
+      const set = new Set((Array.isArray(prev) ? prev : []).map((x) => String(x)));
+      for (const p of filtered || []) {
+        if (p?._id) set.add(String(p._id));
+      }
+      return Array.from(set);
+    });
+  }, [filtered]);
+
+  const clearSelection = useCallback(() => {
+    setSelectedIds([]);
+  }, []);
+
+  useEffect(() => {
+    if (!assignMode) {
+      setSelectedIds([]);
+      setShowOnlyCategory(false);
+      return;
+    }
+
+    const ids = new Set((products || []).map((p) => String(p?._id || '')).filter(Boolean));
+    setSelectedIds((prev) => (Array.isArray(prev) ? prev.filter((id) => ids.has(String(id))) : []));
+  }, [assignMode, products]);
 
   const saveEdit = useCallback(async () => {
     if (!editDraft?.id) return;
@@ -244,6 +290,43 @@ const ProduitsResp = ({ userName, onLogout }) => {
     }
   }, [closeEdit, editDraft, load, toast]);
 
+  const bulkUpdateCategory = useCallback(async (action) => {
+    const act = String(action || '').trim().toLowerCase();
+    if (!['set', 'clear'].includes(act)) return;
+
+    const ids = (Array.isArray(selectedIds) ? selectedIds : []).map((x) => String(x)).filter(Boolean);
+    if (!ids.length) {
+      toast.warning('Sélectionnez au moins un produit.');
+      return;
+    }
+
+    if (act === 'set' && !categoryFilterId) {
+      toast.warning('Choisissez une catégorie cible.');
+      return;
+    }
+
+    setSubmitting(true);
+    try {
+      const payload = act === 'clear'
+        ? { action: 'clear', product_ids: ids }
+        : { action: 'set', product_ids: ids, category_id: categoryFilterId };
+
+      await post('/products/bulk/category', payload);
+
+      toast.success(
+        act === 'clear'
+          ? `${ids.length} produit(s) déclassé(s).`
+          : `${ids.length} produit(s) affecté(s) à la catégorie.`
+      );
+      clearSelection();
+      await load();
+    } catch (err) {
+      toast.error(err?.message || 'Échec mise à jour catégories');
+    } finally {
+      setSubmitting(false);
+    }
+  }, [categoryFilterId, clearSelection, load, selectedIds, toast]);
+
   const archiveProduct = useCallback(async (p) => {
     if (!p?._id) return;
 
@@ -272,7 +355,7 @@ const ProduitsResp = ({ userName, onLogout }) => {
   const title = inactiveOnly ? 'Produits inactifs' : 'Référentiel Produits';
   const subtitle = inactiveOnly
     ? `Rupture ou manque de demandes (fenêtre ${inactiveDays} jours)`
-    : 'Catalogue produits — stock & validation';
+    : 'Catalogue produits — stock & pilotage';
 
   return (
     <ProtectedPage userName={userName}>
@@ -322,17 +405,29 @@ const ProduitsResp = ({ userName, onLogout }) => {
                     <option value="rupture">Rupture</option>
                   </select>
                 </label>
-                {!inactiveOnly ? (
+                {!inactiveOnly && (
                   <label className="resp-products-filter">
-                    <span>Validation</span>
-                    <select value={validationFilter} onChange={(e) => setValidationFilter(e.target.value)} disabled={loading}>
-                      <option value="all">Tous</option>
-                      <option value="approved">Validés</option>
-                      <option value="pending">En attente</option>
-                      <option value="rejected">Rejetés</option>
+                    <span>Catégorie</span>
+                    <select
+                      value={categoryFilterId}
+                      onChange={(e) => {
+                        const params = new URLSearchParams(location.search || '');
+                        const next = String(e.target.value || '').trim();
+                        if (next) params.set('category', next);
+                        else params.delete('category');
+                        const nextSearch = params.toString();
+                        navigate({ pathname: '/responsable/produits', search: nextSearch ? `?${nextSearch}` : '' });
+                      }}
+                      disabled={loading || submitting}
+                    >
+                      <option value="">Toutes</option>
+                      {categories.map((c) => (
+                        <option key={String(c._id)} value={String(c._id)}>{c.name}</option>
+                      ))}
                     </select>
                   </label>
-                ) : (
+                )}
+                {inactiveOnly && (
                   <label className="resp-products-filter">
                     <span>Raison</span>
                     <select value={inactiveReasonFilter} onChange={(e) => setInactiveReasonFilter(e.target.value)} disabled={loading || submitting}>
@@ -345,9 +440,9 @@ const ProduitsResp = ({ userName, onLogout }) => {
               </div>
               <div className="resp-products-actions">
                 {!inactiveOnly && (
-                  <button className="btn" type="button" onClick={() => navigate('/responsable/pilotage?tab=validations')}>
+                  <button className="btn" type="button" onClick={() => navigate('/responsable/demandes-a-traiter')}>
                     <RefreshCw size={16} />
-                    Validations
+                    Voir demandes
                   </button>
                 )}
               </div>
@@ -364,10 +459,58 @@ const ProduitsResp = ({ userName, onLogout }) => {
               </div>
             )}
 
+            {assignMode && (
+              <div className="resp-products-assign" role="region" aria-label="Affectation catégorie">
+                <div className="resp-products-assign-left">
+                  <strong>Mode association catégorie</strong>
+                  <div className="muted">
+                    Catégorie cible:{' '}
+                    {targetCategory?.name || (categoryFilterId ? 'Catégorie introuvable' : 'Non sélectionnée')}
+                    {' '}— Sélection: {Number(selectedIds?.length || 0)}
+                  </div>
+                </div>
+                <div className="resp-products-assign-actions">
+                  <label className="resp-products-assign-toggle">
+                    <input
+                      type="checkbox"
+                      checked={showOnlyCategory}
+                      onChange={(e) => setShowOnlyCategory(e.target.checked)}
+                      disabled={!categoryFilterId}
+                    />
+                    <span>Voir seulement déjà associés</span>
+                  </label>
+                  <button className="btn" type="button" onClick={selectAllFiltered} disabled={loading || submitting}>
+                    Tout cocher (filtré)
+                  </button>
+                  <button className="btn" type="button" onClick={clearSelection} disabled={loading || submitting}>
+                    Vider sélection
+                  </button>
+                  <button
+                    className="btn primary"
+                    type="button"
+                    onClick={() => bulkUpdateCategory('set')}
+                    disabled={loading || submitting || !categoryFilterId}
+                    title={!categoryFilterId ? 'Choisissez une catégorie cible' : ''}
+                  >
+                    Associer
+                  </button>
+                  <button
+                    className="btn"
+                    type="button"
+                    onClick={() => bulkUpdateCategory('clear')}
+                    disabled={loading || submitting}
+                  >
+                    Déclasser
+                  </button>
+                </div>
+              </div>
+            )}
+
             <div className="resp-products-card">
               <table className="resp-products-table">
                 <thead>
                   <tr>
+                    {assignMode ? <th style={{ width: 42 }}></th> : null}
                     <th>Code</th>
                     <th>Produit</th>
                     <th>Catégorie</th>
@@ -381,9 +524,7 @@ const ProduitsResp = ({ userName, onLogout }) => {
                         <th>Dernière demande</th>
                         <th>Actions</th>
                       </>
-                    ) : (
-                      <th>Validation</th>
-                    )}
+                    ) : null}
                   </tr>
                 </thead>
                 <tbody>
@@ -391,15 +532,31 @@ const ProduitsResp = ({ userName, onLogout }) => {
                     const stock = Number(p?.quantity_current || 0);
                     const seuil = Number(p?.seuil_minimum || 0);
                     const stockStatus = computeProductStockStatus(stock, seuil);
-                    const validation = String(p?.validation_status || 'pending');
                     const familyLabel = FAMILY_LABEL[String(p?.family || '')] || (p?.family || '-');
                     const inactiveReason = String(p?.inactive_reason || '');
                     const lastReq = p?.last_request_at ? new Date(p.last_request_at).toLocaleString('fr-FR') : '-';
+                    const rowId = String(p?._id || '');
+                    const isSelected = rowId ? selectedIds.includes(rowId) : false;
+                    const inTargetCategory = Boolean(categoryFilterId && p?.category?._id && String(p.category._id) === String(categoryFilterId));
                     return (
                       <tr key={String(p?._id)}>
+                        {assignMode ? (
+                          <td>
+                            <input
+                              type="checkbox"
+                              checked={isSelected}
+                              onChange={(e) => toggleSelected(rowId, e.target.checked)}
+                              disabled={!rowId || loading || submitting}
+                              aria-label="Sélectionner le produit"
+                            />
+                          </td>
+                        ) : null}
                         <td className="muted">{p?.code_product || '-'}</td>
                         <td className="prod-name">{p?.name || 'Produit'}</td>
-                        <td className="muted">{p?.category?.name || '-'}</td>
+                        <td className="muted">
+                          {p?.category?.name || '-'}
+                          {assignMode && inTargetCategory ? <span className="pill ok" style={{ marginLeft: 8 }}>OK</span> : null}
+                        </td>
                         <td className="muted">{familyLabel}</td>
                         <td className={stockStatus !== 'ok' ? 'overdue' : 'muted'}>{stock}</td>
                         <td className="muted">{seuil}</td>
@@ -427,13 +584,7 @@ const ProduitsResp = ({ userName, onLogout }) => {
                               </div>
                             </td>
                           </>
-                        ) : (
-                          <td>
-                            <span className={`pill ${validation}`}>
-                              {validation === 'approved' ? 'Validé' : validation === 'rejected' ? 'Rejeté' : 'En attente'}
-                            </span>
-                          </td>
-                        )}
+                        ) : null}
                       </tr>
                     );
                   })}

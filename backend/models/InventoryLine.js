@@ -15,6 +15,7 @@ const inventoryLineSchema = new mongoose.Schema(
     observation_magasinier: { type: String, default: '', trim: true },
     observation_responsable: { type: String, default: '', trim: true },
     is_counted: { type: Boolean, default: false, index: true },
+    is_verified_by_magasinier: { type: Boolean, default: false, index: true },
 
     // Recount support (simple PFE approach)
     requires_recount: { type: Boolean, default: false, index: true },

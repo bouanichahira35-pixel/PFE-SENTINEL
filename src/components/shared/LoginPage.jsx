@@ -65,6 +65,11 @@ const LoginPage = ({ onLogin }) => {
       onLogin(data.user, data.token, data.refreshToken, data.session_id);
       navigate(redirectPath, { replace: true });
     } catch (err) {
+      const status = Number(err?.status || 0);
+      if (status === 503) {
+        setError('Service indisponible. Verifiez que MongoDB et le backend (port 5000) sont demarres, puis reessayez.');
+        return;
+      }
       // UX: for security, keep the same generic message for invalid credentials.
       const message = String(err.message || '');
       if (
@@ -73,7 +78,15 @@ const LoginPage = ({ onLogin }) => {
         message.includes('Compte bloque') ||
         message.includes('Role invalide')
       ) {
-        setError('Mot de passe incorrect');
+        const isDevUi = process.env.NODE_ENV !== 'production';
+        if (isDevUi) {
+          if (message.includes('Utilisateur introuvable')) setError('Utilisateur introuvable');
+          else if (message.includes('Compte bloque')) setError('Compte bloque');
+          else if (message.includes('Role invalide')) setError('Role utilisateur invalide');
+          else setError('Mot de passe incorrect');
+        } else {
+          setError('Identifiant ou mot de passe incorrect');
+        }
       } else {
         setError(message || 'Erreur de connexion');
       }

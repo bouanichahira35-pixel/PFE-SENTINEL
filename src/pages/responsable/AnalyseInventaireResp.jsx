@@ -19,6 +19,26 @@ import { useToast } from '../../components/shared/Toast';
 import { get, patch, post } from '../../services/api';
 import './AnalyseInventaireResp.css';
 
+const DELTA_MINOR_ABS_MAX = 2;
+
+function computeDeltaBadge(delta) {
+  if (delta === null || delta === undefined) return null;
+  const n = Number(delta);
+  if (!Number.isFinite(n)) return null;
+  if (n === 0) return 'OK';
+  if (Math.abs(n) <= DELTA_MINOR_ABS_MAX) return 'MINEUR';
+  return 'CRITIQUE';
+}
+
+function displayInventoryStatus(status) {
+  const s = String(status || '');
+  if (s === 'A_FAIRE') return 'PLANIFIE';
+  if (s === 'A_RECOMPTER') return 'RECOMPTAGE_DEMANDE';
+  if (s === 'VALIDE') return 'CLOTURE';
+  if (s === 'REJETE') return 'CLOTURE';
+  return s || '-';
+}
+
 function formatDt(value) {
   if (!value) return '-';
   try {
@@ -93,6 +113,7 @@ const AnalyseInventaireResp = ({ userName, onLogout }) => {
   const [lines, setLines] = useState([]);
   const [motifs, setMotifs] = useState([]);
   const [query, setQuery] = useState('');
+  const [lineFilter, setLineFilter] = useState('deltas'); // all | deltas | critical | ok
   const [drafts, setDrafts] = useState(() => new Map());
 
   const [showRecountModal, setShowRecountModal] = useState(false);
@@ -127,14 +148,27 @@ const AnalyseInventaireResp = ({ userName, onLogout }) => {
 
   const filteredLines = useMemo(() => {
     const q = String(query || '').trim().toLowerCase();
-    if (!q) return lines;
-    return lines.filter((l) => {
+    let base = Array.isArray(lines) ? lines : [];
+
+    if (lineFilter === 'ok') {
+      base = base.filter((l) => Number(l.ecart || 0) === 0);
+    } else if (lineFilter === 'critical') {
+      base = base.filter((l) => {
+        const delta = Number(l.ecart || 0);
+        return delta !== 0 && computeDeltaBadge(delta) === 'CRITIQUE';
+      });
+    } else if (lineFilter === 'deltas') {
+      base = base.filter((l) => Number(l.ecart || 0) !== 0);
+    }
+
+    if (!q) return base;
+    return base.filter((l) => {
       const code = String(l.product?.code_product || '').toLowerCase();
       const name = String(l.product?.name || '').toLowerCase();
       const emp = String(l.product?.emplacement || '').toLowerCase();
       return code.includes(q) || name.includes(q) || emp.includes(q);
     });
-  }, [lines, query]);
+  }, [lines, query, lineFilter]);
 
   const selectableRecountLines = useMemo(() => (lines || []).filter((l) => Number(l.ecart || 0) !== 0), [lines]);
 
@@ -279,7 +313,7 @@ const AnalyseInventaireResp = ({ userName, onLogout }) => {
               <div className="inv-an-title">
                 <h2>{inventory?.reference || 'Inventaire'}</h2>
                 <div className="inv-an-sub">
-                  <span className={`inv-pill ${String(inventory?.status || '').toLowerCase()}`}>{inventory?.status || '-'}</span>
+                  <span className={`inv-pill ${String(inventory?.status || '').toLowerCase()}`}>{displayInventoryStatus(inventory?.status)}</span>
                   <span>Type: <strong>{inventory?.type_inventaire || '-'}</strong></span>
                   <span>Magasin: <strong>{inventory?.magasin_id?.name || '-'}</strong></span>
                   <span>Périmètre: <strong>{perimeterLabel(inventory)}</strong></span>
@@ -349,6 +383,12 @@ const AnalyseInventaireResp = ({ userName, onLogout }) => {
                 <div className="inv-an-search">
                   <Search size={16} />
                   <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Rechercher (réf, désignation, emplacement)..." />
+                </div>
+                <div className="inv-an-filters">
+                  <button type="button" className={`inv-filter ${lineFilter === 'all' ? 'active' : ''}`} onClick={() => setLineFilter('all')}>Tous</button>
+                  <button type="button" className={`inv-filter ${lineFilter === 'deltas' ? 'active' : ''}`} onClick={() => setLineFilter('deltas')}>Écarts</button>
+                  <button type="button" className={`inv-filter ${lineFilter === 'critical' ? 'active' : ''}`} onClick={() => setLineFilter('critical')}>Critiques</button>
+                  <button type="button" className={`inv-filter ${lineFilter === 'ok' ? 'active' : ''}`} onClick={() => setLineFilter('ok')}>OK</button>
                 </div>
                 <div className="inv-an-legend">
                   <span className="tag ok"><CheckCircle2 size={14} /> Écart nul</span>

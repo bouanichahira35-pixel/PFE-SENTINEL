@@ -35,8 +35,8 @@ export function SettingsScreen(props: { onBack: () => void }) {
 
   return (
     <Screen title="Paramètres" onBack={props.onBack}>
-      <Text style={styles.subtitle}>URL backend (ex: http://10.0.2.2:5000)</Text>
-      <Input label="URL backend" value={apiBaseUrl} onChangeText={setApiBaseUrl} placeholder="http://10.0.2.2:5000" />
+      <Text style={styles.subtitle}>Adresse du PC (ex : http://10.0.2.2:5000)</Text>
+      <Input label="Adresse du PC" value={apiBaseUrl} onChangeText={setApiBaseUrl} placeholder="http://10.0.2.2:5000" />
       <Input label="Site actif" value={site} onChangeText={setSite} placeholder="SITE-DEFAULT" />
       {msg ? <Text style={styles.msg}>{msg}</Text> : null}
       <Button title="Enregistrer" onPress={save} loading={saving} />
@@ -48,4 +48,3 @@ const styles = StyleSheet.create({
   subtitle: { color: colors.muted, marginBottom: 10 },
   msg: { color: colors.ok, marginBottom: 10, fontWeight: '800' },
 });
-

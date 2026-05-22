@@ -1,13 +1,14 @@
 import { Link, useLocation } from 'react-router-dom';
 import {
-  LayoutDashboard,
+  Grid3X3,
   Users,
   Bot,
   Monitor,
-  Shield,
+  KeyRound,
   ShieldAlert,
+  FileText,
   Settings,
-  LifeBuoy,
+  Headset,
   ChevronLeft,
   ChevronRight,
   LogOut,
@@ -30,49 +31,81 @@ const SidebarAdmin = ({ collapsed, onToggle, onLogout, userName }) => {
 
   const labels = {
     fr: {
-      dashboard: 'Console',
+      section_console: 'CONSOLE',
+      section_governance: 'GOUVERNANCE & ACCÈS',
+      section_ai: 'PILOTAGE & IA',
+      section_settings: 'PARAMÈTRES',
+      dashboard: 'Vue générale',
       users: 'Utilisateurs',
-      ia: 'Supervision IA',
+      roles_permissions: 'Rôles & permissions',
       sessions: 'Sessions',
-      support: 'Support utilisateurs',
-      rbac: 'Rôles & permissions',
       security: 'Sécurité',
+      audit: 'Historique / Audit',
+      ia: 'Supervision IA',
+      support: 'Support utilisateurs',
       settings: 'Paramètres',
       logout: 'Déconnexion',
     },
     en: {
-      dashboard: 'Console',
+      section_console: 'CONSOLE',
+      section_governance: 'GOVERNANCE & ACCESS',
+      section_ai: 'PILOTAGE & AI',
+      section_settings: 'SETTINGS',
+      dashboard: 'Overview',
       users: 'Users',
-      ia: 'AI Supervision',
+      roles_permissions: 'Roles & permissions',
       sessions: 'Sessions',
-      support: 'User support',
-      rbac: 'Roles & permissions',
       security: 'Security',
+      audit: 'Audit / History',
+      ia: 'AI supervision',
+      support: 'User support',
       settings: 'Settings',
       logout: 'Logout',
     },
     ar: {
-      dashboard: 'Console',
-      support: 'Support utilisateurs',
+      section_console: 'CONSOLE',
+      section_governance: 'GOUVERNANCE & ACCÈS',
+      section_ai: 'PILOTAGE & IA',
+      section_settings: 'PARAMÈTRES',
+      dashboard: 'Vue générale',
       users: 'Utilisateurs',
-      ia: 'Supervision IA',
+      roles_permissions: 'Rôles & permissions',
       sessions: 'Sessions',
-      rbac: 'Rôles & permissions',
       security: 'Sécurité',
+      audit: 'Historique / Audit',
+      ia: 'Supervision IA',
+      support: 'Support utilisateurs',
       settings: 'Paramètres',
       logout: 'Déconnexion',
     },
   }[language] || {};
 
-  const menuItems = [
-    { icon: LayoutDashboard, label: labels.dashboard, path: '/admin' },
-    { icon: Users, label: labels.users, path: '/admin/utilisateurs' },
-    { icon: Bot, label: labels.ia, path: '/admin/ia' },
-    { icon: LifeBuoy, label: labels.support, path: '/admin/support' },
-    { icon: Monitor, label: labels.sessions, path: '/admin/sessions' },
-    { icon: Shield, label: labels.rbac, path: '/admin/rbac' },
-    { icon: ShieldAlert, label: labels.security || 'Sécurité', path: '/admin/securite' },
-    { icon: Settings, label: labels.settings, path: '/admin/parametres' },
+  const sections = [
+    {
+      title: labels.section_console || 'CONSOLE',
+      items: [{ icon: Grid3X3, label: labels.dashboard || 'Vue générale', path: '/admin' }],
+    },
+    {
+      title: labels.section_governance || 'GOUVERNANCE & ACCÈS',
+      items: [
+        { icon: Users, label: labels.users || 'Utilisateurs', path: '/admin/utilisateurs' },
+        { icon: KeyRound, label: labels.roles_permissions || 'Rôles & permissions', path: '/admin/roles-permissions' },
+        { icon: Monitor, label: labels.sessions || 'Sessions', path: '/admin/sessions' },
+        { icon: ShieldAlert, label: labels.security || 'Sécurité', path: '/admin/securite' },
+        { icon: FileText, label: labels.audit || 'Historique / Audit', path: '/admin/audit' },
+      ],
+    },
+    {
+      title: labels.section_ai || 'PILOTAGE & IA',
+      items: [
+        { icon: Bot, label: labels.ia || 'Supervision IA', path: '/admin/supervision-ia' },
+        { icon: Headset, label: labels.support || 'Support utilisateurs', path: '/admin/support' },
+      ],
+    },
+    {
+      title: labels.section_settings || 'PARAMÈTRES',
+      items: [{ icon: Settings, label: labels.settings || 'Paramètres', path: '/admin/parametres' }],
+    },
   ];
 
   return (
@@ -98,28 +131,38 @@ const SidebarAdmin = ({ collapsed, onToggle, onLogout, userName }) => {
         )}
       </div>
 
-      <nav className="sidebar-nav">
-        {menuItems.map((item, index) => {
-          const isActive = location.pathname === item.path;
-          const IconComponent = item.icon;
-          return (
-            <Link
-              key={item.path}
-              to={item.path}
-              className={`sidebar-nav-item ${isActive ? 'active' : ''}`}
-              style={{ animationDelay: `${index * 45}ms` }}
-            >
-              <IconComponent className="sidebar-nav-icon" size={20} />
-              {!collapsed && <span className="sidebar-nav-label">{item.label}</span>}
-            </Link>
-          );
-        })}
+      <nav className="sidebar-nav" aria-label="Menu admin">
+        {(() => {
+          let index = 0;
+          return sections.map((section) => (
+            <div key={section.title} className="sidebar-section">
+              {!collapsed && <div className="sidebar-section-title">{section.title}</div>}
+              {section.items.map((item) => {
+                const isActive = location.pathname === item.path;
+                const IconComponent = item.icon;
+                const delay = `${index * 45}ms`;
+                index += 1;
+                return (
+                  <Link
+                    key={item.path}
+                    to={item.path}
+                    className={`sidebar-nav-item ${isActive ? 'active' : ''}`}
+                    style={{ animationDelay: delay }}
+                  >
+                    <IconComponent className="sidebar-nav-icon" size={20} />
+                    {!collapsed && <span className="sidebar-nav-label">{item.label}</span>}
+                  </Link>
+                );
+              })}
+            </div>
+          ));
+        })()}
       </nav>
 
       <div className="sidebar-logout">
         <button onClick={onLogout} className="sidebar-logout-btn" type="button">
           <LogOut size={20} />
-          {!collapsed && <span>{labels.logout}</span>}
+          {!collapsed && <span>{labels.logout || 'Déconnexion'}</span>}
         </button>
       </div>
     </aside>
@@ -127,3 +170,4 @@ const SidebarAdmin = ({ collapsed, onToggle, onLogout, userName }) => {
 };
 
 export default SidebarAdmin;
+

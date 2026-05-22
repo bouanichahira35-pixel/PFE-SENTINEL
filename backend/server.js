@@ -19,6 +19,8 @@ const { getQrSecretStatus } = require('./services/qrTokenService');
 const { getSupplierPortalSecretStatus } = require('./services/supplierPortalTokenService');
 const { removeInformatiqueDomain } = require('./services/domainCleanupService');
 const AppSetting = require('./models/AppSetting');
+const Product = require('./models/Product');
+const { sanitizeStockRulesConfig } = require('./constants/stockRules');
 const { startPurchaseOrderRemindersJob } = require('./services/purchaseOrderReminderJob');
 
 const app = express();
@@ -122,6 +124,35 @@ app.use(pinoHttp({
   customProps: (req) => ({ request_id: req.requestId }),
 }));
 app.use(express.json({ limit: process.env.JSON_BODY_LIMIT || '2mb' }));
+
+function mongoStateLabel(readyState) {
+  const stateMap = {
+    0: 'disconnected',
+    1: 'connected',
+    2: 'connecting',
+    3: 'disconnecting',
+  };
+  return stateMap[readyState] || 'unknown';
+}
+
+// Fail fast when MongoDB is unavailable to avoid requests hanging until client timeouts.
+app.use((req, res, next) => {
+  if (req.method === 'OPTIONS') return next();
+
+  const url = String(req.originalUrl || req.url || '');
+  if (!url.startsWith('/api')) return next();
+  if (url.startsWith('/api/health')) return next();
+
+  const readyState = mongoose.connection.readyState;
+  if (readyState === 1) return next();
+
+  res.set('Retry-After', '3');
+  return res.status(503).json({
+    error: 'Service indisponible. Base de donnees non connectee.',
+    reason: `mongodb_${mongoStateLabel(readyState)}`,
+    request_id: req.requestId,
+  });
+});
 app.use(idempotencyGuard);
 
 const authLimiter = rateLimit({
@@ -162,12 +193,14 @@ app.get('/api/health', async (req, res) => {
 
   let maintenance = { enabled: false, message: '' };
   try {
-    const item = await AppSetting.findOne({ setting_key: 'maintenance_mode' }).lean();
-    if (item?.setting_value && typeof item.setting_value === 'object') {
-      maintenance = {
-        enabled: Boolean(item.setting_value.enabled),
-        message: String(item.setting_value.message || '').slice(0, 220),
-      };
+    if (readyState === 1) {
+      const item = await AppSetting.findOne({ setting_key: 'maintenance_mode' }).lean();
+      if (item?.setting_value && typeof item.setting_value === 'object') {
+        maintenance = {
+          enabled: Boolean(item.setting_value.enabled),
+          message: String(item.setting_value.message || '').slice(0, 220),
+        };
+      }
     }
   } catch {
     // best-effort
@@ -330,37 +363,128 @@ async function runAiAlertsBoot() {
   }
 }
 
+async function runProductValidationRemovalMigration() {
+  // 2026-05: new products created by magasinier are immediately usable (no responsable validation).
+  // We also auto-approve any legacy "pending" products to avoid confusing states in the UI.
+  const key = 'migration_remove_product_validation_new_products_v1';
+  try {
+    const marker = await AppSetting.findOne({ setting_key: key }).lean();
+    if (marker?.setting_value?.done) return;
+
+    // Ensure config is aligned (even if older UI persisted it).
+    try {
+      const current = await AppSetting.findOne({ setting_key: 'stock_rules_config' }).lean();
+      const sanitized = sanitizeStockRulesConfig(current?.setting_value || {});
+      const next = { ...sanitized, validationObligatoireNouveauxProduits: false };
+      await AppSetting.updateOne(
+        { setting_key: 'stock_rules_config' },
+        { $set: { setting_value: next } },
+        { upsert: true }
+      );
+    } catch {
+      // best-effort: config update should never block boot
+    }
+
+    const pendingCount = await Product.countDocuments({ validation_status: 'pending' });
+    let approvedCount = 0;
+
+    if (pendingCount > 0) {
+      const cursor = Product.find({ validation_status: 'pending' }).select('_id created_by validated_by').lean().cursor();
+      let ops = [];
+      for await (const doc of cursor) {
+        const set = { validation_status: 'approved' };
+        const creator = doc?.created_by || null;
+        if (!doc?.validated_by && creator) set.validated_by = creator;
+        ops.push({
+          updateOne: {
+            filter: { _id: doc._id, validation_status: 'pending' },
+            update: { $set: set },
+          },
+        });
+        if (ops.length >= 500) {
+          const res = await Product.bulkWrite(ops, { ordered: false });
+          approvedCount += Number(res?.modifiedCount || 0);
+          ops = [];
+        }
+      }
+      if (ops.length) {
+        const res = await Product.bulkWrite(ops, { ordered: false });
+        approvedCount += Number(res?.modifiedCount || 0);
+      }
+    }
+
+    await AppSetting.updateOne(
+      { setting_key: key },
+      {
+        $set: {
+          setting_value: {
+            done: true,
+            at: new Date().toISOString(),
+            pending_before: Number(pendingCount || 0),
+            approved_updates: Number(approvedCount || 0),
+          },
+        },
+      },
+      { upsert: true }
+    );
+
+    if (pendingCount > 0) {
+      logger.info({ pendingCount, approvedCount }, '[MIGRATION] Auto-approved legacy pending products');
+    }
+  } catch (err) {
+    logger.warn({ err: err?.message || err }, '[MIGRATION] Product validation removal skipped due to error');
+  }
+}
+
 const PORT = process.env.PORT || 5000;
-initMailQueue()
-  .then(async () => {
-    const qrSecretStatus = getQrSecretStatus();
-    if (!qrSecretStatus.ok || qrSecretStatus.fallback) {
-      logger.warn({
-        warning: qrSecretStatus.warning || null,
-        source: qrSecretStatus.source,
-        fallback: qrSecretStatus.fallback,
-      }, '[SECURITY] QR signing key status');
-    }
+
+async function logQrSecretStatus() {
+  const qrSecretStatus = getQrSecretStatus();
+  if (!qrSecretStatus.ok || qrSecretStatus.fallback) {
+    logger.warn({
+      warning: qrSecretStatus.warning || null,
+      source: qrSecretStatus.source,
+      fallback: qrSecretStatus.fallback,
+    }, '[SECURITY] QR signing key status');
+  }
+}
+
+async function runPostBootTasks() {
+  try {
     await runDomainCleanup();
+    await runProductValidationRemovalMigration();
     startAiAutoTrainingJob();
     await runAiAlertsBoot();
     startPurchaseOrderRemindersJob();
-    app.listen(PORT, () => logger.info({ port: Number(PORT) }, 'API ready'));
-  })
-  .catch(async (err) => {
-    logger.warn({ err: err?.message || err }, 'Mail queue init failed, server continues with fallback mail mode');
-    const qrSecretStatus = getQrSecretStatus();
-    if (!qrSecretStatus.ok || qrSecretStatus.fallback) {
-      logger.warn({
-        warning: qrSecretStatus.warning || null,
-        source: qrSecretStatus.source,
-        fallback: qrSecretStatus.fallback,
-      }, '[SECURITY] QR signing key status');
-    }
-    await runDomainCleanup();
-    startAiAutoTrainingJob();
-    await runAiAlertsBoot();
-    startPurchaseOrderRemindersJob();
-    app.listen(PORT, () => logger.info({ port: Number(PORT) }, 'API ready'));
+  } catch (err) {
+    logger.warn({ err: err?.message || err }, '[BOOT] Post-boot tasks failed');
+  }
+}
+
+(async () => {
+  // Ensure the DB connection handshake has completed before accepting requests.
+  // This prevents confusing 401/500 responses when Mongo is still "connecting".
+  const mongoReady = await mongoose.waitForMongoReady({
+    timeoutMs: Number(process.env.MONGODB_BOOT_TIMEOUT_MS || 15_000),
   });
+  if (!mongoReady.ok) {
+    logger.error({ reason: mongoReady.reason }, '[BOOT] MongoDB connection not ready (server will start in degraded mode)');
+  }
+
+  try {
+    await initMailQueue();
+  } catch (err) {
+    logger.warn({ err: err?.message || err }, 'Mail queue init failed, server continues with fallback mail mode');
+  }
+
+  await logQrSecretStatus();
+
+  // Start listening ASAP, then run optional boot tasks without blocking API readiness.
+  app.listen(PORT, () => logger.info({ port: Number(PORT) }, 'API ready'));
+  if (mongoReady.ok) {
+    runPostBootTasks();
+  } else {
+    logger.warn('[BOOT] Post-boot tasks skipped because MongoDB is not ready');
+  }
+})();
 

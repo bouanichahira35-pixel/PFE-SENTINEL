@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Monitor, Ban, RefreshCw } from 'lucide-react';
+import { useSearchParams } from 'react-router-dom';
 import SidebarAdmin from '../../components/admin/SidebarAdmin';
 import HeaderPage from '../../components/shared/HeaderPage';
 import LoadingSpinner from '../../components/shared/LoadingSpinner';
@@ -27,6 +28,7 @@ function formatDateTime(value) {
 
 const AdminSessions = ({ userName, onLogout }) => {
   const toast = useToast();
+  const [searchParams] = useSearchParams();
   const [sidebarCollapsed, setSidebarCollapsed] = useState(() => (typeof window !== 'undefined' ? window.innerWidth <= 768 : false));
   const [loading, setLoading] = useState(false);
   const [items, setItems] = useState([]);
@@ -57,17 +59,24 @@ const AdminSessions = ({ userName, onLogout }) => {
     }
   }, [load, toast]);
 
-  const rows = useMemo(() => (items || []).map((s) => ({
-    id: s?._id,
-    user: s?.user?.username || '-',
-    email: s?.user?.email || '-',
-    role: s?.user?.role || '-',
-    ip: s?.ip_address || '-',
-    last: s?.last_activity_at || s?.updatedAt || null,
-    login: s?.login_time || null,
-    expires: s?.expires_at || null,
-    ua: s?.user_agent || '',
-  })), [items]);
+  const rows = useMemo(() => {
+    const userFilterId = safeText(searchParams.get('user') || '');
+    const filtered = userFilterId
+      ? (items || []).filter((s) => String(s?.user?._id || '') === userFilterId)
+      : (items || []);
+
+    return filtered.map((s) => ({
+      id: s?._id,
+      user: s?.user?.username || '-',
+      email: s?.user?.email || '-',
+      role: s?.user?.role || '-',
+      ip: s?.ip_address || '-',
+      last: s?.last_activity_at || s?.updatedAt || null,
+      login: s?.login_time || null,
+      expires: s?.expires_at || null,
+      ua: s?.user_agent || '',
+    }));
+  }, [items, searchParams]);
 
   return (
     <div className="admin-layout">
@@ -142,4 +151,3 @@ const AdminSessions = ({ userName, onLogout }) => {
 };
 
 export default AdminSessions;
-

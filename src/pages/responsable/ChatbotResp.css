@@ -276,10 +276,26 @@
 }
 
 .message-text {
-  margin: 0;
   font-size: 0.93rem;
   line-height: 1.48;
   white-space: pre-wrap;
+}
+
+.message-rich__p {
+  margin: 0;
+}
+
+.message-rich__spacer {
+  height: 10px;
+}
+
+.message-rich__ul {
+  margin: 0;
+  padding-left: 1.1rem;
+}
+
+.message-rich__ul li {
+  margin: 0.12rem 0;
 }
 
 .message-meta {

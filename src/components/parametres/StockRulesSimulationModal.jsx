@@ -40,7 +40,6 @@ export default function StockRulesSimulationModal({
               ['En rupture', safeNum(counts.products_in_rupture)],
               ['Inactifs', safeNum(counts.products_inactive)],
               ['À vérifier', safeNum(counts.products_to_verify)],
-              ['En attente validation', safeNum(counts.products_to_validate)],
               ['Alertes qui seront générées', safeNum(alerts.total)],
             ].map(([label, value]) => (
               <div key={label} className="sr-impact-line">
@@ -64,4 +63,3 @@ export default function StockRulesSimulationModal({
     </div>
   );
 }
-

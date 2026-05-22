@@ -1601,6 +1601,33 @@ async function askResponsableAssistant(options = {}) {
       ].join('\n');
     }
 
+    // Small talk / confirmations: avoid spamming a full "mini-rapport-like" answer.
+    const isGreeting = ['bonjour', 'salut', 'hello', 'bonsoir', 'coucou'].includes(queryNorm);
+    if (isGreeting) {
+      return [
+        'Bonjour !',
+        "Dis-moi ce que tu veux faire, par exemple :",
+        '- « Quels produits sont les plus critiques cette semaine ? »',
+        '- « Pourquoi Chaussures de sécurité est en alerte ? »',
+        '- « Donne-moi un plan de commande priorisé. »',
+        '- « Résume la situation en 5 lignes. »',
+      ].join('\n');
+    }
+
+    const queryCompact = queryNorm.replace(/[^a-z0-9]/g, '');
+    const isShortConfirm = ['oui', 'ok', 'daccord', 'merci', 'mercibeaucoup', 'svp', 'stp'].includes(queryCompact)
+      || queryNorm.length <= 2;
+    if (isShortConfirm) {
+      return [
+        'OK.',
+        'Tu veux que je fasse quoi exactement ?',
+        '- Top produits critiques',
+        '- Pourquoi un produit est en alerte',
+        '- Plan de commande priorisé',
+        '- Mini-rapport exportable (bouton « Mini-rapport »)',
+      ].join('\n');
+    }
+
     const findInActionPlan = (rawQ) => {
       const qn = normalize(rawQ);
       if (!qn) return null;
@@ -1661,7 +1688,7 @@ async function askResponsableAssistant(options = {}) {
       if (!topList.length && !actionPlan.length) {
         return 'Aucun produit critique detecte sur la periode recente.';
       }
-      const lines = ['Top produits critiques (fallback):'];
+      const lines = ['Top produits critiques:'];
       for (const item of topList) {
         const name = item?.product_name || item?.code_product || 'Produit';
         lines.push(`- ${name}: risque ${pct(item?.risk_probability)}, commande ${qty(item?.recommended_order_qty)} u.`);
@@ -1762,7 +1789,7 @@ async function askResponsableAssistant(options = {}) {
       const st = metrics?.stockout_j7 || {};
       const co = metrics?.consumption_j14 || {};
       lines.push(
-        `Fiabilite actuelle: Rupture F1=${st?.f1 ?? '-'}, AUC=${st?.auc ?? '-'}; Conso MAE=${co?.mae ?? '-'}, MAPE=${co?.mape ?? '-'}%.`
+        `Fiabilité actuelle: Rupture F1=${st?.f1 ?? '-'}, AUC=${st?.auc ?? '-'}; Conso MAE=${co?.mae ?? '-'}, MAPE=${co?.mape ?? '-'}%.`
       );
     } else if (wantsSummary) {
       lines.push(`Critiques: ${stockoutTop.length}, Anomalies: ${anomalyTop.length}.`);
@@ -1770,7 +1797,7 @@ async function askResponsableAssistant(options = {}) {
       if (top) {
         lines.push(`Priorite: ${top.product_name || 'Produit'} (risque ${pct(top.risk_probability)}).`);
       } else {
-        lines.push('Priorite: aucune urgence forte detectee.');
+        lines.push('Priorité: aucune urgence forte détectée.');
       }
     } else if (focus) {
       lines.push(`Produit prioritaire: ${focus.product_name || 'Produit'} (${pct(focus.risk_probability)}).`);
@@ -1778,10 +1805,10 @@ async function askResponsableAssistant(options = {}) {
       if (factors.length) lines.push(`Pourquoi: ${factors.slice(0, 3).map(String).join(', ')}.`);
       else if (focus.explanation) lines.push(`Pourquoi: ${focus.explanation}.`);
     } else {
-      lines.push('Aucun signal critique detecte pour le moment.');
+      lines.push('Aucun signal critique détecté pour le moment.');
     }
 
-    lines.push('', 'Actions immediates:');
+    lines.push('', 'Actions immédiates:');
     if (actionPlan.length) {
       for (const step of actionPlan.slice(0, 3)) {
         lines.push(`- ${step?.product_name || 'Produit'}: ${step?.action || 'Action'} (urgence ${step?.urgency || 'normale'}).`);
@@ -1790,7 +1817,7 @@ async function askResponsableAssistant(options = {}) {
       for (const fallbackLine of buildPriorityLines(ctx, 3)) lines.push(fallbackLine);
     }
 
-    lines.push('', 'Si tu veux, je peux aussi te generer un mini-rapport exportable maintenant.');
+    lines.push('', "Si tu veux, je peux aussi générer un mini-rapport exportable (bouton « Mini-rapport »).");
     return lines.join('\n');
   };
 

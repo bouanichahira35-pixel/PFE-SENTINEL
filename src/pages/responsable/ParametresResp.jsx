@@ -102,14 +102,14 @@ const ParametresResp = ({ userName, onLogout }) => {
 
   const tabs = [
     { id: 'profil', label: ({ fr: 'Profil', en: 'Profile', ar: 'الملف الشخصي' }[uiLanguage]), icon: User },
-    { id: 'securite', label: ({ fr: 'Securite', en: 'Security', ar: 'الأمان' }[uiLanguage]), icon: Lock },
+    { id: 'securite', label: ({ fr: 'Sécurité', en: 'Security', ar: 'الأمان' }[uiLanguage]), icon: Lock },
     { id: 'apparence', label: ({ fr: 'Apparence', en: 'Appearance', ar: 'المظهر' }[uiLanguage]), icon: Moon },
     { id: 'langue', label: ({ fr: 'Langue', en: 'Language', ar: 'اللغة' }[uiLanguage]), icon: Globe },
     { id: 'notifications', label: ({ fr: 'Notifications', en: 'Notifications', ar: 'الإشعارات' }[uiLanguage]), icon: Bell },
     { id: 'support', label: ({ fr: 'Support IT', en: 'IT Support', ar: 'دعم تقني' }[uiLanguage]), icon: LifeBuoy },
   ];
   const i18n = {
-    fr: { title: 'Parametres', loading: 'Chargement...', languageSaved: 'Langue enregistree' },
+    fr: { title: 'Paramètres', loading: 'Chargement...', languageSaved: 'Langue enregistrée' },
     en: { title: 'Settings', loading: 'Loading...', languageSaved: 'Language saved' },
     ar: { title: 'الإعدادات', loading: 'جار التحميل...', languageSaved: 'تم حفظ اللغة' },
   }[uiLanguage];
@@ -293,7 +293,7 @@ const ParametresResp = ({ userName, onLogout }) => {
       return;
     }
 
-    // Ne pas creer directement depuis Parametres: rediriger vers le flux Commandes (Approvisionnement).
+    // Ne pas creer directement depuis Paramètres: rediriger vers le flux Commandes (Approvisionnement).
     navigate(
       `/responsable/commandes/nouvelle?fournisseurId=${encodeURIComponent(recommendedSupplierId)}&produitId=${encodeURIComponent(pid)}&quantite=${encodeURIComponent(String(qty))}&source=recommandation`
     );
@@ -427,7 +427,7 @@ const ParametresResp = ({ userName, onLogout }) => {
     try { 
       let imageProfile = profileData.imageProfile; 
       if (avatarFile) {
-        const uploaded = await uploadFile('/files/upload', avatarFile);
+        const uploaded = await uploadFile('/settings/me/avatar', avatarFile);
         imageProfile = uploaded.file_url;
       }
 
@@ -463,13 +463,16 @@ const ParametresResp = ({ userName, onLogout }) => {
 
     setIsSaving(true);
     try {
-      await patch('/settings/me/password', {
+      const res = await patch('/settings/me/password', {
         current_password: securityData.currentPassword,
         new_password: securityData.newPassword,
         confirm_password: securityData.confirmPassword,
       });
       setSecurityData({ currentPassword: '', newPassword: '', confirmPassword: '' });
-      toast.success('Mot de passe modifie');
+      toast.success(res?.message || 'Mot de passe modifié. Reconnexion requise.');
+      if (res?.logout_required && onLogout) {
+        onLogout('Mot de passe modifié. Veuillez vous reconnecter.', { remote: false });
+      }
     } catch (err) {
       toast.error(err.message || 'Erreur modification mot de passe');
     } finally {
@@ -786,7 +789,7 @@ const ParametresResp = ({ userName, onLogout }) => {
 
               {activeTab === 'securite' && (
                 <div className="param-section">
-                  <h2>Securite du compte</h2>
+                  <h2>Sécurité du compte</h2>
                   <div className="form-group">
                     <label>Mot de passe actuel</label>
                     <div className="password-input-wrap">
@@ -1629,7 +1632,7 @@ const ParametresResp = ({ userName, onLogout }) => {
                   <div className="users-header">
                     <div>
                       <h2>Support IT</h2>
-                      <p className="users-subtitle">Signaler un incident technique Ã  lâ€™administration (email + notification).</p>
+                      <p className="users-subtitle">Ancien formulaire désactivé. Utilisez le module Support IT (tickets).</p>
                     </div>
                   </div>
                   <div className="users-list" style={{ marginTop: 10 }}>
@@ -1664,7 +1667,7 @@ const ParametresResp = ({ userName, onLogout }) => {
                               style={{ marginTop: 6, width: '100%', border: '1px solid #e2e8f0', borderRadius: 10, padding: '10px 12px', fontWeight: 800 }}
                               value={''}
                               onChange={() => {}}
-                              placeholder="DÃ©cris le problÃ¨me (page, heure, contexte)"
+                              placeholder="Décris le problème (page, heure, contexte)"
                               rows={4}
                               maxLength={800}
                             />
@@ -1696,7 +1699,7 @@ const ParametresResp = ({ userName, onLogout }) => {
               {activeTab === 'ia' && (
                 <div className="param-section">
                   <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10 }}>
-                    <h2 style={{ margin: 0 }}>Parametres Intelligence Artificielle</h2>
+                    <h2 style={{ margin: 0 }}>Paramètres Intelligence Artificielle</h2>
                     <button className="btn-refresh" type="button" onClick={loadAiRuntimeStatus} disabled={aiRuntimeLoading}>
                       <RefreshCw size={16} /> Actualiser etat
                     </button>

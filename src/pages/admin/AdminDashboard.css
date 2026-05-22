@@ -112,6 +112,71 @@
   margin-bottom: 10px;
 }
 
+.admin-ai-weekly {
+  background: linear-gradient(150deg, #ffffff 0%, #eff6ff 55%, #ecfeff 100%);
+  border-color: #dbe4ef;
+}
+
+.admin-ai-weekly-strip {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  border: 1px solid rgba(148, 163, 184, 0.35);
+  background: rgba(255, 255, 255, 0.75);
+  border-radius: 16px;
+  padding: 12px;
+  box-shadow: 0 10px 22px rgba(15, 23, 42, 0.06);
+}
+
+.admin-ai-weekly-strip-icon {
+  width: 44px;
+  height: 44px;
+  border-radius: 14px;
+  display: grid;
+  place-items: center;
+  flex: 0 0 auto;
+  color: #0f766e;
+  background: radial-gradient(circle at 30% 30%, rgba(20, 184, 166, 0.18), rgba(59, 130, 246, 0.12));
+  border: 1px solid rgba(148, 163, 184, 0.28);
+}
+
+.admin-ai-weekly-strip-body {
+  min-width: 0;
+  flex: 1;
+}
+
+.admin-ai-weekly-strip-title {
+  font-weight: 1100;
+  color: #0f172a;
+}
+
+.admin-ai-weekly-strip-meta {
+  margin-top: 2px;
+  font-size: 12.5px;
+  font-weight: 800;
+  color: #475569;
+}
+
+.admin-ai-weekly-strip-right {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.admin-ai-weekly-report {
+  margin-top: 10px;
+  border: 1px solid rgba(148, 163, 184, 0.35);
+  background: rgba(255, 255, 255, 0.72);
+  border-radius: 16px;
+  padding: 12px;
+  white-space: pre-wrap;
+  font-weight: 900;
+  color: #0f172a;
+  line-height: 1.35;
+}
+
 .admin-kv {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -216,6 +281,16 @@
   .admin-note,
   .admin-list {
     overflow-wrap: anywhere;
+  }
+
+  .admin-ai-weekly-strip {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .admin-ai-weekly-strip-right .admin-pill {
+    width: 100%;
+    justify-content: center;
   }
 }
 

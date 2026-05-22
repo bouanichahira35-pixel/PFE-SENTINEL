@@ -226,7 +226,7 @@ export default function StockRulesSettings({ hideHeader = false } = {}) {
         </div>
         <div className="sr-card-body">
           <div className="sr-help">
-            Ces règles déterminent le comportement automatique du système : alertes de seuil, inactivité produit, validation des nouveaux produits et contrôle des ruptures.
+            Ces règles déterminent le comportement automatique du système : alertes de seuil, inactivité produit, re-validation après modifications (seuil/catégorie) et contrôle des ruptures.
           </div>
         </div>
       </div>
@@ -306,7 +306,7 @@ export default function StockRulesSettings({ hideHeader = false } = {}) {
               <div>
                 <strong>Restaurer les valeurs par défaut</strong>
                 <div className="sr-subtitle" style={{ marginTop: 4 }}>
-                  Seuil global: 10 • Jours d’inactivité: 30 • Validation nouveaux produits: obligatoire • Alertes automatiques: activées
+                  Seuil global: 10 • Jours d’inactivité: 30 • Re-validation après modifications: désactivée • Alertes automatiques: activées
                 </div>
               </div>
               <button className="btn-refresh" type="button" onClick={() => setDefaultsConfirmOpen(false)} disabled={saving}>

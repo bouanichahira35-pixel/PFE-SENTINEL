@@ -96,11 +96,20 @@ const ForgotPassword = () => {
       const maybeDevOtp = typeof data?.dev_otp === 'string' ? data.dev_otp : '';
       setDevOtp(maybeDevOtp);
       setStep('verify');
-      setInfo("Code envoye. Verifiez votre boite de reception (et spam).");
+      if (channel === 'email' && isDevUi && maybeDevOtp) {
+        setInfo("SMTP non configure: en mode dev, le code s'affiche ci-dessous.");
+      } else {
+        setInfo("Code envoye. Verifiez votre boite de reception (et spam).");
+      }
       const cooldown = Number(data?.cooldown_seconds || RESEND_COOLDOWN_SEC);
       setResendRemainingSec(Number.isFinite(cooldown) ? Math.max(0, Math.floor(cooldown)) : RESEND_COOLDOWN_SEC);
     } catch (err) {
-      setError(err.message || "Erreur lors de l'envoi du code");
+      const message = String(err?.message || '');
+      if (message.includes('Service email indisponible')) {
+        setError("Service email indisponible. Configurez l'SMTP (MAIL_HOST/MAIL_USER/MAIL_PASS) puis reessayez.");
+      } else {
+        setError(message || "Erreur lors de l'envoi du code");
+      }
     } finally {
       setIsLoading(false);
     }

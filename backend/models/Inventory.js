@@ -25,6 +25,9 @@ const inventorySchema = new mongoose.Schema(
 
     responsable_id: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true, index: true },
     magasinier_id: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true, index: true },
+    // Multi-assign: allow one inventory mission to be visible to multiple magasinier accounts.
+    // `magasinier_id` remains the primary/legacy field for backward compatibility.
+    magasinier_ids: { type: [{ type: mongoose.Schema.Types.ObjectId, ref: 'User' }], default: [], index: true },
 
     date_lancement: { type: Date, required: true, index: true },
     date_prevue: { type: Date, required: true, index: true },

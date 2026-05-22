@@ -15,6 +15,7 @@ const { logSecurityEvent } = require('../services/securityAuditService');
 const { isSafeText } = require('../utils/validation');
 const { enqueueMail } = require('../services/mailQueueService');
 const { getUserPreferences, canSendNotificationEmail } = require('../services/userPreferencesService');
+const { getAdminWeeklyAiSummary } = require('../services/adminWeeklyAiSummaryService');
 
 function ensureAdmin(req, res) {
   const role = String(req.user?.role || '').toLowerCase();
@@ -329,6 +330,20 @@ router.get('/perf', requireAuth, async (req, res) => {
     return res.json(summarize({ window_ms: windowMs, limit }));
   } catch (err) {
     return res.status(500).json({ error: 'Failed to fetch perf summary', details: err.message });
+  }
+});
+
+// GET /api/admin/ai/weekly-summary
+// Petit rapport IA sur les 7 derniers jours (support, sécurité, perf, IA).
+router.get('/ai/weekly-summary', requireAuth, async (req, res) => {
+  try {
+    if (!ensureAdmin(req, res)) return;
+    const windowDays = Number(req.query?.days || req.query?.window_days || 7);
+    const limit = Number(req.query?.limit || 6);
+    const result = await getAdminWeeklyAiSummary({ window_days: windowDays, limit });
+    return res.json(result);
+  } catch (err) {
+    return res.status(500).json({ error: 'Failed to generate weekly AI summary', details: err.message });
   }
 });
 

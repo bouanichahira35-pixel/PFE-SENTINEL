@@ -10,7 +10,7 @@ const SidebarDem = ({ collapsed, onToggle, onLogout, userName }) => {
   const menuItems = [
     { icon: Package, label: 'Produits', path: '/demandeur' },
     { icon: FileText, label: 'Mes Demandes', path: '/demandeur/mes-demandes' },
-    { icon: Settings, label: 'Parametres', path: '/demandeur/parametres' },
+    { icon: Settings, label: 'Paramètres', path: '/demandeur/parametres' },
   ];
 
   const handleLogout = () => {
@@ -64,7 +64,7 @@ const SidebarDem = ({ collapsed, onToggle, onLogout, userName }) => {
       <div className="sidebar-logout">
         <button onClick={handleLogout} className="sidebar-logout-btn">
           <LogOut size={20} />
-          {!collapsed && <span>Deconnexion</span>}
+          {!collapsed && <span>Déconnexion</span>}
         </button>
       </div>
     </aside>

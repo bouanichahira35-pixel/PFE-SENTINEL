@@ -34,6 +34,7 @@ import FournisseursResp from "./pages/responsable/FournisseursResp";
 import CategoriesResp from "./pages/responsable/CategoriesResp";
 import RegistreChimique from "./pages/responsable/RegistreChimique";
 import ReglesStock from "./pages/responsable/ReglesStock";
+import LotsASurveillerResp from "./pages/responsable/LotsASurveillerResp";
 
 import FournisseursPage from "./pages/responsable/fournisseurs/FournisseursPage";
 import NouveauFournisseurPage from "./pages/responsable/fournisseurs/NouveauFournisseurPage";
@@ -55,6 +56,7 @@ import ParametresDem from "./pages/demandeur/ParametresDem";
 import AdminDashboard from "./pages/admin/AdminDashboard";
 import AdminUsers from "./pages/admin/AdminUsers";
 import AdminIA from "./pages/admin/AdminIA";
+import AdminAudit from "./pages/admin/AdminAudit";
 import AdminSettings from "./pages/admin/AdminSettings";
 import AdminSecurity from "./pages/admin/AdminSecurity";
 import AdminSessions from "./pages/admin/AdminSessions";
@@ -65,6 +67,7 @@ import SupplierPortal from "./pages/supplier/SupplierPortal";
 import NotFound from "./pages/NotFound";
 import { HOME_PATH_BY_ROLE, ROLES, isKnownRole } from "./constants/roles";
 import { applyUiLanguage, getUiLanguage } from "./utils/uiLanguage";
+import { decodeJwtPayload } from "./utils/jwt";
 import { API_BASE } from "./services/api";
 
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
@@ -76,17 +79,6 @@ const LAST_ACTIVITY_KEY = "lastActivityAt";
 const LAST_LOGIN_ROLE_KEY = "lastLoginRole";
 const LOGOUT_REASON_KEY = "logoutReason";
 const AUTH_LOGOUT_EVENT_NAME = "auth-logout";
-
-function decodeJwtPayload(token) {
-  try {
-    const payloadPart = token.split(".")[1];
-    if (!payloadPart) return null;
-    const json = atob(payloadPart.replace(/-/g, "+").replace(/_/g, "/"));
-    return JSON.parse(json);
-  } catch {
-    return null;
-  }
-}
 
 const App = () => {
   const [showSplash, setShowSplash] = useState(true);
@@ -389,7 +381,10 @@ const App = () => {
               {userRole === ROLES.RESPONSABLE && (
                 <>
                   <Route path="/responsable" element={<DashboardResp userName={userName} onLogout={handleLogout} />} />
+                  <Route path="/responsable/demandes-a-traiter" element={<Navigate to="/responsable/pilotage" replace />} />
                   <Route path="/responsable/produits" element={<ProduitsResp userName={userName} onLogout={handleLogout} />} />
+                  <Route path="/responsable/produits-critiques" element={<Navigate to="/responsable/produits?filter=critiques" replace />} />
+                  <Route path="/responsable/lots-a-surveiller" element={<LotsASurveillerResp userName={userName} onLogout={handleLogout} />} />
                   <Route path="/responsable/pilotage" element={<PilotageResp userName={userName} onLogout={handleLogout} />} />
                   <Route path="/responsable/alertes" element={<Navigate to="/responsable/pilotage?tab=alertes" replace />} />
                   <Route path="/responsable/flux" element={<Navigate to="/responsable/transactions" replace />} />
@@ -430,10 +425,14 @@ const App = () => {
                 <>
                   <Route path="/admin" element={<AdminDashboard userName={userName} onLogout={handleLogout} />} />
                   <Route path="/admin/utilisateurs" element={<AdminUsers userName={userName} onLogout={handleLogout} />} />
-                  <Route path="/admin/ia" element={<AdminIA userName={userName} onLogout={handleLogout} />} />
+                  <Route path="/admin/supervision-ia" element={<AdminIA userName={userName} onLogout={handleLogout} />} />
+                  <Route path="/admin/ia" element={<Navigate to="/admin/supervision-ia" replace />} />
                   <Route path="/admin/sessions" element={<AdminSessions userName={userName} onLogout={handleLogout} />} />
-                  <Route path="/admin/rbac" element={<AdminRbac userName={userName} onLogout={handleLogout} />} />
+                  <Route path="/admin/roles-permissions" element={<AdminRbac userName={userName} onLogout={handleLogout} />} />
+                  <Route path="/admin/rbac" element={<Navigate to="/admin/roles-permissions" replace />} />
                   <Route path="/admin/securite" element={<AdminSecurity userName={userName} onLogout={handleLogout} />} />
+                  <Route path="/admin/audit" element={<AdminAudit userName={userName} onLogout={handleLogout} />} />
+                  <Route path="/admin/historique" element={<Navigate to="/admin/audit" replace />} />
                   <Route path="/admin/parametres" element={<AdminSettings userName={userName} onLogout={handleLogout} />} />
                   <Route path="/admin/support" element={<AdminSupport userName={userName} onLogout={handleLogout} />} />
                   <Route path="/" element={<Navigate to="/admin" replace />} />

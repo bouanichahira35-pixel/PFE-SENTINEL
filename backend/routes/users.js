@@ -468,7 +468,7 @@ router.patch(
 
 // PATCH /api/users/:id/service-direction
 // Body: { service_direction: "RH" | "Finance" | "HSE" | ... }
-// Pour les demandeurs uniquement. Met Ã  jour aussi le profil catalogue automatiquement.
+// Pour les demandeurs uniquement. Met à jour aussi le profil catalogue automatiquement.
 router.patch(
   '/:id/service-direction',
   requirePermission(PERMISSIONS.USER_MANAGE),

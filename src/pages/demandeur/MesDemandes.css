@@ -1,7 +1,7 @@
-﻿.app-layout {
+.app-layout {
   display: flex;
   min-height: 100vh;
-  background: #f9fafb;
+  background: var(--color-bg-secondary);
 }
 
 .main-container {
@@ -22,9 +22,9 @@
 }
 
 .demandes-table-container {
-  background: white;
+  background: var(--color-bg-primary);
   border-radius: 12px;
-  border: 1px solid #e5e7eb;
+  border: 1px solid var(--color-border);
   overflow-x: auto;
   overflow-y: hidden;
   -webkit-overflow-scrolling: touch;
@@ -44,22 +44,22 @@
 }
 
 .demandes-table th {
-  background: #f9fafb;
+  background: var(--color-bg-secondary);
   padding: 1rem;
   text-align: left;
   font-size: 0.75rem;
   font-weight: 600;
-  color: #6b7280;
+  color: var(--color-text-secondary);
   text-transform: uppercase;
   letter-spacing: 0.05em;
-  border-bottom: 1px solid #e5e7eb;
+  border-bottom: 1px solid var(--color-border);
 }
 
 .demandes-table td {
   padding: 1rem;
-  border-bottom: 1px solid #f3f4f6;
+  border-bottom: 1px solid var(--color-border-light);
   font-size: 0.875rem;
-  color: #1f2937;
+  color: var(--color-text-primary);
   vertical-align: top;
   word-break: break-word;
 }
@@ -74,7 +74,7 @@
 }
 
 .demandes-table tbody tr:hover {
-  background: #f9fafb;
+  background: var(--color-bg-secondary);
 }
 
 .mes-demandes-page .ref-cell {
@@ -90,7 +90,7 @@
 }
 
 .mes-demandes-page .product-cell svg {
-  color: #6b7280;
+  color: var(--color-text-secondary);
 }
 
 .mes-demandes-page .product-name {
@@ -101,7 +101,7 @@
 .mes-demandes-page .product-code {
   display: block;
   font-size: 0.75rem;
-  color: #9ca3af;
+  color: var(--color-text-muted);
   font-family: monospace;
 }
 
@@ -113,7 +113,7 @@
   display: flex;
   align-items: center;
   gap: 0.5rem;
-  color: #6b7280;
+  color: var(--color-text-secondary);
 }
 
 .mes-demandes-page .statut-badge {
@@ -146,6 +146,36 @@
   color: #1d4ed8;
 }
 
+.actions-col {
+  width: 140px;
+}
+
+.actions-cell {
+  vertical-align: top;
+}
+
+.actions-muted {
+  color: var(--color-text-muted);
+  font-weight: 700;
+}
+
+.btn-edit-request {
+  border: 1px solid var(--color-border);
+  border-radius: 0.75rem;
+  padding: 0.45rem 0.6rem;
+  cursor: pointer;
+  font-weight: 900;
+  color: var(--color-text-primary);
+  background: var(--color-bg-primary);
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.btn-edit-request:hover {
+  background: var(--color-bg-secondary);
+}
+
 .receipt-row {
   margin-top: 0.45rem;
   display: flex;
@@ -170,15 +200,166 @@
 }
 
 .receipt-code {
-  color: #64748b;
+  color: var(--color-text-secondary);
   font-weight: 700;
 }
 
 .demandes-footer {
   margin-top: 1rem;
   padding: 0.75rem;
-  color: #6b7280;
+  color: var(--color-text-secondary);
   font-size: 0.875rem;
+}
+
+.dem-edit-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(15, 23, 42, 0.55);
+  backdrop-filter: blur(4px);
+  display: grid;
+  place-items: center;
+  padding: 1rem;
+  z-index: 50;
+}
+
+.dem-edit-content {
+  width: min(720px, 100%);
+  background: var(--color-bg-primary);
+  border-radius: 16px;
+  border: 1px solid var(--color-border);
+  box-shadow: 0 20px 60px rgba(0,0,0,0.25);
+  overflow: hidden;
+}
+
+.dem-edit-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 1rem 1.25rem;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.dem-edit-head h2 {
+  margin: 0;
+  font-size: 1.05rem;
+  font-weight: 900;
+  color: var(--color-text-primary);
+}
+
+.dem-edit-close {
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+  padding: 0.35rem;
+  border-radius: 10px;
+  color: var(--color-text-secondary);
+}
+
+.dem-edit-close:hover {
+  background: var(--color-bg-secondary);
+}
+
+.dem-edit-meta {
+  padding: 0.85rem 1.25rem 0.25rem 1.25rem;
+  color: var(--color-text-primary);
+  font-weight: 800;
+}
+
+.dem-edit-hint {
+  margin-top: 0.35rem;
+  font-size: 0.82rem;
+  color: var(--color-text-secondary);
+  font-weight: 800;
+}
+
+.dem-edit-form {
+  padding: 1rem 1.25rem 1.25rem 1.25rem;
+}
+
+.dem-edit-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.9rem;
+}
+
+.dem-edit-span2 {
+  grid-column: 1 / -1;
+}
+
+@media (max-width: 640px) {
+  .dem-edit-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.dem-edit-form .form-group {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.dem-edit-form .form-group input,
+.dem-edit-form .form-group select,
+.dem-edit-form .form-group textarea {
+  width: 100%;
+  border: 1px solid var(--color-border);
+  border-radius: 12px;
+  padding: 0.7rem 0.75rem;
+  font-weight: 800;
+  color: var(--color-text-primary);
+  background: var(--color-bg-primary);
+  outline: none;
+}
+
+.dem-edit-form .form-group textarea {
+  resize: vertical;
+}
+
+.dem-edit-form .form-group input:focus,
+.dem-edit-form .form-group select:focus,
+.dem-edit-form .form-group textarea:focus {
+  border-color: #38bdf8;
+  box-shadow: 0 0 0 3px rgba(56, 189, 248, 0.25);
+}
+
+.dem-edit-form .form-group input.error,
+.dem-edit-form .form-group select.error,
+.dem-edit-form .form-group textarea.error {
+  border-color: #ef4444;
+  background: #fef2f2;
+}
+
+.dem-edit-form .error-text {
+  font-size: 0.75rem;
+  font-weight: 800;
+  color: #dc2626;
+}
+
+.dem-edit-actions {
+  margin-top: 1rem;
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.75rem;
+}
+
+.btn-cancel-edit {
+  border: 1px solid var(--color-border);
+  background: var(--color-bg-primary);
+  color: var(--color-text-primary);
+  font-weight: 900;
+  border-radius: 0.9rem;
+  padding: 0.65rem 0.9rem;
+  cursor: pointer;
+}
+
+.btn-save-edit {
+  border: 0;
+  border-radius: 0.9rem;
+  padding: 0.65rem 0.9rem;
+  cursor: pointer;
+  font-weight: 900;
+  color: #ffffff;
+  background: linear-gradient(135deg, #0284c7, #0f766e);
 }
 
 @keyframes fadeIn {

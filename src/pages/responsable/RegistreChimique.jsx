@@ -235,15 +235,6 @@ export default function RegistreChimique({ userName, onLogout }) {
     });
   }, [filterChemicalClass, filterEmplacement, filterFds, filterPhysicalState, prepared, search]);
 
-  const kpis = useMemo(() => {
-    const sigs = filtered.map((r) => r._sig || computeChemicalRegisterSignals(r));
-    const total = filtered.length;
-    const fdsOk = sigs.filter((s) => s.hasFds).length;
-    const fdsMissing = total - fdsOk;
-    const toWatch = sigs.filter((s) => s.status === 'À surveiller' || s.status === 'Sensible').length;
-    return { total, fdsOk, fdsMissing, toWatch };
-  }, [filtered]);
-
   const points = useMemo(() => {
     const sigs = filtered.map((r) => r._sig || computeChemicalRegisterSignals(r));
     const withoutFds = sigs.filter((s) => s.missingFds).length;
@@ -252,6 +243,54 @@ export default function RegistreChimique({ userName, onLogout }) {
     const expiringLots = filtered.reduce((acc, r) => acc + Math.max(0, Math.floor(Number(r?.lots_expiring_30d || 0))), 0);
     return { withoutFds, withoutClass, sensitive, expiringLots };
   }, [filtered]);
+
+  const kpis = useMemo(() => {
+    const total = filtered.length;
+    return {
+      total,
+      fdsMissing: points.withoutFds,
+      classMissing: points.withoutClass,
+      expiringLots: points.expiringLots,
+    };
+  }, [filtered.length, points.expiringLots, points.withoutClass, points.withoutFds]);
+
+  const watchItems = useMemo(() => {
+    const items = [];
+
+    if (points.withoutFds > 0) {
+      items.push({
+        key: 'withoutFds',
+        value: points.withoutFds,
+        label: `produit${points.withoutFds > 1 ? 's' : ''} sans FDS`,
+      });
+    }
+
+    if (points.withoutClass > 0) {
+      items.push({
+        key: 'withoutClass',
+        value: points.withoutClass,
+        label: `produit${points.withoutClass > 1 ? 's' : ''} sans classe chimique`,
+      });
+    }
+
+    if (points.sensitive > 0) {
+      items.push({
+        key: 'sensitive',
+        value: points.sensitive,
+        label: `produit${points.sensitive > 1 ? 's' : ''} sensible${points.sensitive > 1 ? 's' : ''}`,
+      });
+    }
+
+    if (points.expiringLots > 0) {
+      items.push({
+        key: 'expiringLots',
+        value: points.expiringLots,
+        label: `lot${points.expiringLots > 1 ? 's' : ''} proche${points.expiringLots > 1 ? 's' : ''} péremption`,
+      });
+    }
+
+    return items;
+  }, [points.expiringLots, points.sensitive, points.withoutClass, points.withoutFds]);
 
   const handleExport = useCallback(() => {
     if (!filtered.length) {
@@ -292,6 +331,7 @@ export default function RegistreChimique({ userName, onLogout }) {
           <HeaderPage
             userName={userName}
             title="Registre chimique"
+            subtitle="Suivi des produits chimiques et des fiches de sécurité."
             showSearch={false}
             onRefresh={load}
             onMenuClick={() => setSidebarCollapsed((p) => !p)}
@@ -305,18 +345,21 @@ export default function RegistreChimique({ userName, onLogout }) {
                 <div className="rc-hero-left">
                   <div className="rc-hero-title">
                     <FlaskConical size={18} />
-                    <strong>Registre chimique</strong>
+                    <strong>Période</strong>
                     <span className="rc-period">{formatMonthLabel(year, month)}</span>
-                  </div>
-                  <div className="rc-hero-sub">
-                    Suivi des produits chimiques, des quantités stockées et des fiches de sécurité.
                   </div>
                 </div>
                 <div className="rc-hero-actions">
                   <button type="button" className="btn btn-secondary btn-sm" onClick={load} disabled={isLoading}>
                     <RefreshCw size={14} /> Actualiser
                   </button>
-                  <button type="button" className="btn btn-primary btn-sm" onClick={handleExport} disabled={isLoading}>
+                  <button
+                    type="button"
+                    className="btn btn-primary btn-sm"
+                    onClick={handleExport}
+                    disabled={isLoading || filtered.length === 0}
+                    title={filtered.length === 0 ? 'Aucune ligne à exporter' : undefined}
+                  >
                     <Download size={14} /> Exporter registre
                   </button>
                 </div>
@@ -399,17 +442,17 @@ export default function RegistreChimique({ userName, onLogout }) {
                   <span>Produits chimiques</span>
                   <AnimatedKpi value={kpis.total} />
                 </article>
-                <article className="rc-kpi-card ok">
-                  <span>FDS disponibles</span>
-                  <AnimatedKpi value={kpis.fdsOk} />
-                </article>
-                <article className="rc-kpi-card warn">
+                <article className={`rc-kpi-card ${kpis.fdsMissing > 0 ? 'warn' : 'ok'}`}>
                   <span>FDS manquantes</span>
                   <AnimatedKpi value={kpis.fdsMissing} />
                 </article>
-                <article className="rc-kpi-card danger">
-                  <span>Produits à surveiller</span>
-                  <AnimatedKpi value={kpis.toWatch} />
+                <article className={`rc-kpi-card ${kpis.classMissing > 0 ? 'warn' : 'ok'}`}>
+                  <span>Classes à compléter</span>
+                  <AnimatedKpi value={kpis.classMissing} />
+                </article>
+                <article className={`rc-kpi-card ${kpis.expiringLots > 0 ? 'warn' : 'ok'}`}>
+                  <span>Lots proches péremption</span>
+                  <AnimatedKpi value={kpis.expiringLots} />
                 </article>
               </section>
 
@@ -418,14 +461,13 @@ export default function RegistreChimique({ userName, onLogout }) {
                   <strong>Points à surveiller</strong>
                   <span className="rc-watch-hint">À corriger / vérifier</span>
                 </div>
-                {(points.withoutFds + points.withoutClass + points.sensitive + points.expiringLots) === 0 ? (
+                {watchItems.length === 0 ? (
                   <div className="rc-watch-ok">Aucun point critique détecté.</div>
                 ) : (
                   <ul className="rc-watch-list">
-                    <li><strong>{points.withoutFds}</strong> produit{points.withoutFds > 1 ? 's' : ''} sans FDS</li>
-                    <li><strong>{points.withoutClass}</strong> produit{points.withoutClass > 1 ? 's' : ''} sans classe chimique</li>
-                    <li><strong>{points.sensitive}</strong> produit{points.sensitive > 1 ? 's' : ''} sensible{points.sensitive > 1 ? 's' : ''}</li>
-                    <li><strong>{points.expiringLots}</strong> lot{points.expiringLots > 1 ? 's' : ''} proche{points.expiringLots > 1 ? 's' : ''} péremption</li>
+                    {watchItems.map((it) => (
+                      <li key={it.key}><strong>{it.value}</strong> {it.label}</li>
+                    ))}
                   </ul>
                 )}
               </section>
@@ -481,7 +523,6 @@ export default function RegistreChimique({ userName, onLogout }) {
                             ) : (
                               <div className="rc-fds-cell">
                                 <span className="rc-pill warn">Manquante</span>
-                                <span className="rc-pill warn subtle">À compléter</span>
                               </div>
                             )}
                           </td>
@@ -493,10 +534,13 @@ export default function RegistreChimique({ userName, onLogout }) {
                           </td>
                           <td>
                             <div className="rc-actions">
-                              <button type="button" className="rc-btn" onClick={() => setDetailRow(row)}>Voir détail</button>
-                              {sig.hasFds ? (
-                                <button type="button" className="rc-btn subtle" onClick={() => handleOpenFds(row, 'download')}>Télécharger FDS</button>
-                              ) : null}
+                              <button
+                                type="button"
+                                className={`rc-btn ${sig.missingFds || sig.missingClass ? 'warn' : ''}`}
+                                onClick={() => setDetailRow(row)}
+                              >
+                                {sig.missingFds || sig.missingClass ? 'Compléter' : 'Consulter'}
+                              </button>
                             </div>
                           </td>
                         </tr>

@@ -261,8 +261,12 @@ async function request(path, method, payload, retried = false) {
     const message = String(err?.message || "");
     const isAbort = String(err?.name || "") === "AbortError";
     if (isAbort) {
+      const origin = typeof window !== "undefined" && window?.location?.origin
+        ? window.location.origin
+        : "";
+      const baseHint = API_BASE.startsWith("http") ? API_BASE : `${origin}${API_BASE}`;
       const timeoutErr = new Error(
-        `Requete trop lente (>${Math.round(API_TIMEOUT_MS / 1000)}s). Verifiez le backend et la connexion reseau.`
+        `Requete trop lente (>${Math.round(API_TIMEOUT_MS / 1000)}s) vers ${baseHint}${path}. Verifiez le backend (port 5000), MongoDB et REACT_APP_API_URL. Testez /api/health.`
       );
       timeoutErr.cause = err;
       throw timeoutErr;
@@ -291,7 +295,11 @@ async function request(path, method, payload, retried = false) {
 
   const latencyMs = Math.max(0, Math.round(nowMs() - startedAt));
 
-  if (res.status === 401 && !retried && path !== "/auth/refresh") {
+  // Only attempt refresh when we *were* authenticated (token present).
+  // Otherwise, a legitimate 401 from public endpoints like `/auth/login`
+  // would incorrectly trigger a refresh call and surface confusing errors
+  // (ex: "refreshToken obligatoire").
+  if (res.status === 401 && token && !retried && path !== "/auth/refresh") {
     const refreshed = await refreshAccessTokenOnce();
     if (refreshed?.ok && refreshed.token) {
       return request(path, normalizedMethod, payload, true);
@@ -370,7 +378,7 @@ async function uploadFileInternal(path, file, fieldName, retried = false) {
     body: formData,
   });
 
-  if (res.status === 401 && !retried && path !== "/auth/refresh") {
+  if (res.status === 401 && token && !retried && path !== "/auth/refresh") {
     const refreshed = await refreshAccessTokenOnce();
     if (refreshed?.ok && refreshed.token) {
       return uploadFileInternal(path, file, fieldName, true);

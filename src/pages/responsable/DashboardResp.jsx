@@ -2,16 +2,13 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { 
   AlertTriangle, 
   Package, 
-  Activity,
   CheckCircle2,
-  RefreshCw,
+  ChevronRight,
   Clock,
   ClipboardCheck,
   FlaskConical,
-  ShieldAlert,
   LineChart,
   PieChart,
-  ShoppingCart,
   Sparkles,
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
@@ -21,7 +18,6 @@ import ProtectedPage from '../../components/shared/ProtectedPage';
 import LoadingSpinner from '../../components/shared/LoadingSpinner';
 import { useToast } from '../../components/shared/Toast';
 import { get, post } from '../../services/api';
-import ProtectedImage from '../../components/shared/ProtectedImage';
 import { computeChemicalRegisterSignals } from '../../utils/chemicalRegister';
 import './DashboardResp.css';
 
@@ -51,14 +47,6 @@ function formatIsoDay(value) {
   const d = new Date(value);
   if (Number.isNaN(d.getTime())) return '';
   return d.toISOString().slice(0, 10);
-}
-
-function levelFromRisk(probability, stock, seuil) {
-  const inRupture = Number(stock || 0) <= 0;
-  const underThreshold = Number(stock || 0) > 0 && Number(stock || 0) <= Number(seuil || 0);
-  if (inRupture || Number(probability || 0) >= 70) return 'Critique';
-  if (underThreshold || Number(probability || 0) >= 40) return 'Moyen';
-  return 'Faible';
 }
 
 function toLineCoords(values, minValue, maxValue) {
@@ -184,31 +172,81 @@ function AnimatedNumber({ value, decimals = 0, durationMs = 650 }) {
   return <span>{formatted}</span>;
 }
 
+/*
+============================
+Bloc de Recommandations / Directives strictes pour IA et alertes
+============================
+
+Objectif :
+Fournir des directives claires pour le développement et l'utilisation
+des alertes IA et des résumés générés par le chatbot, afin de garantir
+la cohérence, la fiabilité et la traçabilité dans l'application.
+
+Recommandations strictes :
+
+1. Traçabilité
+   - Chaque alerte doit avoir un identifiant unique (alertId).
+   - Chaque résumé IA doit inclure le timestamp de génération.
+   - L’historique des changements d’alerte doit être stocké pour audit.
+
+2. Responsabilité
+   - Chaque alerte doit être assignée à un responsable clairement identifié.
+   - Le responsable doit pouvoir confirmer, rejeter ou annoter l’alerte.
+
+3. Qualité des résumés
+   - Le résumé IA doit être concis (max 3 phrases) et explicatif.
+   - Il doit inclure :
+     * Le type d’alerte
+     * Les facteurs principaux déclencheurs
+     * Les actions recommandées ou points à surveiller
+   - Toute incertitude ou hypothèse doit être explicitement signalée.
+
+4. Interface Utilisateur
+   - Les badges doivent être colorés selon la criticité :
+     * Rouge : rupture critique
+     * Orange : anomalie
+     * Bleu : information / seuil adaptatif
+   - Les popovers doivent être accessibles via un clic ou survol et
+     afficher les résumés sans surcharge visuelle.
+
+5. Automatisation et mises à jour
+   - Les résumés IA doivent se régénérer automatiquement à chaque
+     modification pertinente de l’alerte ou du stock.
+   - Les notifications doivent être envoyées uniquement aux responsables
+     concernés.
+
+6. Sécurité et confidentialité
+   - Les données sensibles (stock réel, fournisseurs) doivent être
+     filtrées avant génération de résumé IA.
+   - Les accès à l’API /api/ai/alert-summary doivent être authentifiés
+     et audités.
+
+7. Tests et validation
+   - Chaque changement du modèle IA ou du workflow d’alerte doit
+     être testé pour cohérence et non-régression.
+   - Les résultats doivent être validés par un responsable avant
+     mise en production.
+
+Ce bloc peut être utilisé comme guide strict pour tout développement
+futur lié aux alertes IA et aux résumés générés par le chatbot.
+*/
+
 const DashboardResp = ({ userName, onLogout }) => {
   const toast = useToast();
   const navigate = useNavigate();
 
   const [sidebarCollapsed, setSidebarCollapsed] = useState(() => (typeof window !== 'undefined' ? window.innerWidth <= 768 : false));
-  const [periodDays, setPeriodDays] = useState(30);
+  const periodDays = 30;
   const [allProducts, setAllProducts] = useState([]);
   const [historyTrend, setHistoryTrend] = useState([]);
   const [topConsumedProducts, setTopConsumedProducts] = useState([]);
-  const [historyAnomalies, setHistoryAnomalies] = useState([]);
-  const [recentActivity, setRecentActivity] = useState([]);
   const [, setAiModelStatus] = useState(null);
-  const [assistantStatus, setAssistantStatus] = useState(null);
   const [stockoutForecast, setStockoutForecast] = useState([]);
-  const [aiAlerts, setAiAlerts] = useState([]);
-  const [supplierOps, setSupplierOps] = useState(() => ({ active_suppliers: 0, open_orders: 0, late_open_orders: 0 }));
   const [isLoading, setIsLoading] = useState(false);
   const [pendingRequestsCount, setPendingRequestsCount] = useState(0);
-  const [pendingUrgentCount, setPendingUrgentCount] = useState(0);
-  const [pendingAvgWaitDays, setPendingAvgWaitDays] = useState(0);
-  const [prioritiesTodayCount, setPrioritiesTodayCount] = useState(0);
   const [inventoriesToValidateCount, setInventoriesToValidateCount] = useState(0);
-  const [inactiveProductsCount, setInactiveProductsCount] = useState(0);
   const [expiringLotsCount, setExpiringLotsCount] = useState(0);
-  const [opsTab, setOpsTab] = useState('alertes');
+  const [lastUpdatedAt, setLastUpdatedAt] = useState(null);
   const [chemicalSummary, setChemicalSummary] = useState(() => ({
     total: 0,
     missingFds: 0,
@@ -229,35 +267,23 @@ const DashboardResp = ({ userName, onLogout }) => {
       const chemYear = now.getFullYear();
       const chemMonth = now.getMonth() + 1;
 
-      await post('/ai/alerts/refresh', { window_days: range.days }).catch(() => null);
-
       const [
         all,
         insights,
         stockoutRes,
-        activityRes,
         modelStatusRes,
-        assistantStatusRes,
-        supplierInsightsRes,
-        aiAlertsRes,
         pendingRequests,
         inventoriesToValidate,
         expiringLots,
-        inactiveProducts,
         chemicalRegister,
       ] = await Promise.all([
         get('/products'),
         get(`/history/insights?from=${fromIso}&to=${toIso}`).catch(() => ({ daily_trend: [], top_consumed_products: [], anomalies: [] })),
         post('/ai/predict/stockout', { horizon_days: 7 }).catch(() => ({ predictions: [] })),
-        get(`/history?limit=12&from=${fromIso}&to=${toIso}`).catch(() => ({ items: [] })),
         get('/ai/models/status').catch(() => null),
-        get('/ai/assistant/status').catch(() => null),
-        get('/suppliers/insights?max=3&window_days=180').catch(() => null),
-        get('/ai/alerts').catch(() => []),
         get('/requests?status=pending').catch(() => []),
         get('/inventory/responsable/to-validate').catch(() => ({ items: [] })),
         get('/stock/lots/expiring?days=30').catch(() => ({ count: 0 })),
-        get('/products/inactive?days=60').catch(() => ({ items: [] })),
         get(`/reports/chemical-register?year=${encodeURIComponent(chemYear)}&month=${encodeURIComponent(chemMonth)}`).catch(() => ({ rows: [] })),
       ]);
 
@@ -267,44 +293,8 @@ const DashboardResp = ({ userName, onLogout }) => {
       const pendingList = Array.isArray(pendingRequests) ? pendingRequests : [];
       setPendingRequestsCount(pendingList.length);
 
-      const nowTs = Date.now();
-      const msPerDay = 24 * 60 * 60 * 1000;
-
-      const waitDays = pendingList
-        .map((r) => {
-          const raw = r?.date_request || r?.createdAt || null;
-          if (!raw) return null;
-          const d = new Date(raw);
-          const ts = d.getTime();
-          if (Number.isNaN(ts)) return null;
-          return Math.max(0, (nowTs - ts) / msPerDay);
-        })
-        .filter((x) => typeof x === 'number' && Number.isFinite(x));
-
-      const hasWaitData = waitDays.length > 0;
-      const avgWait = waitDays.length ? waitDays.reduce((sum, v) => sum + v, 0) / waitDays.length : 0;
-      setPendingAvgWaitDays(waitDays.length ? Math.max(0, Math.round(avgWait * 10) / 10) : 0);
-      // If dates are missing/unparseable, fall back to a simple note in the UI.
-      if (!hasWaitData && pendingList.length) setPendingAvgWaitDays(null);
-
-      const urgentCount = pendingList.filter((r) => {
-        const p = String(r?.priority || '').toLowerCase();
-        if (p === 'urgent' || p === 'critical') return true;
-        const raw = r?.date_request || r?.createdAt || null;
-        if (!raw) return false;
-        const d = new Date(raw);
-        const ts = d.getTime();
-        if (Number.isNaN(ts)) return false;
-        return nowTs - ts >= 48 * 60 * 60 * 1000;
-      }).length;
-      setPendingUrgentCount(urgentCount);
-      setPrioritiesTodayCount(urgentCount);
-
       const toValidateCount = Array.isArray(inventoriesToValidate?.items) ? inventoriesToValidate.items.length : 0;
       setInventoriesToValidateCount(toValidateCount);
-
-      const inactiveCount = Array.isArray(inactiveProducts?.items) ? inactiveProducts.items.length : 0;
-      setInactiveProductsCount(inactiveCount);
 
       setExpiringLotsCount(Math.max(0, Math.floor(Number(expiringLots?.count || 0))));
 
@@ -347,16 +337,8 @@ const DashboardResp = ({ userName, onLogout }) => {
       );
 
       setTopConsumedProducts(Array.isArray(insights?.top_consumed_products) ? insights.top_consumed_products : []);
-      setHistoryAnomalies(Array.isArray(insights?.anomalies) ? insights.anomalies : []);
-      setRecentActivity(Array.isArray(activityRes?.items) ? activityRes.items.slice(0, 6) : []);
       setAiModelStatus(modelStatusRes && typeof modelStatusRes === 'object' ? modelStatusRes : null);
-      setAssistantStatus(assistantStatusRes && typeof assistantStatusRes === 'object' ? assistantStatusRes : null);
-      setAiAlerts(Array.isArray(aiAlertsRes) ? aiAlertsRes : []);
-      setSupplierOps(
-        supplierInsightsRes?.summary && supplierInsightsRes?.ok
-          ? supplierInsightsRes.summary
-          : { active_suppliers: 0, open_orders: 0, late_open_orders: 0 }
-      );
+      setLastUpdatedAt(new Date().toISOString());
     } catch (err) {
       toast.error(err.message || 'Erreur chargement dashboard');
     } finally {
@@ -384,13 +366,6 @@ const DashboardResp = ({ userName, onLogout }) => {
     const disponiblesCount = Math.max(0, totalProduits - sousSeuilCount - ruptureCount);
     return { totalProduits, sousSeuilCount, ruptureCount, disponiblesCount };
   }, [allProducts]);
-
-  const movementStats = useMemo(() => {
-    const entries = historyTrend.reduce((acc, x) => acc + Number(x.entry || 0), 0);
-    const exits = historyTrend.reduce((acc, x) => acc + Number(x.exit || 0), 0);
-    const total = entries + exits;
-    return { entries, exits, total };
-  }, [historyTrend]);
 
   const availabilityRate = useMemo(() => {
     const ok = Number(stats.disponiblesCount || 0);
@@ -431,134 +406,12 @@ const DashboardResp = ({ userName, onLogout }) => {
 
   const topRiskProduct = useMemo(() => (riskSource.length ? riskSource[0] : null), [riskSource]);
 
-  const productImageById = useMemo(() => {
-    const map = {};
-    (allProducts || []).forEach((p) => {
-      const id = p?._id || p?.id;
-      if (!id) return;
-      map[String(id)] = p?.image_product || p?.image || '';
-    });
-    return map;
-  }, [allProducts]);
-
-  const smartAlerts = useMemo(() => ( 
-    riskSource
-      .filter((row) => Number(row.risk_probability || 0) >= 25 || Number(row.current_stock || 0) <= Number(row.seuil_minimum || 0))
-      .slice(0, 6)
-      .map((row, idx) => { 
-        const stock = Number(row.current_stock || 0); 
-        const seuil = Number(row.seuil_minimum || 0); 
-        const inRupture = stock <= 0;
-        const underThreshold = stock > 0 && stock <= seuil;
-        const suggestedOrder = Number(row.recommended_order_qty || 0);
-        const pid = String(row.product_id || '');
-        const type = inRupture ? 'Rupture' : underThreshold ? 'Sous seuil' : 'Sous seuil';
-        return {
-          id: `${row.product_id || 'p'}-${idx}`,
-          productId: pid,
-          image: pid ? (productImageById[pid] || '') : '',
-          productName: row.product_name || 'Produit', 
-          type,
-          level: levelFromRisk(row.risk_probability, stock, seuil), 
-          action: suggestedOrder > 0 ? `Commander ${suggestedOrder} u.` : 'Surveillance active.',
-          reason: inRupture
-            ? 'Rupture immediate: stock a zero.'
-            : underThreshold
-              ? `Stock sous seuil minimum (${stock} / ${seuil}).`
-              : `Stock proche du seuil (${stock} / ${seuil}).`,
-          riskProbability: Number(row.risk_probability || 0), 
-        }; 
-      }) 
-  ), [productImageById, riskSource]); 
-
-  const opsAlertsTop = useMemo(() => {
-    const list = Array.isArray(smartAlerts) ? smartAlerts : [];
-    const top = list.slice(0, 3);
-    const fdsMissing = Number(chemicalSummary.missingFds || 0);
-    if (fdsMissing > 0 && top.length < 3) {
-      top.push({
-        id: 'chem_fds_missing',
-        productId: '',
-        image: '',
-        productName: 'Registre chimique',
-        type: 'FDS manquante',
-        level: 'Important',
-        action: 'Compléter les fiches.',
-        reason: 'FDS ou classe manquante.',
-        riskProbability: Math.min(99, Math.max(25, 40 + fdsMissing)),
-        isChem: true,
-      });
-    }
-    return top.slice(0, 3);
-  }, [chemicalSummary.missingFds, smartAlerts]);
-
-  const criticalAlertsCount = useMemo(() => (
-    smartAlerts.filter((a) => String(a.level || '').toLowerCase() === 'critique').length
-  ), [smartAlerts]);
-
-  const aiAlertsSummary = useMemo(() => {
-    const list = Array.isArray(aiAlerts) ? aiAlerts : [];
-    const normalized = list.map((a) => {
-      const risk = String(a?.risk_level || '').toLowerCase();
-      const type = String(a?.alert_type || '').toLowerCase();
-      const status = String(a?.status || 'new').toLowerCase();
-      const productName = a?.product?.name || a?.product?.code_product || a?.product_name || 'Produit';
-      return {
-        id: String(a?._id || `${type}_${productName}_${a?.detected_at || ''}`),
-        productName,
-        risk,
-        type,
-        status,
-        message: String(a?.message || '').trim(),
-        detected_at: a?.detected_at || a?.createdAt || null,
-      };
-    });
-
-    const newAlerts = normalized.filter((a) => a.status === 'new');
-    const criticalNew = newAlerts.filter((a) => a.risk === 'high' || a.type === 'rupture').length;
-
-    const top = [...newAlerts]
-      .sort((a, b) => {
-        const pa = a.risk === 'high' ? 3 : a.risk === 'medium' ? 2 : 1;
-        const pb = b.risk === 'high' ? 3 : b.risk === 'medium' ? 2 : 1;
-        if (pb !== pa) return pb - pa;
-        return new Date(b.detected_at || 0) - new Date(a.detected_at || 0);
-      })
-      .slice(0, 3);
-
-    return { newCount: newAlerts.length, criticalNewCount: criticalNew, top };
-  }, [aiAlerts]);
-
-  const alertsBadgeCount = useMemo(() => (
-    aiAlerts.length ? aiAlertsSummary.criticalNewCount : criticalAlertsCount
-  ), [aiAlerts.length, aiAlertsSummary.criticalNewCount, criticalAlertsCount]);
-
-  const alertsToWatchCount = useMemo(() => {
-    const n = Array.isArray(aiAlerts) ? aiAlerts.length : 0;
-    return n > 0 ? n : alertsBadgeCount;
-  }, [aiAlerts, alertsBadgeCount]);
-
-  const decisionWhy = useMemo(() => {
-    if (!topRiskProduct) return 'Aucun signal critique détecté.';
-    const stock = Number(topRiskProduct.current_stock || 0);
-    const seuil = Number(topRiskProduct.seuil_minimum || 0);
-    if (stock <= 0) return 'Stock à zéro ou rupture imminente. Action immédiate conseillée.';
-    if (stock <= seuil) return 'Seuil atteint ou dépassé. Action rapide conseillée.';
-    return 'Signal de risque détecté (stock proche du seuil).';
-  }, [topRiskProduct]);
-
   const requestsSeries = useMemo(() => {
-    return historyTrend.slice(-10).map((x) => ({
+    return historyTrend.slice(-7).map((x) => ({
       label: formatDayLabel(x.day),
       value: Number(x.request || 0),
     }));
   }, [historyTrend]);
-
-  const chemicalCardTone = useMemo(() => {
-    if (chemicalSummary.sensitive > 0) return { card: 'danger', icon: 'danger' };
-    if (chemicalSummary.missingFds > 0 || chemicalSummary.withoutClass > 0 || chemicalSummary.toComplete > 0) return { card: 'warn', icon: 'warn' };
-    return { card: '', icon: 'ok' };
-  }, [chemicalSummary.missingFds, chemicalSummary.sensitive, chemicalSummary.toComplete, chemicalSummary.withoutClass]);
 
   const requestsInsight = useMemo(() => {
     const values = requestsSeries.map((x) => Number(x.value || 0));
@@ -605,29 +458,6 @@ const DashboardResp = ({ userName, onLogout }) => {
   const stockVsSeuilCoords = toLineCoords(stockVsSeuil.stock, 0, stockVsSeuilMax);
   const seuilCoords = toLineCoords(stockVsSeuil.seuil, 0, stockVsSeuilMax);
 
-  const decisionSummary = useMemo(() => {
-    if (!topRiskProduct) {
-      return {
-        priorityProduct: '-',
-        priorityRisk: 0,
-        nextDecision: 'Aucune action urgente.',
-        thresholdSignal: 'Pas de croisement seuil imminent.',
-      };
-    }
-    const risk = Number(topRiskProduct.risk_probability || 0);
-    const orderQty = Number(topRiskProduct.recommended_order_qty || 0);
-    const qtyLabel = orderQty === 1 ? '1 unité' : `${orderQty} unités`;
-    const crossingSignal = stockVsSeuil.crossingDay
-      ? `Croisement seuil vers ${stockVsSeuil.crossingDay}`
-      : "Pas de croisement seuil sur l'horizon";
-    return {
-      priorityProduct: topRiskProduct.product_name || 'Produit',
-      priorityRisk: risk,
-      nextDecision: orderQty > 0 ? `Commander ${qtyLabel} aujourd'hui` : 'Surveillance active sans commande immédiate',
-      thresholdSignal: crossingSignal,
-    };
-  }, [topRiskProduct, stockVsSeuil.crossingDay]);
-
   const topConsumed = useMemo(() => {
     const rows = Array.isArray(topConsumedProducts) ? topConsumedProducts : [];
     const maxQty = Math.max(1, ...rows.map((r) => Number(r.total_qty || 0)));
@@ -644,82 +474,6 @@ const DashboardResp = ({ userName, onLogout }) => {
     };
   }, [topConsumedProducts]);
 
-  const recentFeed = useMemo(() => {
-    const items = Array.isArray(recentActivity) ? recentActivity : [];
-    const labelByAction = {
-      entry: 'Entrée',
-      exit: 'Sortie',
-      request: 'Demande',
-      validation: 'Validation',
-      product_create: 'Création produit',
-      product_update: 'Mise à jour produit',
-      block: 'Blocage',
-    };
-    return items.map((it) => ({
-      id: String(it?._id || Math.random()),
-      when: it?.date_action || it?.createdAt || null,
-      action: String(it?.action_type || '-'),
-      actionLabel: labelByAction[String(it?.action_type || '').toLowerCase()] || String(it?.action_type || '-'),
-      qty: Number(it?.quantity || 0),
-      description: String(it?.description || '').trim(),
-      product: it?.product?.name || it?.product?.code_product || '-',
-      role: it?.actor_role || it?.user?.role || '-',
-      source: it?.source || '-',
-    }));
-  }, [recentActivity]);
-
-  const anomalyFeed = useMemo(() => {
-    const rows = Array.isArray(historyAnomalies) ? historyAnomalies : [];
-    return rows.slice(0, 3).map((a, idx) => ({
-      id: `${a?.product_id || 'p'}_${idx}`,
-      product_id: a?.product_id || null,
-      qty: Number(a?.quantity || 0),
-      when: a?.date_action || null,
-      threshold: Number(a?.threshold || 0),
-    }));
-  }, [historyAnomalies]);
-
-  const assistantSummary = useMemo(() => {
-    const geminiConfigured = Boolean(assistantStatus?.gemini?.configured);
-    const predictionsEnabled = assistantStatus?.ai_config?.predictionsEnabled !== false;
-    const trained = Boolean(assistantStatus?.models?.trained);
-    const lastTrainedAt = assistantStatus?.models?.trained_at || null;
-
-    const assistantOk = geminiConfigured;
-    const predictionsOk = predictionsEnabled && trained;
-    const predictionsLabel = predictionsOk ? 'Disponibles' : predictionsEnabled ? 'En cours' : 'Désactivées';
-
-    return {
-      assistantLabel: assistantOk ? 'Actif' : 'À configurer',
-      assistantHint: assistantOk
-        ? 'Résumé et recommandations disponibles.'
-        : "Activez l'assistant dans Paramètres > IA.",
-      predictionsLabel,
-      lastUpdateLabel: lastTrainedAt ? formatDateTimeLabel(lastTrainedAt) : '-',
-    };
-  }, [assistantStatus]);
-
-  const pendingBiNote = useMemo(() => {
-    if (!pendingRequestsCount) return 'Aucune demande en attente';
-    if (pendingAvgWaitDays == null) {
-      return `${pendingRequestsCount} demande${pendingRequestsCount > 1 ? 's' : ''} en attente`;
-    }
-    const avg = Number(pendingAvgWaitDays || 0);
-    const avgLabel = Number.isFinite(avg) ? String(avg).replace(/\.0$/, '') : '0';
-    if (pendingUrgentCount > 0) {
-      return `${pendingUrgentCount} urgente${pendingUrgentCount > 1 ? 's' : ''} · attente moyenne : ${avgLabel} j`;
-    }
-    return `Aucune urgence · attente moyenne : ${avgLabel} j`;
-  }, [pendingAvgWaitDays, pendingRequestsCount, pendingUrgentCount]);
-
-  const rangeLabel = useMemo(() => {
-    if (periodDays === 1) return "Aujourd'hui";
-    if (periodDays === 7) return '7 jours';
-    if (periodDays === 30) return '30 jours';
-    if (periodDays === 'month') return 'Mois en cours';
-    return 'Période';
-  }, [periodDays]);
-
   const openConsumption = useCallback((prefillQuery) => {
     const range = periodDays === 'month' ? buildMonthToDateRange() : buildRange(periodDays);
     const params = new URLSearchParams();
@@ -732,21 +486,13 @@ const DashboardResp = ({ userName, onLogout }) => {
     navigate(`/responsable/consommation${search ? `?${search}` : ''}`);
   }, [navigate, periodDays]);
 
-  const openPriorityProduct = useCallback(() => {
-    const rawQuery = String(topRiskProduct?.product_name || decisionSummary?.priorityProduct || '').trim();
-    const query = rawQuery ? encodeURIComponent(rawQuery) : '';
-    navigate(`/responsable/produits${query ? `?q=${query}` : ''}`);
-  }, [decisionSummary?.priorityProduct, navigate, topRiskProduct?.product_name]);
-
   const daySynthesis = useMemo(() => {
     const demandes = pendingRequestsCount || 0;
     const critiques = (stats.ruptureCount + stats.sousSeuilCount) || 0;
     const chemToComplete = chemicalSummary.toComplete || 0;
-    const action = String(decisionSummary?.nextDecision || '').trim();
-    const actionLine = action && action !== 'Aucune action urgente.' ? action : 'Surveiller les indicateurs.';
 
     return {
-      title: 'Synthèse du jour',
+      title: 'Priorités du jour',
       indicators: [
         { key: 'req', value: demandes, label: `demande${demandes > 1 ? 's' : ''} à valider` },
         { key: 'crit', value: critiques, label: `produit${critiques > 1 ? 's' : ''} critique${critiques > 1 ? 's' : ''}` },
@@ -756,11 +502,9 @@ const DashboardResp = ({ userName, onLogout }) => {
           label: `fiche${chemToComplete > 1 ? 's' : ''} chimique${chemToComplete > 1 ? 's' : ''} à compléter`,
         },
       ],
-      actionLine,
     };
   }, [
     chemicalSummary.toComplete,
-    decisionSummary?.nextDecision,
     pendingRequestsCount,
     stats.ruptureCount,
     stats.sousSeuilCount,
@@ -784,352 +528,144 @@ const DashboardResp = ({ userName, onLogout }) => {
           <HeaderPage
             userName={userName}
             title="Tableau de bord responsable"
-            subtitle="Vue d’ensemble des validations, du stock, des alertes et des actions prioritaires."
+            subtitle="Vue rapide du stock et des priorités"
             showSearch={false}
             onRefresh={loadData}
             onMenuClick={() => setSidebarCollapsed((prev) => !prev)}
           />
-          <main className="main-content">
+          <main className="main-content dashboard-main">
             {isLoading && <LoadingSpinner overlay text="Chargement..." />}
 
             <div className="dashboard-page saas-dashboard">
-              <div className="resp-hero">
-                <div className="resp-hero-left">
-                  <div className="dash-toolbar-left">
-                    <span className="dash-range-label">Période : {rangeLabel}</span>
-                    <div className="dash-pills" role="tablist" aria-label="Sélection de période">
-                      <button type="button" className={`dash-pill ${periodDays === 1 ? 'active' : ''}`} onClick={() => setPeriodDays(1)} disabled={isLoading}>Aujourd&apos;hui</button>
-                      <button type="button" className={`dash-pill ${periodDays === 7 ? 'active' : ''}`} onClick={() => setPeriodDays(7)} disabled={isLoading}>7 jours</button>
-                      <button type="button" className={`dash-pill ${periodDays === 30 ? 'active' : ''}`} onClick={() => setPeriodDays(30)} disabled={isLoading}>30 jours</button>
-                      <button type="button" className={`dash-pill ${periodDays === 'month' ? 'active' : ''}`} onClick={() => setPeriodDays('month')} disabled={isLoading}>Mois</button>
+              <section className="bi-summary bi-summary-compact priorities" aria-label="Priorités du jour">
+                <div className="priorities-grid">
+                  <div className="priorities-left">
+                    <div className="bi-summary-head">
+                      <h2 className="bi-summary-title">{daySynthesis.title}</h2>
                     </div>
-                    <button type="button" className="dash-action subtle" onClick={loadData} disabled={isLoading} title="Actualiser">
-                      <RefreshCw size={16} />
-                      <span>Actualiser</span>
-                    </button>
+
+                    <div className="bi-mini-indicators" aria-label="Indicateurs du jour">
+                      {daySynthesis.indicators.map((it, idx) => {
+                        const icon = it.key === 'req'
+                          ? <ClipboardCheck size={18} />
+                          : it.key === 'crit'
+                            ? <AlertTriangle size={18} />
+                            : <FlaskConical size={18} />;
+
+                        const tone = it.key === 'req'
+                          ? 'req'
+                          : it.key === 'crit'
+                            ? 'crit'
+                            : 'chem';
+
+                        return (
+                          <div
+                            key={it.key}
+                            className={`bi-mini-indicator tone-${tone} ${it.key === 'crit' && Number(it.value || 0) > 0 ? 'critical' : ''}`}
+                            style={{ '--i': idx }}
+                          >
+                            <div className={`bi-mi-icon tone-${tone}`} aria-hidden="true">{icon}</div>
+                            <div className="bi-mi-content">
+                              <div className="bi-mi-value"><AnimatedNumber value={it.value} /></div>
+                              <div className="bi-mi-label">{it.label}</div>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+
+                    <div className="priorities-ctas" aria-label="Accès rapide">
+                      <button type="button" className="priorities-cta primary" onClick={() => navigate('/responsable/demandes-a-traiter')} disabled={isLoading}>
+                        <span>Voir demandes</span>
+                        <ChevronRight size={16} />
+                      </button>
+                      <button type="button" className="priorities-cta" onClick={() => navigate('/responsable/produits-critiques')} disabled={isLoading}>
+                        <span>Voir produits critiques</span>
+                        <ChevronRight size={16} />
+                      </button>
+                      <button type="button" className="priorities-cta" onClick={() => navigate('/responsable/registre-chimique')} disabled={isLoading}>
+                        <span>Ouvrir registre</span>
+                        <ChevronRight size={16} />
+                      </button>
+                      <button
+                        type="button"
+                        className="priorities-cta"
+                        onClick={() => navigate('/responsable/chatbot')}
+                        disabled={isLoading}
+                        title="Résumé IA"
+                      >
+                        <span>Résumé IA</span>
+                        <ChevronRight size={16} />
+                      </button>
+                    </div>
                   </div>
-                </div>
-                <div className="resp-hero-right">
-                  <button
-                    type="button"
-                    className="resp-pill"
-                    onClick={() => navigate('/responsable/produits?inactive_only=1')}
-                    disabled={isLoading}
-                    title="Voir les produits inactifs"
-                  >
-                    <Activity size={16} />
-                    <span>Inactifs</span>
-                    <span className="resp-pill-badge warn">{inactiveProductsCount}</span>
-                  </button>
-                  <button
-                    type="button"
-                    className="resp-pill primary"
-                    onClick={() => navigate('/responsable/pilotage?tab=validations')}
-                    disabled={isLoading}
-                    title="Voir les priorités du jour"
-                  >
-                    <ShieldAlert size={16} />
-                    <span>Priorités du jour</span>
-                    <span className="resp-pill-badge hot">{prioritiesTodayCount}</span>
-                  </button>
-                </div>
-              </div>
 
-              <section className="bi-summary bi-summary-compact" aria-label="Synthèse du jour">
-                <div className="bi-summary-head">
-                  <h2 className="bi-summary-title">{daySynthesis.title}</h2>
-                </div>
-
-                <div className="bi-mini-indicators" aria-label="Indicateurs du jour">
-                  {daySynthesis.indicators.map((it, idx) => (
-                    <div
-                      key={it.key}
-                      className={`bi-mini-indicator ${it.key === 'crit' && Number(it.value || 0) > 0 ? 'critical' : ''}`}
-                      style={{ '--i': idx }}
-                    >
-                      <div className="bi-mi-value"><AnimatedNumber value={it.value} /></div>
-                      <div className="bi-mi-label">{it.label}</div>
-                    </div>
-                  ))}
-                </div>
-
-                <div className="bi-summary-actionline">
-                  <span className="bi-action-label">Action du jour :</span>
-                  <strong className="bi-action-value">{daySynthesis.actionLine}</strong>
-                </div>
-
-                <div className="bi-shortcuts" aria-label="Accès rapide">
-                  <button type="button" className="dash-action compact" onClick={() => navigate('/responsable/pilotage?tab=validations')} disabled={isLoading}>
-                    <Package size={14} />
-                    <span>Voir demandes</span>
-                  </button>
-                  <button type="button" className="dash-action compact" onClick={() => navigate('/responsable/pilotage?tab=alertes')} disabled={isLoading}>
-                    <AlertTriangle size={14} />
-                    <span>Voir alertes</span>
-                  </button>
-                  <button type="button" className="dash-action compact" onClick={() => navigate('/responsable/commandes/nouvelle')} disabled={isLoading}>
-                    <ShoppingCart size={14} />
-                    <span>Créer commande</span>
-                  </button>
-                  <button
-                    type="button"
-                    className="dash-action compact ai-alerts"
-                    onClick={() => navigate('/responsable/chatbot')}
-                    disabled={isLoading}
-                    title="Obtenir un résumé"
-                  >
-                    <Sparkles size={14} />
-                    <span>Obtenir un résumé</span>
-                  </button>
                 </div>
               </section>
 
-              <div className="resp-kpi-grid">
-                <article className="resp-kpi-card" style={{ '--i': 0 }}>
-                  <div className="resp-kpi-icon ok"><Package size={18} /></div>
-                  <div className="resp-kpi-body">
-                    <div className="resp-kpi-title">
-                      Demandes à valider
-                      <span className={`resp-kpi-badge ${pendingUrgentCount > 0 ? 'urgent' : 'ok'}`}>
-                        {pendingUrgentCount > 0 ? 'Urgent' : 'OK'}
-                      </span>
-                    </div>
-                    <div className="resp-kpi-row">
-                      <div className="resp-kpi-value"><AnimatedNumber value={pendingRequestsCount} /></div>
-                      <button
-                        className="resp-kpi-chip"
-                        type="button"
-                        onClick={() => navigate('/responsable/pilotage?tab=validations')}
-                        disabled={isLoading}
-                      >
-                        Voir demandes
-                      </button>
-                    </div>
-                    <div className="resp-kpi-sub">{pendingBiNote}</div>
+              <div className="kpi-action-grid" aria-label="Synthèse rapide">
+                <article className="kpi-action-card tone-teal" style={{ '--i': 0 }}>
+                  <div className="kpi-action-head">
+                    <div className="kpi-action-icon tone-teal" aria-hidden="true"><Package size={18} /></div>
+                    <div className="kpi-action-title">Inventaires</div>
                   </div>
-                </article>
-
-                <article className="resp-kpi-card" style={{ '--i': 1 }}>
-                  <div className="resp-kpi-icon info"><ClipboardCheck size={18} /></div>
-                  <div className="resp-kpi-body">
-                    <div className="resp-kpi-title">Inventaires à valider</div>
-                    <div className="resp-kpi-row">
-                      <div className="resp-kpi-value"><AnimatedNumber value={inventoriesToValidateCount} /></div>
-                      <button
-                        className="resp-kpi-chip"
-                        type="button"
-                        onClick={() => navigate('/responsable/inventaires/a-valider')}
-                        disabled={isLoading}
-                      >
-                        Voir inventaires
-                      </button>
-                    </div>
-                    <div className="resp-kpi-sub">{inventoriesToValidateCount ? 'Inventaires soumis' : 'Aucun inventaire soumis'}</div>
-                  </div>
-                </article>
-
-                <article className="resp-kpi-card danger" style={{ '--i': 2 }}>
-                  <div className="resp-kpi-icon danger"><AlertTriangle size={18} /></div>
-                  <div className="resp-kpi-body">
-                    <div className="resp-kpi-title">
-                      Produits critiques
-                      <span className={`resp-kpi-badge ${(stats.ruptureCount + stats.sousSeuilCount) > 0 ? 'critique' : 'ok'}`}>
-                        {(stats.ruptureCount + stats.sousSeuilCount) > 0 ? 'Critique' : 'OK'}
-                      </span>
-                    </div>
-                    <div className="resp-kpi-row">
-                      <div className="resp-kpi-value"><AnimatedNumber value={stats.ruptureCount + stats.sousSeuilCount} /></div>
-                      <button
-                        className="resp-kpi-chip danger"
-                        type="button"
-                        onClick={() => navigate('/responsable/pilotage?tab=alertes')}
-                        disabled={isLoading}
-                      >
-                        Voir alertes
-                      </button>
-                    </div>
-                    <div className="resp-kpi-metrics">
-                      <span>Ruptures <strong><AnimatedNumber value={stats.ruptureCount} /></strong></span>
-                      <span>Sous seuil <strong><AnimatedNumber value={stats.sousSeuilCount} /></strong></span>
-                    </div>
-                  </div>
-                </article>
-
-                <article className="resp-kpi-card" style={{ '--i': 3 }}>
-                  <div className="resp-kpi-icon ok"><Clock size={18} /></div>
-                  <div className="resp-kpi-body">
-                    <div className="resp-kpi-title">Péremption ≤ 30 jours</div>
-                    <div className="resp-kpi-row">
-                      <div className="resp-kpi-value"><AnimatedNumber value={expiringLotsCount} /></div>
-                      <button
-                        className="resp-kpi-chip"
-                        type="button"
-                        onClick={() => navigate('/responsable/produits')}
-                        disabled={isLoading}
-                      >
-                        Voir produits
-                      </button>
-                    </div>
-                    <div className="resp-kpi-sub">{expiringLotsCount ? 'Lots à risque' : 'Aucun lot critique'}</div>
-                  </div>
-                </article>
-
-                <article className={`resp-kpi-card kpi-chem ${chemicalCardTone.card}`} style={{ '--i': 4 }}>
-                  <div className={`resp-kpi-icon ${chemicalCardTone.icon}`}><FlaskConical size={18} /></div>
-                  <div className="resp-kpi-body">
-                    <div className="resp-kpi-title">
-                      Registre chimique
-                      <span className={`resp-kpi-badge ${chemicalSummary.toComplete > 0 ? 'urgent' : 'ok'}`}>
-                        {chemicalSummary.toComplete > 0 ? 'À compléter' : 'OK'}
-                      </span>
-                    </div>
-                    <div className="resp-kpi-row">
-                      <div className="resp-kpi-value">
-                        <AnimatedNumber value={chemicalSummary.total} />
-                        <span className="resp-kpi-unit">produits</span>
-                      </div>
-                      <button
-                        className={`resp-kpi-chip info ${chemicalCardTone.card === 'danger' ? 'danger' : chemicalCardTone.card === 'warn' ? 'warn' : ''}`}
-                        type="button"
-                        onClick={() => navigate('/responsable/registre-chimique')}
-                        disabled={isLoading}
-                      >
-                        Ouvrir registre
-                      </button>
-                    </div>
-                    <div className="resp-kpi-metrics">
-                      <span>
-                        <strong><AnimatedNumber value={chemicalSummary.toComplete} /></strong>
-                        <span>{` fiche${chemicalSummary.toComplete > 1 ? 's' : ''} à compléter`}</span>
-                      </span>
-                      <span>
-                        <strong><AnimatedNumber value={chemicalSummary.sensitive} /></strong>
-                        <span>{` produit${chemicalSummary.sensitive > 1 ? 's' : ''} sensible${chemicalSummary.sensitive > 1 ? 's' : ''}`}</span>
-                      </span>
-                    </div>
-                    {chemicalSummary.toComplete > 0 ? (
-                      <div className="resp-kpi-sub">FDS ou classe à compléter</div>
-                    ) : null}
-                  </div>
-                </article>
-              </div>
-
-
-
-              <div className="activity-bar" aria-label="Activité période">
-                <div className="activity-bar-metrics">
-                  <span className="activity-metric">
-                    <Activity size={14} />
-                    <strong><AnimatedNumber value={movementStats.total} /></strong>
-                    <span>mouvements</span>
-                  </span>
-                  <span className="activity-sep">|</span>
-                  <span className="activity-metric">
-                    <Package size={14} />
-                    <strong><AnimatedNumber value={movementStats.entries} /></strong>
-                    <span>{movementStats.entries > 1 ? 'entrées' : 'entrée'}</span>
-                  </span>
-                  <span className="activity-sep">|</span>
+                  <div className="kpi-action-value"><AnimatedNumber value={inventoriesToValidateCount} /></div>
+                  <div className="kpi-action-sub">À valider</div>
                   <button
                     type="button"
-                    className="activity-metric activity-metric-btn"
-                    onClick={() => openConsumption()}
+                    className="kpi-action-btn"
+                    onClick={() => navigate('/responsable/inventaires/a-valider')}
                     disabled={isLoading}
-                    title="Voir consommation par bénéficiaire"
                   >
-                    <Clock size={14} />
-                    <strong><AnimatedNumber value={movementStats.exits} /></strong>
-                    <span>{movementStats.exits > 1 ? 'sorties' : 'sortie'}</span>
+                    <span>Voir inventaires</span>
+                    <ChevronRight size={16} />
                   </button>
-                  <span className="activity-sep">|</span>
-                  <span className="activity-metric">
-                    <ShieldAlert size={14} />
-                    <strong><AnimatedNumber value={supplierOps.late_open_orders || 0} /></strong>
-                    <span>{Number(supplierOps.late_open_orders || 0) > 1 ? 'retards fournisseurs' : 'retard fournisseur'}</span>
-                  </span>
-                  <span className="activity-sep">|</span>
-                  <span className="activity-metric">
-                    <AlertTriangle size={14} />
-                    <strong>{alertsToWatchCount > 99 ? '99+' : <AnimatedNumber value={alertsToWatchCount} />}</strong>
-                    <span>alertes enregistrées</span>
-                  </span>
-                </div>
-                <div className="activity-bar-actions">
-                  <button type="button" className="activity-link" onClick={() => navigate('/responsable/transactions')} disabled={isLoading}>
-                    Voir activité
+                </article>
+
+                <article className="kpi-action-card tone-purple" style={{ '--i': 1 }}>
+                  <div className="kpi-action-head">
+                    <div className="kpi-action-icon tone-purple" aria-hidden="true"><Clock size={18} /></div>
+                    <div className="kpi-action-title">Péremption</div>
+                  </div>
+                  <div className="kpi-action-value"><AnimatedNumber value={expiringLotsCount} /></div>
+                  <div className="kpi-action-sub">Lots critiques</div>
+                  <button
+                    type="button"
+                    className="kpi-action-btn"
+                    onClick={() => navigate('/responsable/lots-a-surveiller')}
+                    disabled={isLoading}
+                  >
+                    <span>Voir lots à surveiller</span>
+                    <ChevronRight size={16} />
                   </button>
-                  <button type="button" className="activity-link" onClick={() => openConsumption()} disabled={isLoading}>
-                    Voir consommation
+                </article>
+
+                <article className="kpi-action-card tone-green wide" style={{ '--i': 2 }}>
+                  <div className="kpi-action-head">
+                    <div className="kpi-action-icon tone-green" aria-hidden="true"><FlaskConical size={18} /></div>
+                    <div className="kpi-action-title">Registre chimique</div>
+                  </div>
+                  <div className="kpi-action-lines" aria-label="Synthèse registre chimique">
+                    <div className="kpi-action-line">
+                      <span>Produits</span>
+                      <strong><AnimatedNumber value={chemicalSummary.total} /></strong>
+                    </div>
+                    <div className="kpi-action-line">
+                      <span>FDS manquantes</span>
+                      <strong><AnimatedNumber value={chemicalSummary.missingFds} /></strong>
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    className="kpi-action-btn"
+                    onClick={() => navigate('/responsable/registre-chimique')}
+                    disabled={isLoading}
+                  >
+                    <span>Ouvrir registre</span>
+                    <ChevronRight size={16} />
                   </button>
-                  <button type="button" className="activity-link" onClick={() => navigate('/responsable/alertes')} disabled={isLoading}>
-                    Voir les plus importantes
-                  </button>
-                </div>
+                </article>
               </div>
-
-              <section className="decision-day" id="priorites" aria-label="Décision du jour">
-                <div className="decision-day-head">
-                  <div className="decision-day-title">
-                    <Sparkles size={18} />
-                    <h3>Décision du jour</h3>
-                  </div>
-                  <div
-                    className={`decision-risk ${decisionSummary.priorityRisk >= 70 ? 'high' : decisionSummary.priorityRisk >= 40 ? 'mid' : 'low'}`}
-                    style={{ '--risk-pct': clamp(Number(decisionSummary.priorityRisk || 0), 0, 100) }}
-                    aria-label={`Risque ${Math.round(clamp(Number(decisionSummary.priorityRisk || 0), 0, 100))}%`}
-                  >
-                    <div className="decision-risk-top">
-                      <span>Risque</span>
-                      <strong><AnimatedNumber value={decisionSummary.priorityRisk} decimals={0} />%</strong>
-                    </div>
-                    <div className="decision-risk-bar" aria-hidden="true">
-                      <div className="decision-risk-fill" />
-                    </div>
-                  </div>
-                </div>
-
-                  <div className="decision-day-grid">
-                    <div className="decision-day-main">
-                      <div className="decision-row emphasis">
-                      <span className="decision-label">Action principale</span>
-                      <strong className="decision-action">{decisionSummary.nextDecision}</strong>
-                    </div>
-                    <div className="decision-row">
-                      <span className="decision-label">Produit prioritaire</span>
-                      <strong className="decision-value">{decisionSummary.priorityProduct}</strong>
-                    </div>
-                    <div className="decision-row">
-                      <span className="decision-label">Pourquoi ?</span>
-                      <span className="decision-why">{decisionWhy}</span>
-                    </div>
-                    <div className="decision-row minor">
-                      <span className="decision-label">Signal</span>
-                      <span className="decision-why">{decisionSummary.thresholdSignal}</span>
-                    </div>
-                  </div>
-
-                  <div className="decision-day-side">
-                    <div className="decision-side-title">Actions</div>
-                    <div className="decision-side-meta">
-                      Aide : {assistantSummary.predictionsLabel} · MAJ : {assistantSummary.lastUpdateLabel}
-                    </div>
-                    <div className="decision-ctas" aria-label="Actions décision">
-                      <button type="button" className="dash-action" onClick={() => navigate('/responsable/commandes/nouvelle')} disabled={isLoading}>
-                        <ShoppingCart size={16} />
-                        <span>Créer commande</span>
-                      </button>
-                      <button type="button" className="dash-action subtle" onClick={openPriorityProduct} disabled={isLoading}>
-                        <Package size={16} />
-                        <span>Voir produit</span>
-                      </button>
-                      <button type="button" className="dash-action ai-alerts" onClick={() => navigate('/responsable/chatbot')} disabled={isLoading}>
-                        <Sparkles size={16} />
-                        <span>Obtenir résumé</span>
-                      </button>
-                    </div>
-                  </div>
-                </div>
-              </section>
 
               <div className="charts-grid"> 
                 <article className="chart-card"> 
@@ -1273,164 +809,9 @@ const DashboardResp = ({ userName, onLogout }) => {
                 </article>
               </div>
 
-              <section className="dashboard-card ops-card" aria-label="Suivi opérationnel">
-                <div className="card-header">
-                  <div className="card-head-left">
-                    <h3 className="card-title"><AlertTriangle size={17} /><span>Suivi opérationnel</span></h3>
-                    <span className="card-subtitle">Activité, alertes, anomalies</span>
-                  </div>
-                  <div className="ops-tabs" role="tablist" aria-label="Onglets suivi opérationnel">
-                    <button type="button" className={`ops-tab ${opsTab === 'alertes' ? 'active' : ''}`} onClick={() => setOpsTab('alertes')}>Alertes</button>
-                    <button type="button" className={`ops-tab ${opsTab === 'activite' ? 'active' : ''}`} onClick={() => setOpsTab('activite')}>Activité</button>
-                    <button type="button" className={`ops-tab ${opsTab === 'anomalies' ? 'active' : ''}`} onClick={() => setOpsTab('anomalies')}>Anomalies</button>
-                  </div>
-                </div>
-
-                {opsTab === 'activite' ? (
-                  <div className="ops-body">
-                    <div className="ops-head">
-                      <div className="ops-hint">Dernières opérations</div>
-                      <button type="button" className="dash-action compact" onClick={() => navigate('/responsable/transactions')} disabled={isLoading}>
-                        <span>Voir toute l’activité</span>
-                      </button>
-                    </div>
-                    <div className="feed-list">
-                      {recentFeed.slice(0, 5).map((item) => (
-                        <div className="feed-item" key={item.id}>
-                          <div className={`feed-dot ${item.action}`} aria-hidden="true" />
-                          <div className="feed-main">
-                            <div className="feed-title">
-                              <strong>{item.product}</strong>
-                              <span className="feed-badge">{item.actionLabel}</span>
-                              {item.qty ? <span className="feed-qty">{item.qty}</span> : null}
-                            </div>
-                            <div className="feed-meta">
-                              <span>{formatDateTimeLabel(item.when)}</span>
-                              <span>{item.role}</span>
-                              <span>{item.source}</span>
-                            </div>
-                            {item.description ? <div className="feed-desc">{item.description}</div> : null}
-                          </div>
-                        </div>
-                      ))}
-                      {!recentFeed.length && <div className="feed-empty">Aucune activité récente sur la période.</div>}
-                    </div>
-                  </div>
-                ) : null}
-
-                {opsTab === 'anomalies' ? (
-                  <div className="ops-body">
-                    <div className="ops-head">
-                      <div className="ops-hint">Signaux issus de l’historique</div>
-                      <button type="button" className="dash-action compact" onClick={() => navigate('/responsable/transactions')} disabled={isLoading}>
-                        <span>Voir tout</span>
-                      </button>
-                    </div>
-                    <div className="anomaly-list">
-                      {anomalyFeed.map((row) => (
-                        <div className="anomaly-item" key={row.id}>
-                          <div className="anomaly-qty">{Math.round(row.qty)}</div>
-                          <div className="anomaly-main">
-                            <div className="anomaly-when">{formatDateTimeLabel(row.when)}</div>
-                            <div className="anomaly-note">Seuil {Math.round(row.threshold)}</div>
-                          </div>
-                        </div>
-                      ))}
-                      {!anomalyFeed.length && <div className="feed-empty">Aucune anomalie importante récente.</div>}
-                    </div>
-                  </div>
-                ) : null}
-
-                {opsTab === 'alertes' ? (
-                  <div className="ops-body">
-                    <div className="ops-head">
-                      <div className="ops-hint">Les plus importantes</div>
-                      <button type="button" className="dash-action compact" onClick={() => navigate('/responsable/alertes')} disabled={isLoading}>
-                        <span>Voir toutes les alertes</span>
-                      </button>
-                    </div>
-
-                    {aiAlertsSummary.newCount > 0 && (
-                      <div className="ai-alerts-banner">
-                        <div className="ai-alerts-banner-head">
-                          <div className="ai-alerts-banner-title">
-                            Alertes (nouvelles) : {aiAlertsSummary.newCount}
-                          </div>
-                          <button
-                            type="button"
-                            className="dash-action compact"
-                            onClick={() => navigate('/responsable/pilotage?tab=alertes')}
-                          >
-                            <Sparkles size={14} />
-                            <span>Voir</span>
-                          </button>
-                        </div>
-                        <div className="ai-alerts-banner-list">
-                          {aiAlertsSummary.top.map((a) => (
-                            <div key={a.id} className="ai-alerts-banner-item">
-                              <span className={`ai-alerts-banner-type risk-${a.risk || 'low'}`}>
-                                {a.type.toUpperCase()}
-                              </span>
-                              <span className="ai-alerts-banner-product">{a.productName}</span>
-                              <span className="ai-alerts-banner-message">{a.message || 'Signal détecté'}</span>
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-                    )}
-
-                    <div className="alert-table-wrap">
-                      <table className="alert-table">
-                        <thead>
-                          <tr>
-                            <th>Type</th>
-                            <th>Produit</th>
-                            <th>Pourquoi</th>
-                            <th>Action immédiate</th>
-                            <th>Risque</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {opsAlertsTop.map((row) => (
-                            <tr key={row.id}>
-                              <td>
-                                <span className={`alert-type-pill ${String(row.type || '').toLowerCase().includes('rupture') ? 'danger' : String(row.type || '').toLowerCase().includes('fds') ? 'warn' : 'mid'}`}>
-                                  {row.type || 'Alerte'}
-                                </span>
-                              </td>
-                              <td>
-                                <div className="dash-product-cell">
-                                  {!row.isChem ? (
-                                    <ProtectedImage
-                                      filePath={row.image}
-                                      alt={row.productName}
-                                      className="dash-product-thumb"
-                                      fallbackText=""
-                                    />
-                                  ) : (
-                                    <div className="dash-product-thumb chem" aria-hidden="true">
-                                      <FlaskConical size={14} />
-                                    </div>
-                                  )}
-                                  <strong>{row.productName}</strong>
-                                </div>
-                              </td>
-                              <td className="reason-col">{row.reason || 'Signal détecté'}</td>
-                              <td>{row.action}</td>
-                              <td className="risk-col">{Number(row.riskProbability || 0).toFixed(0)}%</td>
-                            </tr>
-                          ))}
-                          {!opsAlertsTop.length && (
-                            <tr>
-                              <td colSpan={5} className="empty-cell">Aucune alerte prioritaire actuellement.</td>
-                            </tr>
-                          )}
-                        </tbody>
-                      </table>
-                    </div>
-                  </div>
-                ) : null}
-              </section>
+              <div className="dash-footer" aria-label="Mise à jour">
+                Dernière mise à jour : {formatDateTimeLabel(lastUpdatedAt)}
+              </div>
             </div>
           </main>
         </div>

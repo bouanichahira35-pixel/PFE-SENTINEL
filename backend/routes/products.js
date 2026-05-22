@@ -15,7 +15,6 @@ const requirePermission = require('../middlewares/requirePermission');
 const strictBody = require('../middlewares/strictBody');
 const { PERMISSIONS } = require('../constants/permissions');
 const History = require('../models/History');
-const { logSecurityEvent } = require('../services/securityAuditService');
 const { enqueueMail } = require('../services/mailQueueService');
 const { getUserPreferences, canSendNotificationEmail } = require('../services/userPreferencesService');
 const { getStockRulesConfig } = require('../services/stockRulesService');
@@ -75,111 +74,6 @@ async function getOrCreateCategory({ categoryId, categoryName, userId }) {
     description: `${normalizedName} (cree automatiquement)`,
     created_by: userId,
   });
-}
-
-async function notifyCreatorOnValidationDecision(product, actorUser, fromStatus, toStatus) {
-  try {
-    if (!product?.created_by) return;
-    const creator = await User.findById(product.created_by).select('_id email username role status').lean();
-    if (!creator || creator.status !== 'active') return;
-
-    const statusLabel = toStatus === 'approved' ? 'VALIDE' : 'REJETE';
-    const actorName = actorUser?.username || 'responsable';
-    const subject = `Produit ${statusLabel}: ${product.name}`;
-    const text = `Votre produit ${product.name} (${product.code_product}) a ete ${statusLabel.toLowerCase()} par ${actorName}.`;
-
-    await Notification.create({
-      user: creator._id,
-      title: subject,
-      message: text,
-      type: toStatus === 'approved' ? 'info' : 'warning',
-      is_read: false,
-    });
-
-    if (!creator.email) return;
-    const creatorPrefs = await getUserPreferences(creator._id);
-    const creatorCategory = creator.role === 'magasinier' ? 'demandes' : 'generic';
-    if (!canSendNotificationEmail(creatorPrefs, creatorCategory)) return;
-    try {
-      await enqueueMail({
-        kind: 'product_validation',
-        role: creator.role,
-        to: creator.email,
-        subject,
-        text,
-        html: `<p>${text}</p>`,
-        job_id: `product_validation_${product._id}_${toStatus}_${Date.now()}`,
-      });
-      await logSecurityEvent({
-        event_type: 'email_sent',
-        user: creator._id,
-        email: creator.email,
-        role: creator.role,
-        success: true,
-        details: `Product validation email sent (${fromStatus} -> ${toStatus})`,
-        after: { product_id: product._id, product_code: product.code_product, validation_status: toStatus },
-      });
-    } catch {
-      await logSecurityEvent({
-        event_type: 'email_failed',
-        user: creator._id,
-        email: creator.email,
-        role: creator.role,
-        success: false,
-        details: `Product validation email failed (${fromStatus} -> ${toStatus})`,
-        after: { product_id: product._id, product_code: product.code_product, validation_status: toStatus },
-      });
-    }
-  } catch {
-    // Keep validation resilient.
-  }
-}
-
-async function notifyResponsablesOnPendingValidation(product, creatorUser) {
-  try {
-    if (!product?._id) return;
-    if (String(product.validation_status || '') !== 'pending') return;
-
-    const responsables = await User.find({ role: 'responsable', status: 'active' })
-      .select('_id email username role')
-      .lean();
-    if (!responsables.length) return;
-
-    const subject = `Produit soumis en attente de validation: ${product.name}`;
-    const creatorName = creatorUser?.username || 'magasinier';
-    const text = `Le produit ${product.name} (${product.code_product}) a ete soumis par ${creatorName} et attend votre validation.`;
-
-    await Notification.insertMany(
-      responsables.map((r) => ({
-        user: r._id,
-        title: subject,
-        message: text,
-        type: 'info',
-        is_read: false,
-      }))
-    );
-
-    for (const r of responsables) {
-      if (!r.email) continue;
-      try {
-        const prefs = await getUserPreferences(r._id);
-        if (!canSendNotificationEmail(prefs, 'demandes')) continue;
-        await enqueueMail({
-          kind: 'product_pending_validation',
-          role: r.role,
-          to: r.email,
-          subject,
-          text,
-          html: `<p>${text}</p>`,
-          job_id: `product_pending_${product._id}_${r._id}_${Date.now()}`,
-        });
-      } catch {
-        // keep flow resilient
-      }
-    }
-  } catch {
-    // keep product creation resilient
-  }
 }
 
 async function notifyResponsablesOnNewProduct(product, creatorUser) {
@@ -343,6 +237,193 @@ router.get('/', requireAuth, async (req, res) => {
   } 
 }); 
 
+// GET /api/products/lookup?code=PRD-2026-0001
+// Lightweight product lookup for scanning/saisie terrain (magasinier forms).
+router.get('/lookup', requireAuth, async (req, res) => {
+  try {
+    const isDemandeur = req.user?.role === 'demandeur';
+    const raw = asTrimmedString(req.query?.code);
+    if (!raw) return res.status(400).json({ error: 'code requis' });
+
+    if (!isSafeText(raw, { min: 1, max: 220 })) {
+      return res.status(400).json({ error: 'code invalide' });
+    }
+
+    const includeArchived = String(req.query?.include_archived || '') === '1' && !isDemandeur;
+
+    const normalized = isValidProductCode(raw) ? normalizeProductCode(raw) : null;
+    const or = [];
+    if (normalized) or.push({ code_product: normalized });
+    // Some scanners return QR payloads or imported external ids.
+    or.push({ qr_code_value: raw });
+    or.push({ external_product_id: raw });
+
+    const filter = { $or: or };
+    if (!includeArchived) filter.lifecycle_status = 'active';
+    if (isDemandeur) filter.lifecycle_status = 'active';
+
+    const product = await Product.findOne(filter)
+      .populate('category', 'name')
+      .select('_id code_product name family unite emplacement quantity_current seuil_minimum status lifecycle_status qr_code_value image_product')
+      .lean();
+
+    if (!product) return res.status(404).json({ error: 'Produit introuvable' });
+
+    return res.json({
+      ok: true,
+      product,
+    });
+  } catch (err) {
+    return res.status(500).json({ error: 'Lookup failed' });
+  }
+});
+
+function escapeRegex(value) {
+  return String(value || '').replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+// GET /api/products/catalog?q=...&category=...&status=ok|sous_seuil|rupture&page=1&limit=20
+// Paginated, lightweight catalogue endpoint (UI friendly).
+router.get('/catalog', requireAuth, async (req, res) => {
+  try {
+    const filterBase = {};
+    const isDemandeur = req.user?.role === 'demandeur';
+    const demandeurProfile = String(req.user?.demandeur_profile || 'bureautique');
+    const includeArchived = String(req.query?.include_archived || '') === '1' && !isDemandeur;
+
+    if (req.query.family) {
+      const family = normalizeFamily(req.query.family);
+      if (family) filterBase.family = family;
+    }
+
+    if (req.query.validation_status && !isDemandeur) {
+      filterBase.validation_status = req.query.validation_status;
+    }
+
+    if (!includeArchived) {
+      filterBase.lifecycle_status = 'active';
+    }
+
+    if (isDemandeur) {
+      filterBase.lifecycle_status = 'active';
+      const allowedCategories = await Category.find({
+        $or: [{ audiences: { $size: 0 } }, { audiences: demandeurProfile }],
+      })
+        .select('_id')
+        .lean();
+
+      const allowedIds = allowedCategories.map((c) => String(c._id));
+      if (!allowedIds.length) {
+        return res.json({ ok: true, page: 1, limit: 0, total: 0, items: [] });
+      }
+
+      if (req.query.category) {
+        const requested = String(req.query.category);
+        if (!allowedIds.includes(requested)) {
+          return res.json({ ok: true, page: 1, limit: 0, total: 0, items: [] });
+        }
+        filterBase.category = requested;
+      } else {
+        filterBase.category = { $in: allowedIds };
+      }
+    } else if (req.query.category && isValidObjectIdLike(req.query.category)) {
+      filterBase.category = String(req.query.category);
+    }
+
+    const q = asTrimmedString(req.query?.q);
+    if (q && isSafeText(q, { min: 1, max: 80 })) {
+      const rx = new RegExp(escapeRegex(q), 'i');
+      filterBase.$or = [
+        { code_product: rx },
+        { name: rx },
+      ];
+    }
+
+    const filter = { ...filterBase };
+
+    const status = asOptionalString(req.query?.status);
+    if (status === 'rupture') {
+      filter.quantity_current = { $lte: 0 };
+    } else if (status === 'sous_seuil') {
+      filter.quantity_current = { $gt: 0 };
+      filter.$expr = { $lte: ['$quantity_current', '$seuil_minimum'] };
+    } else if (status === 'ok') {
+      filter.$expr = { $gt: ['$quantity_current', '$seuil_minimum'] };
+    }
+
+    // Optional: near-threshold products (still OK but close to minimum threshold).
+    // Used by dashboards to find "next" risks without loading full catalogue.
+    const nearThreshold = String(req.query?.near_threshold || '') === '1';
+    if (nearThreshold) {
+      const ratio = Math.max(1.05, Math.min(2.5, Number(asNonNegativeNumber(req.query?.ratio) || 1.2)));
+      filter.quantity_current = { $gt: 0 };
+      filter.$expr = {
+        $and: [
+          { $gt: ['$quantity_current', '$seuil_minimum'] },
+          { $lte: ['$quantity_current', { $multiply: ['$seuil_minimum', ratio] }] },
+        ],
+      };
+    }
+
+    const page = Math.max(1, Math.min(500, Math.floor(asNonNegativeNumber(req.query?.page) || 1)));
+    const limit = Math.max(5, Math.min(50, Math.floor(asNonNegativeNumber(req.query?.limit) || 20)));
+    const skip = (page - 1) * limit;
+
+    const [total, itemsRaw, countsAgg] = await Promise.all([
+      Product.countDocuments(filter),
+      Product.find(filter)
+        .populate('category', 'name')
+        .select('_id code_product name category family unite emplacement quantity_current seuil_minimum lifecycle_status image_product createdAt')
+        .sort({ createdAt: -1 })
+        .skip(skip)
+        .limit(limit)
+        .lean(),
+      Product.aggregate([
+        { $match: filterBase },
+        {
+          $project: {
+            quantity_current: 1,
+            seuil_minimum: 1,
+            computed_status: {
+              $cond: [
+                { $lte: ['$quantity_current', 0] },
+                'rupture',
+                {
+                  $cond: [
+                    { $lte: ['$quantity_current', '$seuil_minimum'] },
+                    'sous_seuil',
+                    'ok',
+                  ],
+                },
+              ],
+            },
+          },
+        },
+        { $group: { _id: '$computed_status', n: { $sum: 1 } } },
+      ]),
+    ]);
+
+    const items = itemsRaw.map((p) => ({
+      ...p,
+      computed_status: computeStatus(p.quantity_current, p.seuil_minimum),
+    }));
+
+    const counts = { all: 0, ok: 0, sous_seuil: 0, rupture: 0 };
+    for (const row of countsAgg || []) {
+      const k = String(row?._id || '');
+      const n = Number(row?.n || 0);
+      if (k === 'ok') counts.ok += n;
+      if (k === 'sous_seuil') counts.sous_seuil += n;
+      if (k === 'rupture') counts.rupture += n;
+      counts.all += n;
+    }
+
+    return res.json({ ok: true, page, limit, total, counts, items });
+  } catch (err) {
+    return res.status(500).json({ error: 'Failed to fetch catalogue' });
+  }
+});
+
 // GET /api/products/inactive?days=60
 // Produits "inactifs" = rupture de stock OU absence de demandes sur une fenêtre récente.
 // Utilisé côté Responsable pour piloter les produits à archiver / corriger.
@@ -421,6 +502,35 @@ router.get('/qr-check', requireAuth, async (req, res) => {
     });
   } catch (err) {
     return res.status(500).json({ error: 'Failed to check qr code', details: err.message });
+  }
+});
+
+router.get('/name-check', requireAuth, async (req, res) => {
+  try {
+    const value = asOptionalString(req.query?.value);
+    const excludeId = asOptionalString(req.query?.exclude_id);
+
+    if (!value) {
+      return res.status(400).json({ error: 'value query param obligatoire' });
+    }
+
+    const normalized = value.replace(/\s+/g, ' ').trim();
+    if (normalized.length < 3 || normalized.length > 80) {
+      return res.status(400).json({ error: 'value invalide (3-80)' });
+    }
+
+    const filter = { name: { $regex: `^${escapeRegex(normalized)}$`, $options: 'i' } };
+    if (excludeId && isValidObjectIdLike(excludeId)) {
+      filter._id = { $ne: excludeId };
+    }
+
+    const existing = await Product.findOne(filter).select('_id code_product name validation_status lifecycle_status');
+    return res.json({
+      exists: Boolean(existing),
+      product: existing || null,
+    });
+  } catch (err) {
+    return res.status(500).json({ error: 'Failed to check name', details: err.message });
   }
 });
 
@@ -536,16 +646,9 @@ router.post(
       });
     }
 
-    let stockRulesConfig = null;
-    try {
-      stockRulesConfig = await getStockRulesConfig();
-    } catch {
-      stockRulesConfig = null;
-    }
-
-    const validationRequiredForNew =
-      !creatorIsResponsable && Boolean(stockRulesConfig?.validationObligatoireNouveauxProduits);
-    const validationStatus = validationRequiredForNew ? 'pending' : 'approved';
+    // Produit cree par magasinier: utilisable immediatement (pas de validation responsable).
+    // On garde le champ validation_status pour compat/traçabilite, mais il est force a "approved".
+    const validationStatus = 'approved';
 
     const payload = { 
       code_product: req.body.code_product ? normalizeProductCode(req.body.code_product) : (await getNextProductCode()), 
@@ -571,8 +674,7 @@ router.post(
         ? asOptionalString(req.body.image_product)
         : null,
       created_by: req.user.id, 
-      // Regles metier: selon configuration, un produit cree par magasinier peut exiger validation responsable.
-      validated_by: validationStatus === 'approved' ? req.user.id : undefined,
+      validated_by: req.user.id,
       validation_status: validationStatus,
     }; 
 
@@ -837,6 +939,89 @@ router.put(
     res.status(400).json({ error: 'Failed to update product', details: err.message });
   }
 });
+
+// POST /api/products/bulk/category
+// Body: { product_ids: string[], category_id?: string, action: "set"|"clear" }
+// Used by Responsable to classify products in bulk.
+router.post(
+  '/bulk/category',
+  requireAuth,
+  requirePermission(PERMISSIONS.PRODUCT_UPDATE),
+  strictBody(['product_ids', 'category_id', 'action']),
+  async (req, res) => {
+    try {
+      const action = String(req.body?.action || 'set').trim().toLowerCase();
+      if (!['set', 'clear'].includes(action)) {
+        return res.status(400).json({ error: 'action invalide (set|clear)' });
+      }
+
+      const rawIds = Array.isArray(req.body?.product_ids) ? req.body.product_ids : [];
+      const dedup = [];
+      const seen = new Set();
+      for (const raw of rawIds) {
+        const id = String(raw || '').trim();
+        if (!id || seen.has(id)) continue;
+        seen.add(id);
+        dedup.push(id);
+      }
+
+      if (!dedup.length) return res.status(400).json({ error: 'product_ids obligatoire (>=1)' });
+      if (dedup.length > 500) return res.status(400).json({ error: 'product_ids trop long (max 500)' });
+      if (dedup.some((id) => !isValidObjectIdLike(id))) return res.status(400).json({ error: 'product_ids invalide' });
+
+      let category = null;
+      if (action === 'set') {
+        const categoryId = String(req.body?.category_id || '').trim();
+        if (!categoryId || !isValidObjectIdLike(categoryId)) {
+          return res.status(400).json({ error: 'category_id obligatoire' });
+        }
+        category = await Category.findById(categoryId).select('_id name lifecycle_status').lean();
+        if (!category?._id) return res.status(404).json({ error: 'Categorie introuvable' });
+        if (String(category.lifecycle_status || 'active') === 'archived') {
+          return res.status(409).json({ error: 'Categorie archivee (interdite)' });
+        }
+      }
+
+      const update = action === 'clear'
+        ? { $unset: { category: '' } }
+        : { $set: { category: category._id } };
+
+      const result = await Product.updateMany(
+        { _id: { $in: dedup } },
+        update
+      );
+
+      await History.create({
+        action_type: 'product_bulk_category',
+        user: req.user.id,
+        source: 'ui',
+        description: action === 'clear'
+          ? `Retrait categorie (bulk): ${dedup.length} produits`
+          : `Affectation categorie "${category.name}" (bulk): ${dedup.length} produits`,
+        actor_role: req.user.role,
+        tags: ['product', 'bulk', 'category'],
+        context: {
+          action,
+          category_id: category?._id ? String(category._id) : null,
+          products_count: dedup.length,
+          matched_count: result?.matchedCount ?? null,
+          modified_count: result?.modifiedCount ?? null,
+        },
+      });
+
+      return res.json({
+        ok: true,
+        action,
+        category: category?._id ? { _id: category._id, name: category.name } : null,
+        products_count: dedup.length,
+        matched_count: result?.matchedCount ?? null,
+        modified_count: result?.modifiedCount ?? null,
+      });
+    } catch (err) {
+      return res.status(500).json({ error: 'Bulk update failed', details: err.message });
+    }
+  }
+);
 
 // DELETE /api/products/:id
 // Suppression definitive (responsable uniquement).

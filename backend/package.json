@@ -13,6 +13,7 @@
     "ai:export-dataset": "node scripts/export-ai-dataset.js",
     "ai:setup-check": "node scripts/ai-setup-check.js",
     "seed:magasinier-large": "node scripts/seed-magasinier-large-data.js",
+    "seed:inventory-demo": "node scripts/seed-inventory-demo.js",
     "demo:setup": "node scripts/demo-setup.js",
     "test:auth-recovery": "node scripts/test-auth-recovery-flow.js",
     "import:realistic-dataset": "node scripts/import-realistic-sentinel-dataset.js"

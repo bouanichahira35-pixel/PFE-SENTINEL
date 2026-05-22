@@ -11,18 +11,6 @@ import { asNonNegativeInt, isSafeText, sanitizeText } from '../../utils/formGuar
 import './AjouterProduit.css';
 
 const unites = ['Unite', 'Ramette', 'Boite', 'Carton', 'Kg', 'Litre', 'Metre'];
-const categories = ['Informatique', 'Fournitures', 'Mobilier', 'Electronique', 'Outillage', 'Laboratoire', 'Produit chimique', 'Gaz'];
-
-const CATEGORY_TO_FAMILY = {
-  Informatique: 'consommable_informatique',
-  Fournitures: 'economat',
-  Mobilier: 'economat',
-  Electronique: 'economat',
-  Outillage: 'economat',
-  Laboratoire: 'consommable_laboratoire',
-  'Produit chimique': 'produit_chimique',
-  Gaz: 'gaz',
-};
 
 const FAMILY_LABELS = {
   economat: 'Economat',
@@ -49,16 +37,23 @@ const AjouterProduit = ({ userName, onLogout }) => {
   const navigate = useNavigate();
   const toast = useToast();
   const qrInputRef = useRef(null);
+  const nameInputRef = useRef(null);
+  const categorieRef = useRef(null);
+  const seuilRef = useRef(null);
   const keyboardBufferRef = useRef('');
   const keyboardTimeoutRef = useRef(null);
+  const nameCheckTimeoutRef = useRef(null);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(() => (typeof window !== 'undefined' ? window.innerWidth <= 768 : false));
   const [showDoublonWarning, setShowDoublonWarning] = useState(false);
   const [duplicateProduct, setDuplicateProduct] = useState(null);
+  const [showNameDoublonWarning, setShowNameDoublonWarning] = useState(false);
+  const [duplicateNameProduct, setDuplicateNameProduct] = useState(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [suggestedCategory, setSuggestedCategory] = useState('');
   const [scanTarget, setScanTarget] = useState('');
   const [keyboardScanMode, setKeyboardScanMode] = useState(false);
   const [showAdvancedFields, setShowAdvancedFields] = useState(false);
+  const [categoriesList, setCategoriesList] = useState([]);
   
   const [formData, setFormData] = useState({
     qrCode: '',
@@ -100,12 +95,33 @@ const AjouterProduit = ({ userName, onLogout }) => {
     }
   }, [toast]);
 
+  const verifyNameUniqueness = useCallback(async (value) => {
+    const raw = String(value || '').replace(/\s+/g, ' ').trim();
+    if (!raw || raw.length < 3) {
+      setShowNameDoublonWarning(false);
+      setDuplicateNameProduct(null);
+      return;
+    }
+    try {
+      const result = await get(`/products/name-check?value=${encodeURIComponent(raw)}`);
+      const exists = Boolean(result?.exists);
+      setShowNameDoublonWarning(exists);
+      setDuplicateNameProduct(result?.product || null);
+    } catch {
+      // best-effort: do not block the form on name-check errors
+    }
+  }, []);
+
   const stopKeyboardScanMode = useCallback(() => {
     setKeyboardScanMode(false);
     keyboardBufferRef.current = '';
     if (keyboardTimeoutRef.current) {
       clearTimeout(keyboardTimeoutRef.current);
       keyboardTimeoutRef.current = null;
+    }
+    if (nameCheckTimeoutRef.current) {
+      clearTimeout(nameCheckTimeoutRef.current);
+      nameCheckTimeoutRef.current = null;
     }
   }, []);
 
@@ -115,6 +131,9 @@ const AjouterProduit = ({ userName, onLogout }) => {
     setFormData((prev) => ({ ...prev, qrCode: qrValue }));
     toast.success('QR Code detecte avec succes');
     await verifyQrCodeUniqueness(qrValue);
+    if (nameInputRef.current) {
+      nameInputRef.current.focus();
+    }
     setScanTarget('');
     stopKeyboardScanMode();
   }, [stopKeyboardScanMode, toast, verifyQrCodeUniqueness]);
@@ -124,14 +143,38 @@ const AjouterProduit = ({ userName, onLogout }) => {
   }, [stopKeyboardScanMode]);
 
   useEffect(() => {
-    const family = CATEGORY_TO_FAMILY[formData.categorie] || '';
+    const cat = categoriesList.find((c) => String(c.id) === String(formData.categorie));
+    const family = String(cat?.parent_family || '');
     if (family && family !== formData.famille) {
       setFormData((prev) => ({ ...prev, famille: family }));
     }
     if (!family && formData.famille) {
       setFormData((prev) => ({ ...prev, famille: '' }));
     }
-  }, [formData.categorie, formData.famille]);
+  }, [categoriesList, formData.categorie, formData.famille]);
+
+  useEffect(() => {
+    let ignore = false;
+
+    const loadCategories = async () => {
+      try {
+        const data = await get('/categories');
+        if (ignore) return;
+        const items = Array.isArray(data) ? data : [];
+        setCategoriesList(items.map((c) => ({
+          id: c._id,
+          name: c.name,
+          parent_family: c.parent_family || '',
+          requires_fds: Boolean(c.requires_fds),
+        })));
+      } catch {
+        if (!ignore) setCategoriesList([]);
+      }
+    };
+
+    loadCategories();
+    return () => { ignore = true; };
+  }, []);
 
   useEffect(() => {
     if (formData.famille !== 'produit_chimique') {
@@ -186,6 +229,19 @@ const AjouterProduit = ({ userName, onLogout }) => {
 
   const handleNomChange = useCallback((value) => {
     setFormData(prev => ({ ...prev, nom: value }));
+    if (showNameDoublonWarning) {
+      setShowNameDoublonWarning(false);
+      setDuplicateNameProduct(null);
+    }
+
+    if (nameCheckTimeoutRef.current) {
+      clearTimeout(nameCheckTimeoutRef.current);
+      nameCheckTimeoutRef.current = null;
+    }
+    nameCheckTimeoutRef.current = setTimeout(() => {
+      verifyNameUniqueness(value);
+    }, 550);
+
     const lowerValue = value.toLowerCase();
     for (const [keyword, category] of Object.entries(categorySuggestions)) {
       if (lowerValue.includes(keyword)) {
@@ -194,15 +250,18 @@ const AjouterProduit = ({ userName, onLogout }) => {
       }
     }
     setSuggestedCategory('');
-  }, []);
+  }, [showNameDoublonWarning, verifyNameUniqueness]);
 
   const applySuggestedCategory = useCallback(() => {
     if (suggestedCategory) {
-      setFormData(prev => ({ ...prev, categorie: suggestedCategory }));
+      const match = categoriesList.find((c) => String(c.name) === String(suggestedCategory));
+      if (match?.id) {
+        setFormData((prev) => ({ ...prev, categorie: match.id }));
+      }
       setSuggestedCategory('');
       toast.success('Categorie appliquee');
     }
-  }, [suggestedCategory, toast]);
+  }, [categoriesList, suggestedCategory, toast]);
 
   const validateForm = useCallback(() => {
     const newErrors = {};
@@ -224,12 +283,31 @@ const AjouterProduit = ({ userName, onLogout }) => {
       newErrors.description = 'Description trop longue (max 600, sans < >)';
     }
     setErrors(newErrors);
-    return Object.keys(newErrors).length === 0;
+
+    const firstKey = Object.keys(newErrors)[0] || '';
+    const focusMap = {
+      qrCode: qrInputRef,
+      nom: nameInputRef,
+      categorie: categorieRef,
+      seuilMinimum: seuilRef,
+    };
+    const ref = focusMap[firstKey];
+    if (ref?.current) {
+      try {
+        ref.current.scrollIntoView({ block: 'center', behavior: 'smooth' });
+      } catch {
+        // ignore
+      }
+      ref.current.focus?.();
+    }
+
+    return { ok: Object.keys(newErrors).length === 0, errors: newErrors };
   }, [formData]);
 
   const handleSubmit = useCallback(async (e) => {
     e.preventDefault();
-    if (!validateForm()) {
+    const validation = validateForm();
+    if (!validation?.ok) {
       toast.error('Veuillez corriger les erreurs du formulaire');
       return;
     }
@@ -260,8 +338,9 @@ const AjouterProduit = ({ userName, onLogout }) => {
 
       const payload = { 
         name: sanitizeText(formData.nom, { maxLen: 80 }), 
-        category_proposal: formData.categorie, 
+        category: formData.categorie || undefined,
         family: formData.famille, 
+        unite: formData.unite || 'Unite',
         description: sanitizeText(formData.description, { maxLen: 600 }) || undefined, 
         seuil_minimum: Number(asNonNegativeInt(formData.seuilMinimum, { min: 0, max: 1000000 })), 
         stock_initial_year: Number(asNonNegativeInt(formData.stockInitial || 0, { min: 0, max: 1000000000 })), 
@@ -278,7 +357,7 @@ const AjouterProduit = ({ userName, onLogout }) => {
 
       await post('/products', payload);
 
-      toast.success('Produit soumis pour validation avec succes');
+      toast.success('Produit ajouté au catalogue avec succès');
       setFormData({
         qrCode: '',
         nom: '',
@@ -297,6 +376,10 @@ const AjouterProduit = ({ userName, onLogout }) => {
       setFdsFile(null);
       setProductImageFile(null);
       setScanTarget('');
+      setShowDoublonWarning(false);
+      setDuplicateProduct(null);
+      setShowNameDoublonWarning(false);
+      setDuplicateNameProduct(null);
       setShowAdvancedFields(false);
       navigate('/magasinier');
     } catch (err) {
@@ -305,6 +388,35 @@ const AjouterProduit = ({ userName, onLogout }) => {
       setIsSubmitting(false);
     }
   }, [duplicateProduct, fdsFile, formData, navigate, productImageFile, toast, validateForm]);
+
+  const openDuplicateProduct = useCallback((p) => {
+    if (!p?._id) return;
+    navigate('/magasinier/voir-details', {
+      state: {
+        product: {
+          id: p._id,
+          _id: p._id,
+          code: p.code_product,
+          nom: p.name,
+          categorie: '',
+          quantite: 0,
+          seuil: 0,
+          unite: 'Unite',
+          description: '',
+        },
+      },
+    });
+  }, [navigate]);
+
+  const seuilMinValue = asNonNegativeInt(formData.seuilMinimum, { min: 0, max: 1000000 });
+  const canSubmit =
+    !isSubmitting
+    && !duplicateProduct
+    && isSafeText(formData.qrCode, { min: 3, max: 220 })
+    && isSafeText(formData.nom, { min: 3, max: 80 })
+    && Boolean(formData.categorie)
+    && Boolean(formData.famille)
+    && Number.isFinite(seuilMinValue);
 
   return (
     <div className="app-layout">
@@ -337,9 +449,9 @@ const AjouterProduit = ({ userName, onLogout }) => {
                 <h2>Nouveau produit</h2>
               </div>
 
-              <div className="validation-notice" role="alert">
+              <div className="validation-notice" role="status">
                 <AlertCircle size={18} />
-                <p>Ce produit sera soumis a validation par le responsable avant d'etre ajoute au stock officiel.</p>
+                <p>Ce produit sera ajouté directement au catalogue actif.</p>
               </div>
 
               {showDoublonWarning && (
@@ -351,8 +463,38 @@ const AjouterProduit = ({ userName, onLogout }) => {
                       Ce QR code est deja utilise
                       {duplicateProduct ? ` par ${duplicateProduct.code_product} (${duplicateProduct.name}).` : '.'}
                     </p>
+                    {duplicateProduct?._id ? (
+                      <div className="doublon-actions">
+                        <button type="button" className="doublon-link" onClick={() => openDuplicateProduct(duplicateProduct)}>
+                          Voir le produit
+                        </button>
+                      </div>
+                    ) : null}
                   </div>
                   <button onClick={() => setShowDoublonWarning(false)} aria-label="Fermer l'alerte">
+                    <X size={16} />
+                  </button>
+                </div>
+              )}
+
+              {showNameDoublonWarning && (
+                <div className="doublon-warning name-doublon" role="status">
+                  <AlertCircle size={18} />
+                  <div>
+                    <strong>Nom deja utilise</strong>
+                    <p>
+                      Un produit avec le meme nom existe deja
+                      {duplicateNameProduct ? `: ${duplicateNameProduct.code_product} (${duplicateNameProduct.name}).` : '.'}
+                    </p>
+                    {duplicateNameProduct?._id ? (
+                      <div className="doublon-actions">
+                        <button type="button" className="doublon-link" onClick={() => openDuplicateProduct(duplicateNameProduct)}>
+                          Voir le produit
+                        </button>
+                      </div>
+                    ) : null}
+                  </div>
+                  <button onClick={() => setShowNameDoublonWarning(false)} aria-label="Fermer l'info">
                     <X size={16} />
                   </button>
                 </div>
@@ -457,7 +599,8 @@ const AjouterProduit = ({ userName, onLogout }) => {
                     <input
                       id="nom"
                       type="text"
-                      maxLength={100}
+                      ref={nameInputRef}
+                      maxLength={80}
                       value={formData.nom}
                       onChange={(e) => handleNomChange(e.target.value)}
                       placeholder="Ex: Cable HDMI 2m"
@@ -505,13 +648,16 @@ const AjouterProduit = ({ userName, onLogout }) => {
                       </label> 
                       <select
                         id="categorie"
+                        ref={categorieRef}
                         value={formData.categorie}
                         onChange={(e) => setFormData({ ...formData, categorie: e.target.value })}
+                        disabled={categoriesList.length === 0}
                         className={errors.categorie ? 'error' : ''}
+                        aria-invalid={errors.categorie ? 'true' : 'false'}
                       >
                         <option value="">Selectionner...</option>
-                        {categories.map(cat => (
-                          <option key={cat} value={cat}>{cat}</option>
+                        {categoriesList.map((cat) => (
+                          <option key={cat.id} value={cat.id}>{cat.name}</option>
                         ))}
                       </select>
                       {errors.categorie && (
@@ -547,7 +693,7 @@ const AjouterProduit = ({ userName, onLogout }) => {
                 </div>
 
                 <div className="form-section">
-                  <h3>Parametres de stock</h3>
+                  <h3>Paramètres de stock</h3>
                   {showAdvancedFields && (
                     <div className="form-row">
                       <div className="form-group">
@@ -587,6 +733,7 @@ const AjouterProduit = ({ userName, onLogout }) => {
                     <input
                       id="seuilMinimum"
                       type="number"
+                      ref={seuilRef}
                       min="0"
                       max="1000000000"
                       step="1"
@@ -594,6 +741,7 @@ const AjouterProduit = ({ userName, onLogout }) => {
                       onChange={(e) => setFormData({ ...formData, seuilMinimum: e.target.value })}
                       placeholder="Ex: 10"
                       className={errors.seuilMinimum ? 'error' : ''}
+                      aria-invalid={errors.seuilMinimum ? 'true' : 'false'}
                     />
                     {errors.seuilMinimum && (
                       <span className="error-text" role="alert">{errors.seuilMinimum}</span>
@@ -604,7 +752,7 @@ const AjouterProduit = ({ userName, onLogout }) => {
 
                 {showAdvancedFields && formData.famille === 'produit_chimique' && (
                   <div className="form-section">
-                    <h3>Parametres produit chimique</h3>
+                    <h3>Paramètres produit chimique</h3>
                     <div className="form-row">
                       <div className="form-group">
                         <label htmlFor="chemicalClass">Classe chimique</label>
@@ -644,7 +792,7 @@ const AjouterProduit = ({ userName, onLogout }) => {
 
                 {showAdvancedFields && formData.famille === 'gaz' && (
                   <div className="form-section">
-                    <h3>Parametres gaz</h3>
+                    <h3>Paramètres gaz</h3>
                     <div className="form-row">
                       <div className="form-group">
                         <label htmlFor="gasPressure">Pression</label>
@@ -690,13 +838,22 @@ const AjouterProduit = ({ userName, onLogout }) => {
                 )}
 
                 <div className="form-actions">
+                  <div className="form-summary" aria-label="Résumé">
+                    <span><strong>QR:</strong> {String(formData.qrCode || '').trim() ? String(formData.qrCode).trim() : '—'}</span>
+                    <span><strong>Nom:</strong> {String(formData.nom || '').trim() ? String(formData.nom).trim() : '—'}</span>
+                    <span><strong>Catégorie:</strong> {(() => {
+                      const cat = categoriesList.find((c) => String(c.id) === String(formData.categorie));
+                      return cat?.name || '—';
+                    })()}</span>
+                    <span><strong>Seuil:</strong> {String(formData.seuilMinimum || '').trim() ? String(formData.seuilMinimum).trim() : '—'}</span>
+                  </div>
                   <button type="button" className="btn-cancel" onClick={() => navigate('/magasinier')} disabled={isSubmitting}>
                     <X size={18} />
                     Annuler
                   </button>
-                  <button type="submit" className="btn-submit" disabled={isSubmitting}>
+                  <button type="submit" className="btn-submit" disabled={!canSubmit}>
                     <CheckCircle size={18} />
-                    Soumettre pour validation
+                    Ajouter au catalogue
                   </button>
                 </div>
               </form>

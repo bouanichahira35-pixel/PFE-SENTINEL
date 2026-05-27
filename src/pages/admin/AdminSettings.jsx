@@ -5,6 +5,7 @@ import HeaderPage from '../../components/shared/HeaderPage';
 import LoadingSpinner from '../../components/shared/LoadingSpinner';
 import { get, patch } from '../../services/api';
 import { useToast } from '../../components/shared/Toast';
+import { getUiErrorMessage } from '../../services/uiError';
 import { asNonNegativeInt, isSafeText, sanitizeText } from '../../utils/formGuards';
 import './AdminDashboard.css';
 import './AdminSettings.css';
@@ -62,7 +63,7 @@ const AdminSettings = ({ userName, onLogout }) => {
       if (res?.runtime_limits_hint) setRuntimeLimits(res.runtime_limits_hint);
       if (res?.supplier_email_policy) setSupplierEmailPolicy(res.supplier_email_policy);
     } catch (err) {
-      toast.error(err.message || 'Erreur chargement paramètres admin');
+      toast.error(getUiErrorMessage(err, 'Erreur chargement paramètres admin'));
     } finally {
       setIsLoading(false);
     }
@@ -107,7 +108,7 @@ const AdminSettings = ({ userName, onLogout }) => {
       toast.success('Paramètres enregistrés.');
       await loadSettings();
     } catch (err) {
-      toast.error(err.message || 'Enregistrement échoué');
+      toast.error(getUiErrorMessage(err, 'Enregistrement échoué'));
     } finally {
       setIsSaving(false);
     }
@@ -138,7 +139,7 @@ const AdminSettings = ({ userName, onLogout }) => {
       }
       toast.success('Profil admin mis à jour.');
     } catch (err) {
-      toast.error(err.message || 'Erreur mise à jour profil');
+      toast.error(getUiErrorMessage(err, 'Erreur mise à jour profil'));
     } finally {
       setIsSavingProfile(false);
     }

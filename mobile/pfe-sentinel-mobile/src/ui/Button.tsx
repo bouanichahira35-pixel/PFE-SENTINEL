@@ -12,20 +12,22 @@ export function Button(props: {
 }) {
   const variant = props.variant || 'primary';
   const disabled = Boolean(props.disabled) || Boolean(props.loading);
+  const spinnerColor = variant === 'ghost' ? colors.accent : colors.text;
   return (
     <Pressable
       onPress={props.onPress}
       disabled={disabled}
-      style={[
+      style={({ pressed }) => [
         styles.base,
         variant === 'primary' && styles.primary,
         variant === 'ghost' && styles.ghost,
         variant === 'danger' && styles.danger,
         disabled && styles.disabled,
+        pressed && !disabled && styles.pressed,
         props.style,
       ]}
     >
-      {props.loading ? <ActivityIndicator color={colors.text} /> : <Text style={styles.text}>{props.title}</Text>}
+      {props.loading ? <ActivityIndicator color={spinnerColor} /> : <Text style={[styles.text, variant === 'ghost' && styles.textGhost]}>{props.title}</Text>}
     </Pressable>
   );
 }
@@ -43,6 +45,7 @@ const styles = StyleSheet.create({
   ghost: { backgroundColor: 'transparent', borderColor: colors.border },
   danger: { backgroundColor: colors.danger, borderColor: colors.danger },
   disabled: { opacity: 0.6 },
+  pressed: { opacity: 0.85, transform: [{ scale: 0.99 }] },
   text: { color: colors.text, fontWeight: '800' },
+  textGhost: { color: colors.text },
 });
-

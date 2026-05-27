@@ -411,7 +411,7 @@ router.post('/login', async (req, res) => {
       is_active: true,
     });
 
-    const profileUpdate = User.updateOne({ _id: user._id }, { $set: profilePatch });
+    User.updateOne({ _id: user._id }, { $set: profilePatch }).catch(() => {});
 
     const revokeOtherSessions = SINGLE_SESSION_MODE
       ? UserSession.updateMany(
@@ -420,7 +420,11 @@ router.post('/login', async (req, res) => {
       )
       : Promise.resolve();
 
-    await Promise.all([sessionCreate, profileUpdate, revokeOtherSessions]);
+    await Promise.all([sessionCreate, revokeOtherSessions]);
+
+    if (typeof requireAuth.invalidateUserSessionsCache === 'function') {
+      requireAuth.invalidateUserSessionsCache(user._id);
+    }
 
     const tokenPayload = {
       id: user._id,
@@ -811,6 +815,9 @@ router.post('/forgot-password/reset', async (req, res) => {
       { user: payload.userId, is_active: true },
       { $set: { is_active: false, logout_time: new Date(), revoked_reason: 'password_reset' } }
     );
+    if (typeof requireAuth.invalidateUserSessionsCache === 'function') {
+      requireAuth.invalidateUserSessionsCache(payload.userId);
+    }
 
     await logSecurityEvent({
       event_type: 'password_reset_done',
@@ -854,9 +861,17 @@ router.post('/refresh', async (req, res) => {
       .select('_id session_id login_time updatedAt last_activity_at')
       .lean();
 
-    if (!session) return res.status(401).json({ error: 'Session invalide' });
+    if (!session) {
+      if (typeof requireAuth.invalidateSessionCache === 'function') {
+        requireAuth.invalidateSessionCache(payload.sid, payload.id);
+      }
+      return res.status(401).json({ error: 'Session invalide' });
+    }
 
     if (isSessionInactive(session, now)) {
+      if (typeof requireAuth.invalidateSessionCache === 'function') {
+        requireAuth.invalidateSessionCache(payload.sid, payload.id);
+      }
       await UserSession.updateOne(
         { _id: session._id, is_active: true },
         {
@@ -914,6 +929,9 @@ router.post('/logout', requireAuth, async (req, res) => {
         { session_id: sessionId, user: req.user.id, is_active: true },
         { $set: { is_active: false, logout_time: new Date(), revoked_reason: 'logout' } }
       );
+      if (typeof requireAuth.invalidateSessionCache === 'function') {
+        requireAuth.invalidateSessionCache(sessionId, req.user.id);
+      }
     }
 
     await logSecurityEvent({
@@ -946,6 +964,9 @@ router.post('/logout-refresh', async (req, res) => {
             { session_id: payload.sid, user: payload.id, is_active: true },
             { $set: { is_active: false, logout_time: new Date(), revoked_reason: 'logout_refresh' } }
           );
+          if (typeof requireAuth.invalidateSessionCache === 'function') {
+            requireAuth.invalidateSessionCache(payload.sid, payload.id);
+          }
 
           await logSecurityEvent({
             event_type: 'logout',
@@ -975,6 +996,9 @@ router.post('/logout-all', requireAuth, async (req, res) => {
       { user: req.user.id, is_active: true },
       { $set: { is_active: false, logout_time: new Date(), revoked_reason: 'logout_all' } }
     );
+    if (typeof requireAuth.invalidateUserSessionsCache === 'function') {
+      requireAuth.invalidateUserSessionsCache(req.user.id);
+    }
 
     await logSecurityEvent({
       event_type: 'logout_all',

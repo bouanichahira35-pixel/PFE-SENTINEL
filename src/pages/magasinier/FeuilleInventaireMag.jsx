@@ -358,7 +358,7 @@ const FeuilleInventaireMag = ({ userName, onLogout }) => {
                     const draft = editing.get(lineId) || {};
                     const qtyValue = draft.quantite_comptee !== undefined ? draft.quantite_comptee : (l.quantite_comptee ?? '');
                     const obsValue = draft.observation_magasinier !== undefined ? draft.observation_magasinier : (l.observation_magasinier ?? '');
-                    // Important (magasinier): ne pas afficher le stock théorique / écart pour éviter de biaiser le comptage terrain.
+                    // Important: keep the counting sheet blind to system audit values.
                     return (
                       <tr key={l._id}>
                         <td className="cell-product">

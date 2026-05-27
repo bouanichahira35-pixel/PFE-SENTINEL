@@ -570,7 +570,7 @@ router.post(
     const name = asTrimmedString(req.body.name); 
     if (!name || !isSafeText(name, { min: 2, max: 140 })) errors.push('name obligatoire (2-140)'); 
     const qrCodeValue = asOptionalString(req.body.qr_code_value); 
-    if (!qrCodeValue || !isSafeText(qrCodeValue, { min: 3, max: 140 })) errors.push('qr_code_value obligatoire (3-140)'); 
+    if (!qrCodeValue || !isSafeText(qrCodeValue, { min: 3, max: 220 })) errors.push('qr_code_value obligatoire (3-220)'); 
 
     const description = asOptionalString(req.body.description);
     if (description !== undefined && description !== null && description !== '' && !isSafeText(description, { min: 0, max: 800 })) {
@@ -580,7 +580,7 @@ router.post(
     const unite = asOptionalString(req.body.unite);
     if (unite && !isSafeText(unite, { min: 1, max: 30 })) errors.push('unite invalide (1-30)');
     const emplacement = asOptionalString(req.body.emplacement);
-    if (emplacement && !isSafeText(emplacement, { min: 1, max: 60 })) errors.push('emplacement invalide (max 60)');
+    if (emplacement && !isSafeText(emplacement, { min: 1, max: 80 })) errors.push('emplacement invalide (max 80)');
 
     const chemicalClass = asOptionalString(req.body.chemical_class);
     if (chemicalClass && !isSafeText(chemicalClass, { min: 1, max: 80 })) errors.push('chemical_class invalide (max 80)');
@@ -808,7 +808,7 @@ router.put(
 
       if (field === 'qr_code_value') {
         const nextQr = asOptionalString(req.body[field]);
-        if (!nextQr || !isSafeText(nextQr, { min: 3, max: 140 })) errors.push('qr_code_value invalide (3-140)');
+        if (!nextQr || !isSafeText(nextQr, { min: 3, max: 220 })) errors.push('qr_code_value invalide (3-220)');
         else product[field] = nextQr;
         return;
       }
@@ -827,7 +827,7 @@ router.put(
       }
       if (field === 'emplacement') {
         const next = asOptionalString(req.body[field]);
-        if (next && !isSafeText(next, { min: 1, max: 60 })) errors.push('emplacement invalide (max 60)');
+        if (next && !isSafeText(next, { min: 1, max: 80 })) errors.push('emplacement invalide (max 80)');
         else product[field] = next || '';
         return;
       }

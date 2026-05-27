@@ -11,7 +11,8 @@ export const PhotoService = {
     if (!perm.granted) throw new Error('Permission caméra refusée');
 
     const result = await ImagePicker.launchCameraAsync({
-      quality: 0.65,
+      // Keep mobile sync usable on weak connections by avoiding oversized base64 payloads.
+      quality: 0.35,
       base64: true,
       exif: false,
     });
@@ -23,4 +24,3 @@ export const PhotoService = {
     return { uri: asset.uri, base64: asset.base64 || undefined };
   },
 };
-

@@ -3,6 +3,7 @@ import { useNavigate, useLocation } from 'react-router-dom';
 import { Mail, Phone, MessageCircle, ArrowLeft, AlertTriangle, CheckCircle, ShieldCheck, Lock, Eye, EyeOff } from 'lucide-react';
 import logoETAP from '../../assets/logoETAP.png';
 import { post } from '../../services/api';
+import { getUiErrorMessage } from '../../services/uiError';
 import './ForgotPassword.css';
 
 const ForgotPassword = () => {
@@ -104,12 +105,7 @@ const ForgotPassword = () => {
       const cooldown = Number(data?.cooldown_seconds || RESEND_COOLDOWN_SEC);
       setResendRemainingSec(Number.isFinite(cooldown) ? Math.max(0, Math.floor(cooldown)) : RESEND_COOLDOWN_SEC);
     } catch (err) {
-      const message = String(err?.message || '');
-      if (message.includes('Service email indisponible')) {
-        setError("Service email indisponible. Configurez l'SMTP (MAIL_HOST/MAIL_USER/MAIL_PASS) puis reessayez.");
-      } else {
-        setError(message || "Erreur lors de l'envoi du code");
-      }
+      setError(getUiErrorMessage(err, "Erreur lors de l'envoi du code. Veuillez réessayer."));
     } finally {
       setIsLoading(false);
     }
@@ -137,7 +133,7 @@ const ForgotPassword = () => {
       setResetToken(data.resetToken);
       setStep('reset');
     } catch (err) {
-      setError(err.message || 'Code invalide ou expire');
+      setError(getUiErrorMessage(err, 'Code invalide ou expiré.'));
     } finally {
       setIsLoading(false);
     }
@@ -176,7 +172,7 @@ const ForgotPassword = () => {
       const cooldown = Number(data?.cooldown_seconds || RESEND_COOLDOWN_SEC);
       setResendRemainingSec(Number.isFinite(cooldown) ? Math.max(0, Math.floor(cooldown)) : RESEND_COOLDOWN_SEC);
     } catch (err) {
-      setError(err.message || "Erreur lors de l'envoi du code");
+      setError(getUiErrorMessage(err, "Erreur lors de l'envoi du code. Veuillez réessayer."));
     } finally {
       setIsResending(false);
     }
@@ -208,7 +204,7 @@ const ForgotPassword = () => {
 
       setStep('success');
     } catch (err) {
-      setError(err.message || 'Erreur lors de la reinitialisation');
+      setError(getUiErrorMessage(err, 'Erreur lors de la réinitialisation. Veuillez réessayer.'));
     } finally {
       setIsLoading(false);
     }

@@ -1,10 +1,11 @@
 import { useState, useEffect, useMemo, useCallback } from 'react';
-import { Clock, CheckCircle, XCircle, Package, Calendar, Truck, Pencil, X } from 'lucide-react';
+import { AlertTriangle, Clock, CheckCircle, XCircle, Package, Calendar, Truck, Pencil, Trash2, X } from 'lucide-react';
 import SidebarDem from '../../components/demandeur/SidebarDem';
 import HeaderPage from '../../components/shared/HeaderPage';
 import LoadingSpinner from '../../components/shared/LoadingSpinner';
 import { useToast } from '../../components/shared/Toast';
 import { get, patch } from '../../services/api';
+import { getUiErrorMessage } from '../../services/uiError';
 import { normalizeRequestStatus } from '../../utils/requestStatus';
 import { asPositiveInt, isSafeText, sanitizeText } from '../../utils/formGuards';
 import './MesDemandes.css';
@@ -17,6 +18,7 @@ const MesDemandes = ({ userName, onLogout }) => {
   const [isLoading, setIsLoading] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [editTarget, setEditTarget] = useState(null);
+  const [deleteTarget, setDeleteTarget] = useState(null);
   const [editDraft, setEditDraft] = useState({ quantite: '', directionLaboratoire: '', priority: 'normal', note: '' });
   const [editErrors, setEditErrors] = useState({});
 
@@ -24,24 +26,26 @@ const MesDemandes = ({ userName, onLogout }) => {
     if (showLoader) setIsLoading(true);
     try {
       const items = await get('/requests');
-      const mapped = (items || []).map((r) => ({
-        id: r._id,
-        reference: `DEM-${String(r._id || '').slice(-6).toUpperCase()}`,
-        produit: r.product?.name || 'Produit',
-        codeProduit: r.product?.code_product || '-',
-        quantite: Number(r.quantity_requested || 0),
-        directionLaboratoire: r.direction_laboratory || '',
-        priority: r.priority || 'normal',
-        note: r.note || '',
-        date: r.date_request ? new Date(r.date_request).toLocaleString('fr-FR') : '-',
-        statut: normalizeRequestStatus(r.status),
-        receiptToken: r.receipt_token || '',
-      }));
+      const mapped = (items || [])
+        .filter((r) => normalizeRequestStatus(r.status) !== 'cancelled')
+        .map((r) => ({
+          id: r._id,
+          reference: `DEM-${String(r._id || '').slice(-6).toUpperCase()}`,
+          produit: r.product?.name || 'Produit',
+          codeProduit: r.product?.code_product || '-',
+          quantite: Number(r.quantity_requested || 0),
+          directionLaboratoire: r.direction_laboratory || '',
+          priority: r.priority || 'normal',
+          note: r.note || '',
+          date: r.date_request ? new Date(r.date_request).toLocaleString('fr-FR') : '-',
+          statut: normalizeRequestStatus(r.status),
+          receiptToken: r.receipt_token || '',
+        }));
 
       mapped.sort((a, b) => String(b.id).localeCompare(String(a.id)));
       setDemandes(mapped);
     } catch (err) {
-      if (!silent) toast.error(err.message || 'Impossible de charger mes demandes');
+      if (!silent) toast.error(getUiErrorMessage(err, 'Impossible de charger mes demandes'));
     } finally {
       if (showLoader) setIsLoading(false);
     }
@@ -88,6 +92,7 @@ const MesDemandes = ({ userName, onLogout }) => {
       return;
     }
     setEditErrors({});
+    setDeleteTarget(null);
     setEditTarget(demande);
     setEditDraft({
       quantite: String(Number.isFinite(Number(demande.quantite)) ? Number(demande.quantite) : ''),
@@ -101,6 +106,21 @@ const MesDemandes = ({ userName, onLogout }) => {
     if (isSubmitting) return;
     setEditTarget(null);
     setEditErrors({});
+  }, [isSubmitting]);
+
+  const openDelete = useCallback((demande) => {
+    if (!demande?.id) return;
+    if (demande.statut !== 'pending') {
+      toast.error('Suppression possible uniquement tant que la demande est en attente');
+      return;
+    }
+    setEditTarget(null);
+    setDeleteTarget(demande);
+  }, [toast]);
+
+  const closeDelete = useCallback(() => {
+    if (isSubmitting) return;
+    setDeleteTarget(null);
   }, [isSubmitting]);
 
   const validateEdit = useCallback(() => {
@@ -146,11 +166,29 @@ const MesDemandes = ({ userName, onLogout }) => {
       setEditTarget(null);
       await loadDemandes(false, true);
     } catch (err) {
-      toast.error(err.message || 'Impossible de modifier la demande');
+      toast.error(getUiErrorMessage(err, 'Impossible de modifier la demande'));
     } finally {
       setIsSubmitting(false);
     }
   }, [editDraft, editTarget, loadDemandes, toast, validateEdit]);
+
+  const deleteRequest = useCallback(async () => {
+    if (!deleteTarget?.id) return;
+    setIsSubmitting(true);
+    try {
+      await patch(`/requests/${encodeURIComponent(deleteTarget.id)}/cancel`, {
+        note: 'Supprimee par le demandeur',
+      });
+      toast.success('Demande supprimee');
+      setDemandes((prev) => prev.filter((demande) => demande.id !== deleteTarget.id));
+      setDeleteTarget(null);
+      await loadDemandes(false, true);
+    } catch (err) {
+      toast.error(getUiErrorMessage(err, 'Impossible de supprimer la demande'));
+    } finally {
+      setIsSubmitting(false);
+    }
+  }, [deleteTarget, loadDemandes, toast]);
 
   const confirmReceipt = useCallback(async (demande) => {
     if (!demande?.id) return;
@@ -162,7 +200,7 @@ const MesDemandes = ({ userName, onLogout }) => {
       toast.success('Reception confirmee');
       await loadDemandes(false, true);
     } catch (err) {
-      toast.error(err.message || 'Impossible de confirmer la reception');
+      toast.error(getUiErrorMessage(err, 'Impossible de confirmer la reception'));
     } finally {
       setIsSubmitting(false);
     }
@@ -257,16 +295,28 @@ const MesDemandes = ({ userName, onLogout }) => {
                         </td>
                         <td className="actions-cell">
                           {demande.statut === 'pending' ? (
-                            <button
-                              type="button"
-                              className="btn-edit-request"
-                              onClick={() => openEdit(demande)}
-                              disabled={isSubmitting}
-                              aria-label={`Modifier ${demande.reference}`}
-                            >
-                              <Pencil size={14} />
-                              Modifier
-                            </button>
+                            <div className="request-actions">
+                              <button
+                                type="button"
+                                className="btn-edit-request"
+                                onClick={() => openEdit(demande)}
+                                disabled={isSubmitting}
+                                aria-label={`Modifier ${demande.reference}`}
+                              >
+                                <Pencil size={14} />
+                                Modifier
+                              </button>
+                              <button
+                                type="button"
+                                className="btn-delete-request"
+                                onClick={() => openDelete(demande)}
+                                disabled={isSubmitting}
+                                aria-label={`Supprimer ${demande.reference}`}
+                              >
+                                <Trash2 size={14} />
+                                Supprimer
+                              </button>
+                            </div>
                           ) : (
                             <span className="actions-muted">—</span>
                           )}
@@ -388,6 +438,40 @@ const MesDemandes = ({ userName, onLogout }) => {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {deleteTarget && (
+        <div
+          className="dem-delete-overlay"
+          onClick={closeDelete}
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="dem-delete-title"
+        >
+          <div className="dem-delete-content" onClick={(e) => e.stopPropagation()}>
+            {isSubmitting && <LoadingSpinner overlay text="Suppression en cours..." />}
+
+            <div className="dem-delete-icon">
+              <AlertTriangle size={22} />
+            </div>
+            <h2 id="dem-delete-title">Supprimer la demande</h2>
+            <p>La demande en attente sera retiree de votre liste et ne sera plus traitee.</p>
+            <div className="dem-delete-summary">
+              <strong>{deleteTarget.reference}</strong>
+              <span>{deleteTarget.produit}</span>
+              <span>Quantite: {deleteTarget.quantite}</span>
+            </div>
+
+            <div className="dem-delete-actions">
+              <button type="button" className="btn-cancel-edit" onClick={closeDelete} disabled={isSubmitting}>
+                Annuler
+              </button>
+              <button type="button" className="btn-confirm-delete" onClick={deleteRequest} disabled={isSubmitting}>
+                Supprimer
+              </button>
+            </div>
           </div>
         </div>
       )}

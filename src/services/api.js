@@ -17,6 +17,13 @@ const API_TIMEOUT_MS = (() => {
   return 20_000;
 })();
 
+const AUTH_API_TIMEOUT_MS = (() => {
+  const raw = String(process.env.REACT_APP_AUTH_API_TIMEOUT_MS || "").trim();
+  const parsed = Number(raw);
+  if (Number.isFinite(parsed) && parsed > 0) return Math.min(Math.max(parsed, 2_000), API_TIMEOUT_MS);
+  return Math.min(8_000, API_TIMEOUT_MS);
+})();
+
 const API_CACHE_TTL_MS = 45 * 1000;
 const API_CACHE_MAX_ITEMS = 60;
 const PERF_STORAGE_KEY = "api_perf_metrics_v1";
@@ -94,6 +101,25 @@ function makeCacheKey(path) {
   const token = getAuthToken();
   const authKey = token ? "auth" : "anon";
   return `GET|${authKey}|${path}`;
+}
+
+function waitMs(ms) {
+  return new Promise((resolve) => setTimeout(resolve, Math.max(0, Number(ms) || 0)));
+}
+
+function computeGetRetryDelayMs(attemptIndex) {
+  // Small jitter to avoid thundering herd; keep UX responsive.
+  const base = attemptIndex === 0 ? 250 : 450;
+  const jitter = Math.floor(Math.random() * 150);
+  return base + jitter;
+}
+
+function getRequestTimeoutMs(path) {
+  const key = String(path || "");
+  if (key === "/auth/login" || key === "/auth/refresh" || key === "/auth/logout" || key === "/auth/logout-refresh") {
+    return AUTH_API_TIMEOUT_MS;
+  }
+  return API_TIMEOUT_MS;
 }
 
 function clearGetCache() {
@@ -185,11 +211,16 @@ async function refreshAccessTokenOnce() {
 
   refreshInFlight = (async () => {
     const refreshToken = getRefreshToken();
+    const controller = typeof AbortController !== "undefined" ? new AbortController() : null;
+    const timeoutId = controller
+      ? setTimeout(() => controller.abort(), AUTH_API_TIMEOUT_MS)
+      : null;
     try {
       const refreshRes = await fetch(`${API_BASE}/auth/refresh`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         credentials: "include",
+        signal: controller ? controller.signal : undefined,
         body: JSON.stringify(refreshToken ? { refreshToken } : {}),
       });
       const refreshData = await refreshRes.json().catch(() => ({}));
@@ -207,6 +238,8 @@ async function refreshAccessTokenOnce() {
       return { ok: false };
     } catch {
       return { ok: false };
+    } finally {
+      if (timeoutId) clearTimeout(timeoutId);
     }
   })();
 
@@ -217,7 +250,10 @@ async function refreshAccessTokenOnce() {
   }
 }
 
-async function request(path, method, payload, retried = false) {
+async function requestInternal(path, method, payload, opts = {}) {
+  const retriedAuth = Boolean(opts?.retriedAuth);
+  const networkRetries = Math.max(0, Number(opts?.networkRetries || 0));
+
   const normalizedMethod = String(method || "GET").toUpperCase();
   const cacheableGet = normalizedMethod === "GET" && !payload;
   const headers = { "Content-Type": "application/json" };
@@ -241,8 +277,9 @@ async function request(path, method, payload, retried = false) {
   let res;
   let data;
   const controller = typeof AbortController !== "undefined" ? new AbortController() : null;
+  const requestTimeoutMs = getRequestTimeoutMs(path);
   const timeoutId = controller
-    ? setTimeout(() => controller.abort(), API_TIMEOUT_MS)
+    ? setTimeout(() => controller.abort(), requestTimeoutMs)
     : null;
 
   try {
@@ -260,15 +297,32 @@ async function request(path, method, payload, retried = false) {
 
     const message = String(err?.message || "");
     const isAbort = String(err?.name || "") === "AbortError";
+    const canRetryGet =
+      cacheableGet &&
+      networkRetries < 1 &&
+      (message.includes("Failed to fetch") ||
+        message.includes("NetworkError") ||
+        message.toLowerCase().includes("fetch") ||
+        isAbort);
+
+    if (canRetryGet) {
+      await waitMs(computeGetRetryDelayMs(networkRetries));
+      return requestInternal(path, normalizedMethod, payload, {
+        ...opts,
+        networkRetries: networkRetries + 1,
+      });
+    }
+
     if (isAbort) {
-      const origin = typeof window !== "undefined" && window?.location?.origin
-        ? window.location.origin
-        : "";
-      const baseHint = API_BASE.startsWith("http") ? API_BASE : `${origin}${API_BASE}`;
-      const timeoutErr = new Error(
-        `Requete trop lente (>${Math.round(API_TIMEOUT_MS / 1000)}s) vers ${baseHint}${path}. Verifiez le backend (port 5000), MongoDB et REACT_APP_API_URL. Testez /api/health.`
-      );
+      const timeoutErr = new Error("Connexion trop lente. Veuillez réessayer.");
       timeoutErr.cause = err;
+      timeoutErr.debug = {
+        kind: "timeout",
+        path,
+        api_base: API_BASE,
+        timeout_ms: requestTimeoutMs,
+        latency_ms: latencyMs,
+      };
       throw timeoutErr;
     }
 
@@ -277,14 +331,14 @@ async function request(path, method, payload, retried = false) {
       message.includes("NetworkError") ||
       message.toLowerCase().includes("fetch")
     ) {
-      const origin = typeof window !== "undefined" && window?.location?.origin
-        ? window.location.origin
-        : "";
-      const baseHint = API_BASE.startsWith("http") ? API_BASE : `${origin}${API_BASE}`;
-      const netErr = new Error(
-        `Impossible de contacter l'API (${baseHint}). Lancez le backend (port 5000) et verifiez REACT_APP_API_URL.`
-      );
+      const netErr = new Error("Impossible de contacter le serveur. Veuillez réessayer.");
       netErr.cause = err;
+      netErr.debug = {
+        kind: "network",
+        path,
+        api_base: API_BASE,
+        latency_ms: latencyMs,
+      };
       throw netErr;
     }
 
@@ -299,14 +353,17 @@ async function request(path, method, payload, retried = false) {
   // Otherwise, a legitimate 401 from public endpoints like `/auth/login`
   // would incorrectly trigger a refresh call and surface confusing errors
   // (ex: "refreshToken obligatoire").
-  if (res.status === 401 && token && !retried && path !== "/auth/refresh") {
+  if (res.status === 401 && token && !retriedAuth && path !== "/auth/refresh") {
     const refreshed = await refreshAccessTokenOnce();
     if (refreshed?.ok && refreshed.token) {
-      return request(path, normalizedMethod, payload, true);
+      return requestInternal(path, normalizedMethod, payload, {
+        ...opts,
+        retriedAuth: true,
+      });
     }
   }
 
-  if ((res.status === 401 || res.status === 403) && token) {
+  if (res.status === 401 && token) {
     const reason = typeof data?.error === "string" ? data.error : "";
     triggerAuthLogout(reason || "Session expiree. Veuillez vous reconnecter.");
   }
@@ -346,23 +403,23 @@ export function subscribeApiPerf(onMetrics) {
 }
 
 export function post(path, payload) {
-  return request(path, "POST", payload);
+  return requestInternal(path, "POST", payload);
 }
 
 export function get(path) {
-  return request(path, "GET");
+  return requestInternal(path, "GET");
 }
 
 export function put(path, payload) {
-  return request(path, "PUT", payload);
+  return requestInternal(path, "PUT", payload);
 }
 
-export function patch(path, payload) { 
-  return request(path, "PATCH", payload); 
-} 
+export function patch(path, payload) {
+  return requestInternal(path, "PATCH", payload);
+}
 
 export function del(path) {
-  return request(path, "DELETE");
+  return requestInternal(path, "DELETE");
 }
 
 async function uploadFileInternal(path, file, fieldName, retried = false) {
@@ -388,7 +445,7 @@ async function uploadFileInternal(path, file, fieldName, retried = false) {
   const latencyMs = Math.max(0, Math.round(nowMs() - startedAt));
   const data = await readJsonOrText(res);
 
-  if ((res.status === 401 || res.status === 403) && token) {
+  if (res.status === 401 && token) {
     const reason = typeof data?.error === "string" ? data.error : "";
     triggerAuthLogout(reason || "Session expiree. Veuillez vous reconnecter.");
   }

@@ -75,6 +75,8 @@ function computeProductStatus(quantity, seuilMinimum) {
 }
 
 const ACTIVE_INVENTORY_STATUSES = ['A_FAIRE', 'EN_COURS', 'A_VALIDER', 'A_RECOMPTER'];
+const DEFAULT_INVENTORY_MAGASIN_CODE = 'MAG-01';
+const DEFAULT_INVENTORY_MAGASIN_NAME = 'Magasin principal';
 const INVENTORY_FAMILIES = [
   { value: 'economat', label: 'Économat' },
   { value: 'produit_chimique', label: 'Produit chimique' },
@@ -97,17 +99,33 @@ const MOTIFS_ECART = [
 
 const CRITICAL_FAMILIES = new Set(['gaz', 'produit_chimique']);
 
-// Simple discrepancy levels for UI badges.
-// Tunable later via AppSetting if needed.
-const DELTA_MINOR_ABS_MAX = 2;
+async function getOrCreateDefaultInventoryMagasin(userId) {
+  const active = await Laboratory.findOne({ active: true }).select('_id code name active').sort({ name: 1 }).lean();
+  if (active) return active;
 
-function computeDeltaBadge(delta) {
-  if (delta === null || delta === undefined) return null;
-  const n = Number(delta);
-  if (!Number.isFinite(n)) return null;
-  if (n === 0) return 'OK';
-  if (Math.abs(n) <= DELTA_MINOR_ABS_MAX) return 'MINEUR';
-  return 'CRITIQUE';
+  const update = {
+    $set: { active: true },
+    $setOnInsert: {
+      code: DEFAULT_INVENTORY_MAGASIN_CODE,
+      name: DEFAULT_INVENTORY_MAGASIN_NAME,
+      description: "Magasin technique utilise automatiquement pour les inventaires.",
+    },
+  };
+
+  if (userId) update.$setOnInsert.created_by = userId;
+
+  const fallback = await Laboratory.findOneAndUpdate(
+    { code: DEFAULT_INVENTORY_MAGASIN_CODE },
+    update,
+    {
+      new: true,
+      upsert: true,
+      setDefaultsOnInsert: true,
+      projection: '_id code name active',
+    }
+  ).lean();
+
+  return fallback;
 }
 
 function normalizeFamily(value) {
@@ -200,6 +218,33 @@ function sanitizeInventoryForResponsable(inv) {
   return inv;
 }
 
+function sanitizeProductForMagasinierCount(product) {
+  if (!product) return null;
+  return {
+    _id: product._id,
+    name: product.name || '',
+    code_product: product.code_product || '',
+  };
+}
+
+function sanitizeLegacyCountLineForRole(count, role) {
+  const line = {
+    _id: count._id,
+    product: role === 'magasinier' ? sanitizeProductForMagasinierCount(count.product) : count.product,
+    counted_quantity: Number(count.counted_quantity || 0),
+    note: count.note || '',
+    counted_by: count.counted_by,
+    counted_at: count.counted_at || count.updatedAt || count.createdAt,
+  };
+
+  if (role !== 'magasinier') {
+    line.system_quantity_at_count = Number(count.system_quantity_at_count || 0);
+    line.delta = Number(count.counted_quantity || 0) - Number(count.system_quantity_at_count || 0);
+  }
+
+  return line;
+}
+
 function safeAbsNumber(value) {
   const n = Number(value || 0);
   if (!Number.isFinite(n)) return 0;
@@ -226,12 +271,17 @@ router.get('/launch/options', async (req, res) => {
   try {
     if (!ensureRole(req, res, ['responsable'])) return;
 
-    const [magasins, zones, categories, magasiniers] = await Promise.all([
+    let [magasins, zones, categories, magasiniers] = await Promise.all([
       Laboratory.find({ active: true }).select('_id code name active').sort({ name: 1 }).lean(),
       Location.find({ active: true }).select('_id code name active').sort({ name: 1 }).lean(),
       Category.find({ lifecycle_status: 'active' }).select('_id name parent_family').sort({ name: 1 }).lean(),
       User.find({ role: 'magasinier', status: 'active' }).select('_id username role status').sort({ username: 1 }).lean(),
     ]);
+
+    if (!magasins.length) {
+      const defaultMagasin = await getOrCreateDefaultInventoryMagasin(req.user?.id);
+      magasins = defaultMagasin ? [defaultMagasin] : [];
+    }
 
     return res.json({
       ok: true,
@@ -258,6 +308,7 @@ router.get('/responsable/to-validate', async (req, res) => {
       .populate('zone_id', 'code name')
       .populate('categorie_id', 'name is_sensitive')
       .populate('magasinier_id', 'username role')
+      .populate('magasinier_ids', 'username role')
       .lean();
 
     const ids = inventories.map((i) => i._id);
@@ -337,6 +388,7 @@ router.get('/responsable/inventories/:id/analysis', async (req, res) => {
       .populate('zone_id', 'code name')
       .populate('categorie_id', 'name is_sensitive')
       .populate('magasinier_id', 'username role')
+      .populate('magasinier_ids', 'username role')
       .populate('responsable_id', 'username role')
       .lean();
 
@@ -867,32 +919,27 @@ router.get('/magasinier/inventories/:id', async (req, res) => {
       .lean();
 
     const lines = linesRaw.map((l) => {
-      const theo = Math.max(0, Math.floor(Number(l.quantite_theorique_initiale || 0)));
       const counted = l.quantite_comptee === null || l.quantite_comptee === undefined ? null : Math.max(0, Math.floor(Number(l.quantite_comptee || 0)));
-      const delta = counted === null ? null : (counted - theo);
-      return ({
-      _id: l._id,
-      product: {
-        _id: l.product_id?._id,
-        code_product: l.product_id?.code_product || '-',
-        name: l.product_id?.name || 'Produit',
-        unite: l.product_id?.unite || '',
-        qr_code_value: l.product_id?.qr_code_value || '',
-        emplacement: l.emplacement_id || l.product_id?.emplacement || '',
-      },
-      lot: l.stock_id || '',
-      quantite_theorique_initiale: theo,
-      quantite_comptee: counted,
-      ecart: delta,
-      ecart_badge: computeDeltaBadge(delta),
-      observation_magasinier: l.observation_magasinier || '',
-      // For recount scenario: allow showing responsable note/motif, not quantities.
-      motif_recompte: l.observation_responsable || '',
-      requires_recount: Boolean(l.requires_recount),
-      is_counted: Boolean(l.is_counted),
-      is_verified_by_magasinier: Boolean(l.is_verified_by_magasinier),
-      updatedAt: l.updatedAt,
-      });
+      return {
+        _id: l._id,
+        product: {
+          _id: l.product_id?._id,
+          code_product: l.product_id?.code_product || '-',
+          name: l.product_id?.name || 'Produit',
+          unite: l.product_id?.unite || '',
+          qr_code_value: l.product_id?.qr_code_value || '',
+          emplacement: l.emplacement_id || l.product_id?.emplacement || '',
+        },
+        lot: l.stock_id || '',
+        quantite_comptee: counted,
+        observation_magasinier: l.observation_magasinier || '',
+        // For recount scenario: allow showing responsable note/motif, not quantities.
+        motif_recompte: l.observation_responsable || '',
+        requires_recount: Boolean(l.requires_recount),
+        is_counted: Boolean(l.is_counted),
+        is_verified_by_magasinier: Boolean(l.is_verified_by_magasinier),
+        updatedAt: l.updatedAt,
+      };
     });
 
     const total = linesRaw.length;
@@ -1236,11 +1283,10 @@ router.post('/magasinier/inventories/:id/submit', async (req, res) => {
 // GET /api/inventory/inventories
 router.get('/inventories', async (req, res) => {
   try {
-    const mine = String(req.query?.mine || '') === '1';
     const role = String(req.user?.role || '');
 
     const q = {};
-    if (role === 'magasinier' && mine) {
+    if (role === 'magasinier') {
       q.$or = [{ magasinier_id: req.user.id }, { magasinier_ids: req.user.id }];
     }
 
@@ -1260,7 +1306,11 @@ router.get('/inventories', async (req, res) => {
       .populate('categorie_id', 'name')
       .lean();
 
-    return res.json({ ok: true, inventories: items });
+    const inventories = role === 'magasinier'
+      ? items.map((inv) => sanitizeInventoryForMagasinier(inv))
+      : items;
+
+    return res.json({ ok: true, inventories });
   } catch (err) {
     return res.status(500).json({ error: 'Failed to fetch inventories', details: err.message });
   }
@@ -1290,8 +1340,17 @@ router.post(
       const typeInventaire = asOptionalString(req.body?.type_inventaire);
       if (!typeInventaire || !['GLOBAL', 'TOURNANT'].includes(typeInventaire)) errors.push('type_inventaire obligatoire (GLOBAL/TOURNANT)');
 
-      const magasinId = asOptionalString(req.body?.magasin_id);
-      if (!magasinId || !isValidObjectIdLike(magasinId)) errors.push('magasin_id obligatoire');
+      let magasinId = asOptionalString(req.body?.magasin_id);
+      if (magasinId && !isValidObjectIdLike(magasinId)) {
+        errors.push('magasin_id invalide');
+      } else if (magasinId) {
+        const magasin = await Laboratory.findOne({ _id: magasinId, active: true }).select('_id').lean();
+        if (!magasin) errors.push('magasin introuvable ou inactif');
+      } else {
+        const defaultMagasin = await getOrCreateDefaultInventoryMagasin(req.user?.id);
+        magasinId = defaultMagasin?._id ? String(defaultMagasin._id) : '';
+        if (!magasinId) errors.push('magasin indisponible pour lancer inventaire');
+      }
 
       const zoneIdRaw = asOptionalString(req.body?.zone_id);
       const zoneId = zoneIdRaw && isValidObjectIdLike(zoneIdRaw) ? zoneIdRaw : null;
@@ -1501,10 +1560,9 @@ router.post(
 router.get('/sessions', async (req, res) => {
   try {
     const status = asOptionalString(req.query?.status);
-    const mine = String(req.query?.mine || '') === '1';
     const q = {};
     if (status && ['draft', 'counting', 'closed', 'applied', 'cancelled'].includes(status)) q.status = status;
-    if (mine && req.user?.role === 'magasinier') q.created_by = req.user.id;
+    if (req.user?.role === 'magasinier') q.created_by = req.user.id;
 
     const sessions = await InventorySession.find(q)
       .sort({ createdAt: -1 })
@@ -1570,34 +1628,28 @@ router.get('/sessions/:id', async (req, res) => {
       return res.status(403).json({ error: 'Acces refuse' });
     }
 
+    const role = String(req.user?.role || '');
     const counts = await InventoryCount.find({ session: session._id })
       .populate('product', '_id name code_product quantity_current seuil_minimum')
       .populate('counted_by', 'username role')
       .sort({ updatedAt: -1 })
       .lean();
 
-    const lines = counts.map((c) => ({
-      _id: c._id,
-      product: c.product,
-      counted_quantity: Number(c.counted_quantity || 0),
-      system_quantity_at_count: Number(c.system_quantity_at_count || 0),
-      delta: Number(c.counted_quantity || 0) - Number(c.system_quantity_at_count || 0),
-      note: c.note || '',
-      counted_by: c.counted_by,
-      counted_at: c.counted_at || c.updatedAt || c.createdAt,
-    }));
+    const lines = counts.map((c) => sanitizeLegacyCountLineForRole(c, role));
 
-    const summary = lines.reduce(
-      (acc, l) => {
-        acc.lines += 1;
-        if (l.delta > 0) acc.surplus += 1;
-        if (l.delta < 0) acc.missing += 1;
-        if (l.delta === 0) acc.ok += 1;
-        acc.total_abs_delta += Math.abs(l.delta);
-        return acc;
-      },
-      { lines: 0, ok: 0, surplus: 0, missing: 0, total_abs_delta: 0 }
-    );
+    const summary = role === 'magasinier'
+      ? { lines: lines.length }
+      : lines.reduce(
+          (acc, l) => {
+            acc.lines += 1;
+            if (l.delta > 0) acc.surplus += 1;
+            if (l.delta < 0) acc.missing += 1;
+            if (l.delta === 0) acc.ok += 1;
+            acc.total_abs_delta += Math.abs(l.delta);
+            return acc;
+          },
+          { lines: 0, ok: 0, surplus: 0, missing: 0, total_abs_delta: 0 }
+        );
 
     return res.json({ ok: true, session, lines, summary });
   } catch (err) {
@@ -1647,7 +1699,7 @@ router.post('/sessions/:id/count', strictBody(['product_id', 'counted_quantity',
       .populate('product', '_id name code_product quantity_current seuil_minimum')
       .lean();
 
-    return res.json({ ok: true, line: doc });
+    return res.json({ ok: true, line: sanitizeLegacyCountLineForRole(doc, String(req.user?.role || '')) });
   } catch (err) {
     return res.status(400).json({ error: 'Failed to save count', details: err.message });
   }

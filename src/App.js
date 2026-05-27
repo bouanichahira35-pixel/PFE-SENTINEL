@@ -34,7 +34,6 @@ import FournisseursResp from "./pages/responsable/FournisseursResp";
 import CategoriesResp from "./pages/responsable/CategoriesResp";
 import RegistreChimique from "./pages/responsable/RegistreChimique";
 import ReglesStock from "./pages/responsable/ReglesStock";
-import LotsASurveillerResp from "./pages/responsable/LotsASurveillerResp";
 
 import FournisseursPage from "./pages/responsable/fournisseurs/FournisseursPage";
 import NouveauFournisseurPage from "./pages/responsable/fournisseurs/NouveauFournisseurPage";
@@ -78,7 +77,27 @@ const SESSION_TIMEOUT_MS = 2 * 60 * 60 * 1000;
 const LAST_ACTIVITY_KEY = "lastActivityAt";
 const LAST_LOGIN_ROLE_KEY = "lastLoginRole";
 const LOGOUT_REASON_KEY = "logoutReason";
+const REFRESH_SESSION_HINT_KEY = "hasRefreshSession";
 const AUTH_LOGOUT_EVENT_NAME = "auth-logout";
+const AUTH_RESTORE_TIMEOUT_MS = 4000;
+
+function hasRefreshSessionHint() {
+  return (
+    sessionStorage.getItem(REFRESH_SESSION_HINT_KEY) === "1" ||
+    localStorage.getItem(REFRESH_SESSION_HINT_KEY) === "1" ||
+    Boolean(sessionStorage.getItem("refreshToken") || localStorage.getItem("refreshToken"))
+  );
+}
+
+function markRefreshSessionHint() {
+  sessionStorage.setItem(REFRESH_SESSION_HINT_KEY, "1");
+  localStorage.setItem(REFRESH_SESSION_HINT_KEY, "1");
+}
+
+function clearRefreshSessionHint() {
+  sessionStorage.removeItem(REFRESH_SESSION_HINT_KEY);
+  localStorage.removeItem(REFRESH_SESSION_HINT_KEY);
+}
 
 const App = () => {
   const [showSplash, setShowSplash] = useState(true);
@@ -109,6 +128,7 @@ const App = () => {
     sessionStorage.removeItem("imageProfile");
     sessionStorage.removeItem("serviceDirection");
     sessionStorage.removeItem(LAST_ACTIVITY_KEY);
+    clearRefreshSessionHint();
 
     localStorage.removeItem("token");
     localStorage.removeItem("refreshToken");
@@ -180,6 +200,7 @@ const App = () => {
           LAST_ACTIVITY_KEY,
           sessionStorage.getItem(LAST_ACTIVITY_KEY) || String(Date.now())
         );
+        markRefreshSessionHint();
         if (!cancelled) {
           setUserRole(roleFromToken);
           setUserName(nameFromToken);
@@ -192,25 +213,40 @@ const App = () => {
         sessionStorage.removeItem("token");
       }
 
+      if (!hasRefreshSessionHint()) return;
+
+      const controller = typeof AbortController !== "undefined" ? new AbortController() : null;
+      const timeoutId = controller
+        ? setTimeout(() => controller.abort(), AUTH_RESTORE_TIMEOUT_MS)
+        : null;
+
       try {
         // Try to refresh using HttpOnly cookie (set by backend on login).
         const res = await fetch(`${API_BASE}/auth/refresh`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           credentials: "include",
+          signal: controller ? controller.signal : undefined,
           body: JSON.stringify({}),
         });
         const data = await res.json().catch(() => ({}));
-        if (!res.ok || !data?.token) return;
+        if (!res.ok || !data?.token) {
+          clearRefreshSessionHint();
+          return;
+        }
 
         const decoded = decodeJwtPayload(data.token);
         const nextRole = String(decoded?.role || "").toLowerCase();
         const nextName = String(decoded?.username || "").trim();
 
-        if (!decoded || !isKnownRole(nextRole) || !nextName) return;
+        if (!decoded || !isKnownRole(nextRole) || !nextName) {
+          clearRefreshSessionHint();
+          return;
+        }
 
         sessionStorage.setItem("token", data.token);
         sessionStorage.setItem(LAST_ACTIVITY_KEY, String(Date.now()));
+        markRefreshSessionHint();
 
         if (!cancelled) {
           setUserRole(nextRole);
@@ -219,6 +255,8 @@ const App = () => {
         }
       } catch {
         // ignore restore errors, user stays logged out
+      } finally {
+        if (timeoutId) clearTimeout(timeoutId);
       }
     }
 
@@ -320,6 +358,7 @@ const App = () => {
     sessionStorage.setItem("userName", user.username);
     sessionStorage.setItem("userRole", normalizedRole); 
     sessionStorage.setItem(LAST_LOGIN_ROLE_KEY, normalizedRole); 
+    markRefreshSessionHint();
     if (user.image_profile) sessionStorage.setItem("imageProfile", user.image_profile); 
     else sessionStorage.removeItem("imageProfile"); 
     if (user.demandeur_profile) sessionStorage.setItem("demandeurProfile", String(user.demandeur_profile));
@@ -384,7 +423,6 @@ const App = () => {
                   <Route path="/responsable/demandes-a-traiter" element={<Navigate to="/responsable/pilotage" replace />} />
                   <Route path="/responsable/produits" element={<ProduitsResp userName={userName} onLogout={handleLogout} />} />
                   <Route path="/responsable/produits-critiques" element={<Navigate to="/responsable/produits?filter=critiques" replace />} />
-                  <Route path="/responsable/lots-a-surveiller" element={<LotsASurveillerResp userName={userName} onLogout={handleLogout} />} />
                   <Route path="/responsable/pilotage" element={<PilotageResp userName={userName} onLogout={handleLogout} />} />
                   <Route path="/responsable/alertes" element={<Navigate to="/responsable/pilotage?tab=alertes" replace />} />
                   <Route path="/responsable/flux" element={<Navigate to="/responsable/transactions" replace />} />

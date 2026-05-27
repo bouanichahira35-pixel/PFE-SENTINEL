@@ -47,6 +47,12 @@ const configuredOrigins = String(
 const allowedOrigins = Array.from(new Set([...configuredOrigins, ...defaultDevOrigins]));
 const isProduction = String(process.env.NODE_ENV || '').toLowerCase() === 'production';
 
+function envFlag(name, defaultValue = false) {
+  const raw = process.env[name];
+  if (raw === undefined || raw === null || String(raw).trim() === '') return Boolean(defaultValue);
+  return ['1', 'true', 'yes', 'on'].includes(String(raw).trim().toLowerCase());
+}
+
 if (isProduction) {
   const jwtSecret = String(process.env.JWT_SECRET || '').trim();
   const piiHashSecret = String(process.env.PII_HASH_SECRET || '').trim();
@@ -324,6 +330,7 @@ app.use('/api/security-audit', require('./routes/security-audit'));
 app.use('/api/notifications', require('./routes/notifications'));
 app.use('/api/files', require('./routes/files'));
 app.use('/api/reports', require('./routes/reports'));
+app.use('/api/sync', require('./routes/sync'));
 app.use('/api/users', require('./routes/users')); 
 app.use('/api/suppliers', require('./routes/suppliers')); 
 app.use('/api/supplier-alerts', require('./routes/supplier-alerts'));
@@ -341,6 +348,8 @@ app.use((err, req, res, next) => {
 });
 
 async function runDomainCleanup() {
+  if (!envFlag('DOMAIN_CLEANUP_ON_BOOT', false)) return;
+
   try {
     const summary = await removeInformatiqueDomain();
     logger.info({ summary }, 'Domain cleanup applied');
@@ -453,17 +462,23 @@ async function runPostBootTasks() {
   try {
     await runDomainCleanup();
     await runProductValidationRemovalMigration();
-    startAiAutoTrainingJob();
+    if (envFlag('AI_AUTO_TRAINING_JOB_ENABLED', isProduction)) {
+      startAiAutoTrainingJob();
+    }
     await runAiAlertsBoot();
-    startPurchaseOrderRemindersJob();
+    if (envFlag('PO_REMINDERS_JOB_ENABLED', isProduction)) {
+      startPurchaseOrderRemindersJob();
+    }
   } catch (err) {
     logger.warn({ err: err?.message || err }, '[BOOT] Post-boot tasks failed');
   }
 }
 
 (async () => {
-  // Ensure the DB connection handshake has completed before accepting requests.
-  // This prevents confusing 401/500 responses when Mongo is still "connecting".
+  app.listen(PORT, () => logger.info({ port: Number(PORT) }, 'API ready'));
+
+  // Keep API startup responsive. Mongo-dependent routes fail fast through the
+  // readiness middleware until the connection is usable.
   const mongoReady = await mongoose.waitForMongoReady({
     timeoutMs: Number(process.env.MONGODB_BOOT_TIMEOUT_MS || 15_000),
   });
@@ -479,8 +494,6 @@ async function runPostBootTasks() {
 
   await logQrSecretStatus();
 
-  // Start listening ASAP, then run optional boot tasks without blocking API readiness.
-  app.listen(PORT, () => logger.info({ port: Number(PORT) }, 'API ready'));
   if (mongoReady.ok) {
     runPostBootTasks();
   } else {

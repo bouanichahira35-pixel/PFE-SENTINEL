@@ -251,6 +251,9 @@ router.patch('/me/password', strictBody(['current_password', 'new_password', 'co
       { user: req.user.id, is_active: true },
       { $set: { is_active: false, logout_time: now, revoked_reason: 'password_change' } }
     );
+    if (typeof requireAuth.invalidateUserSessionsCache === 'function') {
+      requireAuth.invalidateUserSessionsCache(req.user.id);
+    }
 
     await logSecurityEvent({
       event_type: 'password_change',

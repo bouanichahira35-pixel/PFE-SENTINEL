@@ -95,11 +95,6 @@ const LancerInventaireResp = ({ userName, onLogout }) => {
   const familleDisabled = typeInventaire === 'GLOBAL';
   const categorieDisabled = typeInventaire === 'GLOBAL';
 
-  const magasinLabel = useMemo(() => {
-    const item = (options.magasins || []).find((m) => String(m._id) === String(magasinId));
-    return item ? `${item.name || 'Magasin'} (${item.code || '-'})` : '';
-  }, [magasinId, options.magasins]);
-
   const magasinierChoices = useMemo(() => {
     const items = Array.isArray(options.magasiniers) ? options.magasiniers : [];
     const seen = new Set();
@@ -119,6 +114,15 @@ const LancerInventaireResp = ({ userName, onLogout }) => {
     ));
   }, [magasinierQuery, options.magasiniers]);
 
+  const selectedMagasiniersLabel = useMemo(() => {
+    const selected = new Set((Array.isArray(magasinierIds) ? magasinierIds : []).map((id) => String(id)));
+    const names = (Array.isArray(options.magasiniers) ? options.magasiniers : [])
+      .filter((u) => selected.has(String(u?._id || '')))
+      .map((u) => String(u?.username || '').trim())
+      .filter(Boolean);
+    return names.length ? names.join(', ') : '-';
+  }, [magasinierIds, options.magasiniers]);
+
   const toggleMagasinier = (id, checked) => {
     const key = String(id || '');
     if (!key) return;
@@ -133,7 +137,6 @@ const LancerInventaireResp = ({ userName, onLogout }) => {
   const validateForm = () => {
     const errs = [];
     if (!typeInventaire) errs.push('type_inventaire obligatoire');
-    if (!magasinId) errs.push('magasin obligatoire');
     if (!magasinierIds.length) errs.push('magasinier(s) obligatoire(s)');
     if (!datePrevue) errs.push('date_prevue obligatoire');
 
@@ -197,7 +200,7 @@ const LancerInventaireResp = ({ userName, onLogout }) => {
             <div className="inv-launch-header">
               <div className="inv-launch-title">
                 <h2><ClipboardCheck size={20} /> Lancer une session d'inventaire</h2>
-                <div className="inv-launch-sub">Définissez le périmètre et assignez la mission au magasinier.</div>
+                <div className="inv-launch-sub">Définissez le périmètre et assignez la mission aux magasiniers.</div>
               </div>
               <div className="inv-launch-actions">
                 <button className="inv-launch-btn" type="button" onClick={() => navigate('/responsable/inventaires')}>
@@ -255,25 +258,6 @@ const LancerInventaireResp = ({ userName, onLogout }) => {
                 )}
 
                 <div className="inv-launch-form">
-                  <div className="inv-launch-row">
-                    <label>Magasin</label>
-                    {options.magasins.length <= 1 ? (
-                      <input
-                        value={magasinLabel || (options.magasins[0] ? `${options.magasins[0].name} (${options.magasins[0].code})` : '')}
-                        placeholder={options.magasins[0] ? '' : 'Aucun magasin'}
-                        disabled
-                      />
-                    ) : (
-                      <select value={magasinId} onChange={(e) => setMagasinId(e.target.value)}>
-                        {options.magasins.map((m) => (
-                          <option key={m._id} value={m._id}>
-                            {m.name} ({m.code})
-                          </option>
-                        ))}
-                      </select>
-                    )}
-                  </div>
-
                   <div className="inv-launch-row two">
                     <div>
                       <label>Zone (optionnel)</label>
@@ -386,7 +370,7 @@ const LancerInventaireResp = ({ userName, onLogout }) => {
                           checked={notificationsActives}
                           onChange={(e) => setNotificationsActives(e.target.checked)}
                         />
-                        Notifier le magasinier
+                        Notifier les magasiniers
                       </label>
                     </div>
                   </div>
@@ -430,16 +414,16 @@ const LancerInventaireResp = ({ userName, onLogout }) => {
                   <div className="v"><span className={`inv-status-badge type ${typeInventaire === 'GLOBAL' ? 'global' : 'tournant'}`}>{typeInventaire}</span></div>
                 </div>
                 <div className="inv-launch-kv">
-                  <div className="k"><span>Magasin</span></div>
-                  <div className="v">{magasinLabel || '-'}</div>
-                </div>
-                <div className="inv-launch-kv">
                   <div className="k"><span>Mouvements</span></div>
                   <div className="v">{bloquerMouvements ? 'Bloqués (si GLOBAL)' : 'Non bloqués'}</div>
                 </div>
                 <div className="inv-launch-kv">
                   <div className="k"><span>Notification</span></div>
                   <div className="v">{notificationsActives ? 'Active' : 'Désactivée'}</div>
+                </div>
+                <div className="inv-launch-kv">
+                  <div className="k"><span>Assignation</span></div>
+                  <div className="v">{magasinierIds.length} magasinier(s): {selectedMagasiniersLabel}</div>
                 </div>
                 <div className="inv-launch-side-note">
                   Statut initial après lancement: <span className="inv-status-badge a_faire">A_FAIRE</span>

@@ -4,6 +4,7 @@ import { User, Lock, AlertTriangle, Eye } from 'lucide-react';
 import logoETAP from '../../assets/logoETAP.png';
 import { post } from '../../services/api';
 import { HOME_PATH_BY_ROLE } from '../../constants/roles';
+import { getUiErrorMessage } from '../../services/uiError';
 import './LoginPage.css';
 
 const LoginPage = ({ onLogin }) => {
@@ -66,10 +67,6 @@ const LoginPage = ({ onLogin }) => {
       navigate(redirectPath, { replace: true });
     } catch (err) {
       const status = Number(err?.status || 0);
-      if (status === 503) {
-        setError('Service indisponible. Verifiez que MongoDB et le backend (port 5000) sont demarres, puis reessayez.');
-        return;
-      }
       // UX: for security, keep the same generic message for invalid credentials.
       const message = String(err.message || '');
       if (
@@ -78,17 +75,12 @@ const LoginPage = ({ onLogin }) => {
         message.includes('Compte bloque') ||
         message.includes('Role invalide')
       ) {
-        const isDevUi = process.env.NODE_ENV !== 'production';
-        if (isDevUi) {
-          if (message.includes('Utilisateur introuvable')) setError('Utilisateur introuvable');
-          else if (message.includes('Compte bloque')) setError('Compte bloque');
-          else if (message.includes('Role invalide')) setError('Role utilisateur invalide');
-          else setError('Mot de passe incorrect');
-        } else {
-          setError('Identifiant ou mot de passe incorrect');
-        }
+        setError('Identifiant ou mot de passe incorrect');
       } else {
-        setError(message || 'Erreur de connexion');
+        const fallback = status === 503
+          ? 'Service indisponible. Veuillez réessayer.'
+          : 'Erreur de connexion. Veuillez réessayer.';
+        setError(getUiErrorMessage(err, fallback));
       }
     } finally {
       setIsLoading(false);
@@ -178,7 +170,10 @@ const LoginPage = ({ onLogin }) => {
               disabled={isLoading}
             >
               {isLoading ? (
-                <span className="login-spinner"></span>
+                <span className="login-loading-content">
+                  <span className="login-spinner"></span>
+                  <span>Connexion...</span>
+                </span>
               ) : (
                 <span>Se Connecter</span>
               )}

@@ -1,13 +1,16 @@
-import React, { useRef, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { Text, View, StyleSheet } from 'react-native';
 import SignatureCanvas, { type SignatureViewRef } from 'react-native-signature-canvas';
 import { randomUUID } from 'expo-crypto';
 
 import { Screen } from '../../ui/Screen';
 import { Button } from '../../ui/Button';
+import { Card } from '../../ui/Card';
 import { colors } from '../../ui/theme';
 import { OutboxRepo } from '../../core/db/outboxRepo';
+import { ProductsRepo, type ProductRow } from '../../core/db/productsRepo';
 import type { HseAcknowledgement, StockOutDraft } from '../../core/stock/stockOutDraft';
+import { formatProductLabel } from '../lib/productDisplay';
 
 function stripDataUrl(dataUrl: string) {
   return String(dataUrl || '').replace(/^data:image\/png;base64,/, '').trim();
@@ -22,6 +25,11 @@ export function SignatureScreen(props: {
   const ref = useRef<SignatureViewRef>(null);
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState('');
+  const [product, setProduct] = useState<ProductRow | null>(null);
+
+  useEffect(() => {
+    ProductsRepo.getById(props.draft.productId).then(setProduct).catch(() => setProduct(null));
+  }, [props.draft.productId]);
 
   const saveSignature = () => {
     setMessage('');
@@ -63,7 +71,7 @@ export function SignatureScreen(props: {
         },
       });
 
-      setMessage('Sortie + signature ajoutees a l outbox');
+      setMessage('Sortie + signature ajoutées à l’outbox');
       props.onDone();
     } catch (e: any) {
       setMessage(e?.message || 'Erreur signature');
@@ -74,11 +82,11 @@ export function SignatureScreen(props: {
 
   return (
     <Screen title="Signature remise" onBack={props.onBack}>
-      <View style={styles.card}>
-        <Text style={styles.title}>Signature du beneficiaire</Text>
-        <Text style={styles.meta}>Produit: {props.draft.productId.slice(-6)} • Quantite: {props.draft.quantity}</Text>
+      <Card style={{ marginBottom: 12 }}>
+        <Text style={styles.title}>Signature du bénéficiaire</Text>
+        <Text style={styles.meta}>Produit: {formatProductLabel(product, props.draft.productId)} • Quantité: {props.draft.quantity}</Text>
         {message ? <Text style={[styles.msg, { color: message.includes('outbox') ? colors.ok : colors.warn }]}>{message}</Text> : null}
-      </View>
+      </Card>
 
       <View style={styles.signatureWrap}>
         <SignatureCanvas
@@ -100,14 +108,13 @@ export function SignatureScreen(props: {
 
       <View style={styles.actions}>
         <Button title="Effacer" onPress={() => ref.current?.clearSignature()} variant="ghost" style={{ flex: 1 }} />
-        <Button title="Ajouter a l outbox" onPress={saveSignature} loading={saving} style={{ flex: 1, marginLeft: 10 }} />
+        <Button title="Ajouter à l’outbox" onPress={saveSignature} loading={saving} style={{ flex: 1, marginLeft: 10 }} />
       </View>
     </Screen>
   );
 }
 
 const styles = StyleSheet.create({
-  card: { borderWidth: 1, borderColor: colors.border, backgroundColor: colors.card, borderRadius: 14, padding: 12, marginBottom: 12 },
   title: { color: colors.text, fontSize: 16, fontWeight: '900' },
   meta: { color: colors.muted, marginTop: 6 },
   msg: { marginTop: 8, fontWeight: '800' },

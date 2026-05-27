@@ -3,6 +3,7 @@ import { Paperclip, RefreshCw, Send, MessageCircle, CheckCircle2, Eye } from 'lu
 import { useLocation } from 'react-router-dom';
 import { get, patch, post, uploadFile } from '../../services/api';
 import { useToast } from '../shared/Toast';
+import { getUiErrorMessage } from '../../services/uiError';
 import { isSafeText } from '../../utils/formGuards';
 
 const MAX_ATTACHMENT_SIZE_BYTES = 10 * 1024 * 1024;
@@ -104,7 +105,7 @@ export default function SupportItTickets() {
       setTickets(Array.isArray(res?.tickets) ? res.tickets : []);
     } catch (err) {
       setTickets([]);
-      toast.error(err.message || 'Chargement tickets échoué');
+      toast.error(getUiErrorMessage(err, 'Chargement tickets échoué'));
     } finally {
       setTicketsLoading(false);
     }
@@ -118,7 +119,7 @@ export default function SupportItTickets() {
       const res = await get(`/support/tickets/${encodeURIComponent(tid)}`);
       setOpenTicket(res?.ticket || null);
     } catch (err) {
-      toast.error(err.message || 'Chargement ticket échoué');
+      toast.error(getUiErrorMessage(err, 'Chargement ticket échoué'));
       setOpenTicket(null);
     } finally {
       setOpenTicketLoading(false);
@@ -198,7 +199,7 @@ export default function SupportItTickets() {
       setReplyDraft('');
       await loadMyTickets();
     } catch (err) {
-      toast.error(err.message || 'Envoi ticket échoué');
+      toast.error(getUiErrorMessage(err, 'Envoi ticket échoué'));
     } finally {
       setSending(false);
     }
@@ -229,7 +230,7 @@ export default function SupportItTickets() {
       setReplyDraft('');
       await Promise.all([loadMyTickets(), loadTicketDetail(id)]);
     } catch (err) {
-      toast.error(err.message || 'Envoi réponse échoué');
+      toast.error(getUiErrorMessage(err, 'Envoi réponse échoué'));
     } finally {
       setReplySending(false);
     }
@@ -248,7 +249,7 @@ export default function SupportItTickets() {
       }
       await loadMyTickets();
     } catch (err) {
-      toast.error(err.message || 'Action échouée');
+      toast.error(getUiErrorMessage(err, 'Action échouée'));
     }
   }, [loadMyTickets, loadTicketDetail, openTicketId, toast]);
 
@@ -512,4 +513,3 @@ export default function SupportItTickets() {
     </div>
   );
 }
-

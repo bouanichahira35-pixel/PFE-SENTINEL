@@ -1,11 +1,12 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Monitor, Ban, RefreshCw } from 'lucide-react';
+import { Monitor, Ban, RefreshCw, X } from 'lucide-react';
 import { useSearchParams } from 'react-router-dom';
 import SidebarAdmin from '../../components/admin/SidebarAdmin';
 import HeaderPage from '../../components/shared/HeaderPage';
 import LoadingSpinner from '../../components/shared/LoadingSpinner';
 import { get, post } from '../../services/api';
 import { useToast } from '../../components/shared/Toast';
+import { getUiErrorMessage } from '../../services/uiError';
 import './AdminDashboard.css';
 import './AdminSessions.css';
 
@@ -32,6 +33,8 @@ const AdminSessions = ({ userName, onLogout }) => {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(() => (typeof window !== 'undefined' ? window.innerWidth <= 768 : false));
   const [loading, setLoading] = useState(false);
   const [items, setItems] = useState([]);
+  const [revokeDialog, setRevokeDialog] = useState({ open: false, session: null });
+  const [revokeReason, setRevokeReason] = useState('');
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -39,7 +42,7 @@ const AdminSessions = ({ userName, onLogout }) => {
       const res = await get('/admin/sessions?limit=80');
       setItems(Array.isArray(res?.items) ? res.items : []);
     } catch (err) {
-      toast.error(err.message || 'Chargement sessions échoué');
+      toast.error(getUiErrorMessage(err, 'Chargement sessions échoué'));
     } finally {
       setLoading(false);
     }
@@ -49,15 +52,40 @@ const AdminSessions = ({ userName, onLogout }) => {
     load();
   }, [load]);
 
-  const revoke = useCallback(async (sessionId) => {
+  const openRevokeDialog = useCallback((session) => {
+    setRevokeDialog({ open: true, session });
+    setRevokeReason('');
+  }, []);
+
+  const closeRevokeDialog = useCallback(() => {
+    if (loading) return;
+    setRevokeDialog({ open: false, session: null });
+    setRevokeReason('');
+  }, [loading]);
+
+  const confirmRevoke = useCallback(async () => {
+    const sessionId = revokeDialog.session?.id;
+    const reason = safeText(revokeReason);
+
+    if (!sessionId) return;
+    if (reason.length < 5) {
+      toast.warning('Le motif de révocation est obligatoire (min 5 caractères).');
+      return;
+    }
+
     try {
-      await post(`/admin/sessions/${encodeURIComponent(sessionId)}/revoke`, { reason: 'admin_revoke' });
+      setLoading(true);
+      await post(`/admin/sessions/${encodeURIComponent(sessionId)}/revoke`, { reason });
       toast.success('Session révoquée.');
+      setRevokeDialog({ open: false, session: null });
+      setRevokeReason('');
       await load();
     } catch (err) {
-      toast.error(err.message || 'Révocation échouée');
+      toast.error(getUiErrorMessage(err, 'Révocation échouée'));
+    } finally {
+      setLoading(false);
     }
-  }, [load, toast]);
+  }, [load, revokeDialog.session, revokeReason, toast]);
 
   const rows = useMemo(() => {
     const userFilterId = safeText(searchParams.get('user') || '');
@@ -128,7 +156,7 @@ const AdminSessions = ({ userName, onLogout }) => {
                       <td className="muted">{formatDateTime(r.expires)}</td>
                       <td className="muted" title={safeText(r.ua) || ''}>{shortUa(r.ua)}</td>
                       <td style={{ textAlign: 'right' }}>
-                        <button className="admin-btn danger" type="button" onClick={() => revoke(r.id)} disabled={loading}>
+                        <button className="admin-btn danger" type="button" onClick={() => openRevokeDialog(r)} disabled={loading}>
                           <Ban size={16} />
                           <span>Révoquer</span>
                         </button>
@@ -144,6 +172,53 @@ const AdminSessions = ({ userName, onLogout }) => {
               </table>
             </div>
           </div>
+
+          {revokeDialog.open ? (
+            <div className="admin-session-modal-backdrop" role="dialog" aria-modal="true" onClick={closeRevokeDialog}>
+              <div className="admin-session-modal" onClick={(e) => e.stopPropagation()}>
+                <div className="admin-session-modal-head">
+                  <div>
+                    <strong>Révoquer la session</strong>
+                    <span>{revokeDialog.session?.user || 'Utilisateur'} - {revokeDialog.session?.role || 'role'}</span>
+                  </div>
+                  <button
+                    className="admin-session-icon-btn"
+                    type="button"
+                    onClick={closeRevokeDialog}
+                    disabled={loading}
+                    aria-label="Fermer"
+                  >
+                    <X size={18} />
+                  </button>
+                </div>
+
+                <div className="admin-session-modal-body">
+                  <p>Veuillez saisir le motif de révocation. Ce motif sera conservé dans l’audit de sécurité.</p>
+                  <label className="admin-session-reason-label">
+                    Motif de révocation *
+                    <textarea
+                      value={revokeReason}
+                      onChange={(e) => setRevokeReason(e.target.value)}
+                      placeholder="Exemple : appareil perdu, activité suspecte, demande utilisateur..."
+                      rows={4}
+                      maxLength={140}
+                      disabled={loading}
+                      autoFocus
+                    />
+                  </label>
+                  <div className="admin-session-reason-count">{safeText(revokeReason).length}/140</div>
+                </div>
+
+                <div className="admin-session-modal-actions">
+                  <button className="admin-btn" type="button" onClick={closeRevokeDialog} disabled={loading}>Annuler</button>
+                  <button className="admin-btn danger" type="button" onClick={confirmRevoke} disabled={loading || safeText(revokeReason).length < 5}>
+                    <Ban size={16} />
+                    <span>Confirmer</span>
+                  </button>
+                </div>
+              </div>
+            </div>
+          ) : null}
         </div>
       </div>
     </div>

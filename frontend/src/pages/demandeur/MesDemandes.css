@@ -1,0 +1,149 @@
+.app-layout {
+  display: flex;
+  min-height: 100vh;
+  background: #f9fafb;
+}
+
+.main-container {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.main-content {
+  flex: 1;
+  padding: 1.5rem;
+  overflow-y: auto;
+}
+
+.mes-demandes-page {
+  animation: fadeIn 0.3s ease-out;
+}
+
+.demandes-table-container {
+  background: white;
+  border-radius: 12px;
+  border: 1px solid #e5e7eb;
+  overflow: hidden;
+}
+
+.demandes-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.demandes-table th {
+  background: #f9fafb;
+  padding: 1rem;
+  text-align: left;
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: #6b7280;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  border-bottom: 1px solid #e5e7eb;
+}
+
+.demandes-table td {
+  padding: 1rem;
+  border-bottom: 1px solid #f3f4f6;
+  font-size: 0.875rem;
+  color: #1f2937;
+}
+
+.demandes-table tbody tr {
+  transition: all 0.2s ease;
+  animation: fadeInUp 0.3s ease-out backwards;
+}
+
+.demandes-table tbody tr:hover {
+  background: #f9fafb;
+}
+
+.ref-cell {
+  font-family: monospace;
+  font-weight: 500;
+  color: #059669;
+}
+
+.product-cell {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.product-cell svg {
+  color: #6b7280;
+}
+
+.product-name {
+  display: block;
+  font-weight: 500;
+}
+
+.product-code {
+  display: block;
+  font-size: 0.75rem;
+  color: #9ca3af;
+  font-family: monospace;
+}
+
+.quantity-cell {
+  font-weight: 600;
+}
+
+.date-cell {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  color: #6b7280;
+}
+
+.statut-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.375rem;
+  padding: 0.375rem 0.75rem;
+  border-radius: 20px;
+  font-size: 0.75rem;
+  font-weight: 500;
+}
+
+.statut-badge.statut-attente {
+  background: #fef3c7;
+  color: #d97706;
+}
+
+.statut-badge.statut-validee {
+  background: #d1fae5;
+  color: #059669;
+}
+
+.statut-badge.statut-rejetee {
+  background: #fee2e2;
+  color: #dc2626;
+}
+
+.demandes-footer {
+  margin-top: 1rem;
+  padding: 0.75rem;
+  color: #6b7280;
+  font-size: 0.875rem;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes fadeInUp {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}

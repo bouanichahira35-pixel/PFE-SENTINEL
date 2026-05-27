@@ -146,6 +146,8 @@ let intervalId = null;
 
 function startPurchaseOrderRemindersJob() {
   if (started) return;
+  if (String(process.env.PO_REMINDERS_JOB_ENABLED || 'true').trim().toLowerCase() === 'false') return;
+
   started = true;
 
   const everyMinutes = Math.max(2, Math.min(120, Number(process.env.PO_REMINDERS_EVERY_MINUTES || 10)));

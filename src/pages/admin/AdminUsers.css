@@ -63,7 +63,7 @@
 
 .users-filters {
   display: grid;
-  grid-template-columns: 1.6fr 1fr 1fr 1.2fr auto;
+  grid-template-columns: 1.6fr 1fr 1fr 1.2fr auto auto;
   gap: 10px;
   align-items: center;
   margin-bottom: 12px;
@@ -567,4 +567,3 @@
     display: none;
   }
 }
-

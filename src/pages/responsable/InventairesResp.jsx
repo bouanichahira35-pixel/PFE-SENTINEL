@@ -20,6 +20,21 @@ function formatDt(value) {
 
 const ACTIVE_STATUSES = new Set(['A_FAIRE', 'EN_COURS', 'A_VALIDER', 'A_RECOMPTER']);
 
+function assignedMagasiniersLabel(inv) {
+  const names = [];
+  const seen = new Set();
+  const pushName = (u) => {
+    const name = String(u?.username || '').trim();
+    if (!name || seen.has(name)) return;
+    seen.add(name);
+    names.push(name);
+  };
+
+  if (Array.isArray(inv?.magasinier_ids)) inv.magasinier_ids.forEach(pushName);
+  pushName(inv?.magasinier_id);
+  return names.length ? names.join(', ') : '-';
+}
+
 const InventairesResp = ({ userName, onLogout }) => {
   const toast = useToast();
   const navigate = useNavigate();
@@ -79,7 +94,7 @@ const InventairesResp = ({ userName, onLogout }) => {
                     <strong>Lancement & suivi</strong>
                     <ol>
                       <li>Définir le périmètre (GLOBAL ou TOURNANT).</li>
-                      <li>Assigner le magasinier et la date prévue.</li>
+                      <li>Assigner un ou plusieurs magasiniers et la date prévue.</li>
                       <li>Suivre l'avancement puis valider à la fin.</li>
                     </ol>
                   </div>
@@ -130,7 +145,7 @@ const InventairesResp = ({ userName, onLogout }) => {
                       </div>
                       <div className="inv-session-sub">{String(s.type_inventaire || '-')}</div>
                       <div className="inv-session-meta">
-                        Lancé: {formatDt(s.date_lancement || s.createdAt)} — Magasinier: {s.magasinier_id?.username || '-'}
+                        Lancé: {formatDt(s.date_lancement || s.createdAt)} — Magasiniers: {assignedMagasiniersLabel(s)}
                       </div>
                     </button>
                   ))}
@@ -166,7 +181,7 @@ const InventairesResp = ({ userName, onLogout }) => {
                       <div className="inv-line">
                         <div className="inv-line-main"><strong>Affectation</strong></div>
                         <div className="inv-line-kv">
-                          <span>Magasinier: <strong>{activeInventory.magasinier_id?.username || '-'}</strong></span>
+                          <span>Magasiniers: <strong>{assignedMagasiniersLabel(activeInventory)}</strong></span>
                           <span>Date prévue: <strong>{formatDt(activeInventory.date_prevue)}</strong></span>
                         </div>
                       </div>

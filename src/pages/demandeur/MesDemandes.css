@@ -32,7 +32,7 @@
 
 .demandes-table {
   width: 100%;
-  min-width: 720px;
+  min-width: 860px;
   border-collapse: collapse;
   table-layout: fixed;
 }
@@ -147,7 +147,7 @@
 }
 
 .actions-col {
-  width: 140px;
+  width: 230px;
 }
 
 .actions-cell {
@@ -159,7 +159,15 @@
   font-weight: 700;
 }
 
-.btn-edit-request {
+.request-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.btn-edit-request,
+.btn-delete-request {
   border: 1px solid var(--color-border);
   border-radius: 0.75rem;
   padding: 0.45rem 0.6rem;
@@ -172,8 +180,20 @@
   gap: 0.4rem;
 }
 
-.btn-edit-request:hover {
+.btn-edit-request:hover,
+.btn-delete-request:hover {
   background: var(--color-bg-secondary);
+}
+
+.btn-delete-request {
+  border-color: #fecaca;
+  color: #b91c1c;
+}
+
+.btn-edit-request:disabled,
+.btn-delete-request:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
 }
 
 .receipt-row {
@@ -220,6 +240,90 @@
   place-items: center;
   padding: 1rem;
   z-index: 50;
+}
+
+.dem-delete-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(15, 23, 42, 0.55);
+  backdrop-filter: blur(4px);
+  display: grid;
+  place-items: center;
+  padding: 1rem;
+  z-index: 55;
+}
+
+.dem-delete-content {
+  width: min(460px, 100%);
+  background: var(--color-bg-primary);
+  border-radius: 16px;
+  border: 1px solid var(--color-border);
+  box-shadow: 0 20px 60px rgba(0,0,0,0.25);
+  padding: 1.25rem;
+  position: relative;
+}
+
+.dem-delete-icon {
+  width: 44px;
+  height: 44px;
+  border-radius: 999px;
+  display: grid;
+  place-items: center;
+  color: #b91c1c;
+  background: #fee2e2;
+}
+
+.dem-delete-content h2 {
+  margin: 0.85rem 0 0.35rem 0;
+  color: var(--color-text-primary);
+  font-size: 1.05rem;
+  font-weight: 900;
+}
+
+.dem-delete-content p {
+  margin: 0;
+  color: var(--color-text-secondary);
+  font-weight: 700;
+  line-height: 1.45;
+}
+
+.dem-delete-summary {
+  margin-top: 0.9rem;
+  padding: 0.8rem;
+  border: 1px solid var(--color-border);
+  border-radius: 12px;
+  display: grid;
+  gap: 0.25rem;
+  color: var(--color-text-primary);
+}
+
+.dem-delete-summary span {
+  color: var(--color-text-secondary);
+  font-size: 0.86rem;
+  font-weight: 700;
+}
+
+.dem-delete-actions {
+  margin-top: 1rem;
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+
+.btn-confirm-delete {
+  border: 0;
+  border-radius: 0.9rem;
+  padding: 0.65rem 0.9rem;
+  cursor: pointer;
+  font-weight: 900;
+  color: #ffffff;
+  background: #dc2626;
+}
+
+.btn-confirm-delete:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
 }
 
 .dem-edit-content {
@@ -377,4 +481,3 @@
     transform: translateY(0);
   }
 }
-

@@ -9,7 +9,7 @@
   align-items: center;
   justify-content: center;
   z-index: 9999;
-  transition: opacity 0.5s ease-out;
+  transition: opacity 0.18s ease-out;
 }
 
 .splash-screen.fade-out {
@@ -18,7 +18,7 @@
 
 .splash-content {
   text-align: center;
-  animation: fadeInUp 0.6s ease-out;
+  animation: fadeInUp 0.24s ease-out;
 }
 
 .splash-logo-container {
@@ -28,7 +28,7 @@
 .splash-logo {
   width: 120px;
   height: auto;
-  animation: pulse 2s ease-in-out infinite;
+  animation: pulse 0.9s ease-in-out infinite;
 }
 
 .splash-loader {
@@ -45,7 +45,7 @@
   height: 100%;
   background: linear-gradient(90deg, #1565c0, #1976d2, #1565c0);
   border-radius: 2px;
-  animation: loading 2s ease-in-out forwards;
+  animation: loading 0.45s ease-in-out forwards;
 }
 
 .splash-text {

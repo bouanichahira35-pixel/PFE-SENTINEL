@@ -77,6 +77,15 @@ export const OutboxRepo = {
     );
   },
 
+  async markRetryPending(id: string, message: string): Promise<void> {
+    const db = getDb();
+    const now = nowMs();
+    await db.runAsync(
+      `UPDATE outbox_events SET status='pending', updated_at=?, last_error=? WHERE id=?`,
+      [now, String(message || '').slice(0, 600), id]
+    );
+  },
+
   async markConflict(id: string, message: string): Promise<void> {
     const db = getDb();
     const now = nowMs();
@@ -98,4 +107,3 @@ function mapRow(row: any): OutboxRow {
     updatedAt: Number(row.updated_at),
   };
 }
-

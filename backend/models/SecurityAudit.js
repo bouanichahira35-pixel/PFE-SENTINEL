@@ -17,6 +17,7 @@ const securityAuditSchema = new mongoose.Schema(
         'email_sent',
         'email_failed',
         'user_status_changed',
+        'session_revoked',
         'sessions_revoked',
       ],
       required: true,

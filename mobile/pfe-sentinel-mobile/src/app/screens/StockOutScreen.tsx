@@ -1,13 +1,16 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { Text, View, StyleSheet } from 'react-native';
 import { Screen } from '../../ui/Screen';
 import { Input } from '../../ui/Input';
 import { Button } from '../../ui/Button';
+import { Card } from '../../ui/Card';
 import { colors } from '../../ui/theme';
 import { DeviceInfo } from '../../core/device/deviceInfo';
 import { SettingsStore } from '../../core/settings/settingsStore';
 import { PhotoService } from '../../core/services/photoService';
 import type { StockOutDraft } from '../../core/stock/stockOutDraft';
+import { ProductsRepo, type ProductRow } from '../../core/db/productsRepo';
+import { formatProductLabel } from '../lib/productDisplay';
 
 export function StockOutScreen(props: {
   productId: string;
@@ -21,19 +24,24 @@ export function StockOutScreen(props: {
   const [msg, setMsg] = useState('');
   const [saving, setSaving] = useState(false);
   const [photoBase64, setPhotoBase64] = useState<string | null>(null);
+  const [product, setProduct] = useState<ProductRow | null>(null);
 
   const quantity = useMemo(() => Number(qty), [qty]);
+
+  useEffect(() => {
+    ProductsRepo.getById(props.productId).then(setProduct).catch(() => setProduct(null));
+  }, [props.productId]);
 
   const takePhoto = async () => {
     setMsg('');
     try {
       const p = await PhotoService.takePhoto();
       if (!p?.base64) {
-        setMsg('Photo annulee');
+        setMsg('Photo annulée');
         return;
       }
       setPhotoBase64(p.base64);
-      setMsg('Photo ajoutee');
+      setMsg('Photo ajoutée');
     } catch (e: any) {
       setMsg(e?.message || 'Erreur photo');
     }
@@ -43,7 +51,7 @@ export function StockOutScreen(props: {
     setMsg('');
     setSaving(true);
     try {
-      if (!Number.isFinite(quantity) || quantity <= 0) throw new Error('Quantite invalide');
+      if (!Number.isFinite(quantity) || quantity <= 0) throw new Error('Quantité invalide');
       const meta = await DeviceInfo.getEventMeta();
       const site = await SettingsStore.getActiveSite();
 
@@ -65,25 +73,23 @@ export function StockOutScreen(props: {
   };
 
   return (
-    <Screen title="Sortie stock" onBack={props.onBack}>
-      <View style={styles.card}>
-        <Text style={styles.meta}>Produit: {props.productId.slice(-6)}</Text>
-        <Input label="Quantite" value={qty} onChangeText={setQty} keyboardType="numeric" />
-        <Input label="Beneficiaire" value={beneficiary} onChangeText={setBeneficiary} placeholder="Nom du beneficiaire" />
+    <Screen title="Sortie stock" onBack={props.onBack} scroll>
+      <Card>
+        <Text style={styles.meta}>Produit: {formatProductLabel(product, props.productId)}</Text>
+        <Input label="Quantité" value={qty} onChangeText={setQty} keyboardType="numeric" />
+        <Input label="Bénéficiaire" value={beneficiary} onChangeText={setBeneficiary} placeholder="Nom du bénéficiaire" />
         <Input label="Direction / laboratoire" value={direction} onChangeText={setDirection} placeholder="Ex: Laboratoire HSE" />
-        <Input label="Note" value={note} onChangeText={setNote} placeholder="Motif ou observation terrain" />
-        {msg ? <Text style={[styles.msg, { color: msg.includes('Photo ajoutee') ? colors.ok : colors.warn }]}>{msg}</Text> : null}
-        <Button title={photoBase64 ? 'Photo preuve ajoutee' : 'Ajouter une photo preuve'} onPress={takePhoto} variant="ghost" />
+        <Input label="Note (optionnel)" value={note} onChangeText={setNote} placeholder="Motif ou observation terrain" multiline />
+        {msg ? <Text style={[styles.msg, { color: msg.includes('Photo ajoutée') ? colors.ok : colors.warn }]}>{msg}</Text> : null}
+        <Button title={photoBase64 ? 'Photo preuve ajoutée' : 'Ajouter une photo preuve'} onPress={takePhoto} variant="ghost" />
         <View style={{ height: 10 }} />
-        <Button title="Continuer vers controle HSE" onPress={continueToHse} loading={saving} />
-      </View>
+        <Button title="Continuer vers contrôle HSE" onPress={continueToHse} loading={saving} />
+      </Card>
     </Screen>
   );
 }
 
 const styles = StyleSheet.create({
-  card: { borderWidth: 1, borderColor: colors.border, backgroundColor: colors.card, borderRadius: 14, padding: 12 },
   meta: { color: colors.muted, marginBottom: 8 },
   msg: { marginBottom: 10, fontWeight: '800' },
 });
-

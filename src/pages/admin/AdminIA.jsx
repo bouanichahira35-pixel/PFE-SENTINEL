@@ -5,6 +5,7 @@ import HeaderPage from '../../components/shared/HeaderPage';
 import LoadingSpinner from '../../components/shared/LoadingSpinner';
 import { get, patch, post } from '../../services/api';
 import { useToast } from '../../components/shared/Toast';
+import { getUiErrorMessage } from '../../services/uiError';
 import './AdminDashboard.css';
 import './AdminIA.css';
 
@@ -74,7 +75,7 @@ const AdminIA = ({ userName, onLogout }) => {
       const value = config?.value;
       if (value && typeof value === 'object') setAiConfig(value);
     } catch (err) {
-      toast.error(err.message || 'Erreur chargement supervision IA');
+      toast.error(getUiErrorMessage(err, 'Erreur chargement supervision IA'));
     } finally {
       setIsLoading(false);
     }
@@ -91,7 +92,7 @@ const AdminIA = ({ userName, onLogout }) => {
       toast.success('Configuration IA enregistrée.');
       await loadAll();
     } catch (err) {
-      toast.error(err.message || 'Enregistrement configuration IA échoué');
+      toast.error(getUiErrorMessage(err, 'Enregistrement configuration IA échoué'));
     } finally {
       setIsSaving(false);
     }
@@ -104,7 +105,7 @@ const AdminIA = ({ userName, onLogout }) => {
       toast.success('Action lancée avec succès.');
       await loadAll();
     } catch (err) {
-      toast.error(err.message || 'Impossible de lancer l’action. Veuillez réessayer.');
+      toast.error(getUiErrorMessage(err, 'Impossible de lancer l’action. Veuillez réessayer.'));
     } finally {
       setIsSaving(false);
     }
@@ -117,7 +118,7 @@ const AdminIA = ({ userName, onLogout }) => {
       toast.success('Action lancée avec succès.');
       await loadAll();
     } catch (err) {
-      toast.error(err.message || 'Impossible de lancer l’action. Veuillez réessayer.');
+      toast.error(getUiErrorMessage(err, 'Impossible de lancer l’action. Veuillez réessayer.'));
     } finally {
       setIsSaving(false);
     }

@@ -1,0 +1,177 @@
+.role-selection-page {
+  min-height: 100vh;
+  background: linear-gradient(135deg, #e8f4fc 0%, #f0f7fc 50%, #e1eff9 100%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 2rem;
+  position: relative;
+  overflow: hidden;
+}
+
+.role-shape {
+  position: absolute;
+  border-radius: 50%;
+  background: rgba(21, 101, 192, 0.06);
+}
+
+.role-shape-1 {
+  width: 400px;
+  height: 400px;
+  top: -150px;
+  left: -150px;
+}
+
+.role-shape-2 {
+  width: 500px;
+  height: 500px;
+  bottom: -200px;
+  right: -200px;
+}
+
+.role-shape-3 {
+  width: 300px;
+  height: 300px;
+  top: 40%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+}
+
+.role-selection-container {
+  z-index: 1;
+  text-align: center;
+}
+
+.role-header {
+  margin-bottom: 3rem;
+  animation: fadeInDown 0.5s ease-out;
+}
+
+.role-logo {
+  width: 100px;
+  height: auto;
+  margin-bottom: 1.5rem;
+}
+
+.role-main-title {
+  font-size: 2rem;
+  font-weight: 700;
+  color: #1f2937;
+  margin: 0 0 0.5rem 0;
+}
+
+.role-subtitle {
+  font-size: 1rem;
+  color: #6b7280;
+  margin: 0;
+}
+
+.role-cards {
+  display: flex;
+  gap: 1.5rem;
+  justify-content: center;
+  flex-wrap: wrap;
+}
+
+.role-card {
+  width: 240px;
+  padding: 2rem 1.5rem;
+  background: white;
+  border: 2px solid #e5e7eb;
+  border-radius: 16px;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  animation: fadeInUp 0.5s ease-out backwards;
+}
+
+.role-card:hover {
+  transform: translateY(-8px);
+  border-color: var(--role-color);
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.12);
+}
+
+.role-icon {
+  width: 64px;
+  height: 64px;
+  margin: 0 auto 1rem;
+  border-radius: 16px;
+  background: var(--role-color);
+  color: white;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.3s ease;
+}
+
+.role-card:hover .role-icon {
+  transform: scale(1.1);
+}
+
+.role-title {
+  font-size: 1.25rem;
+  font-weight: 700;
+  color: var(--role-color);
+  margin: 0 0 0.5rem 0;
+  letter-spacing: 1px;
+}
+
+.role-desc {
+  font-size: 0.875rem;
+  color: #6b7280;
+  margin: 0;
+  line-height: 1.5;
+}
+
+.role-footer {
+  margin-top: 3rem;
+  animation: fadeIn 0.5s ease-out 0.3s backwards;
+}
+
+.role-footer p {
+  font-size: 0.875rem;
+  color: #9ca3af;
+  margin: 0;
+}
+
+@keyframes fadeInDown {
+  from {
+    opacity: 0;
+    transform: translateY(-20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes fadeInUp {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@media (max-width: 768px) {
+  .role-cards {
+    flex-direction: column;
+    align-items: center;
+  }
+
+  .role-card {
+    width: 100%;
+    max-width: 300px;
+  }
+
+  .role-main-title {
+    font-size: 1.5rem;
+  }
+}

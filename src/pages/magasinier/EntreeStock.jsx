@@ -1,6 +1,6 @@
 import { useCallback, useMemo, useRef, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
-import { ArrowDownToLine, Calendar, Hash, Info, Package, Save, ScanLine, Truck, X } from 'lucide-react';
+import { ArrowDownToLine, Calendar, Camera, Hash, Info, Package, Save, ScanLine, Truck, X } from 'lucide-react';
 import SidebarMag from '../../components/magasinier/SidebarMag';
 import HeaderPage from '../../components/shared/HeaderPage';
 import LoadingSpinner from '../../components/shared/LoadingSpinner';
@@ -30,7 +30,9 @@ const EntreeStock = ({ userName, onLogout }) => {
   const [attachmentFile, setAttachmentFile] = useState(null);
   const [errors, setErrors] = useState({});
   const formOpenedAtRef = useRef(Date.now());
+  const quantiteInputRef = useRef(null);
 
+  const [recentProductCodes, setRecentProductCodes] = useState(() => loadRecentList('mag_recent_product_codes_v1'));
   const [recentSuppliers, setRecentSuppliers] = useState(() => loadRecentList('mag_recent_suppliers_v1'));
   const [recentDeliveryNotes, setRecentDeliveryNotes] = useState(() => loadRecentList('mag_recent_delivery_notes_v1'));
 
@@ -84,6 +86,9 @@ const EntreeStock = ({ userName, onLogout }) => {
       const mapped = mapProductFromLookup(p);
       setProductInfo(mapped);
       setErrors((prev) => ({ ...prev, product: undefined }));
+      saveRecentValue('mag_recent_product_codes_v1', code);
+      setRecentProductCodes(loadRecentList('mag_recent_product_codes_v1'));
+      if (options.focusNext) requestAnimationFrame(() => quantiteInputRef.current?.focus?.());
       if (!options.silent) toast.success('Produit identifié');
       return mapped;
     } catch (err) {
@@ -97,15 +102,16 @@ const EntreeStock = ({ userName, onLogout }) => {
   }, [mapProductFromLookup, toast]);
 
   const handleScanBarcode = useCallback(() => {
-    lookupAndSetProduct(formData.codeBarres);
+    lookupAndSetProduct(formData.codeBarres, { focusNext: true });
   }, [formData.codeBarres, lookupAndSetProduct]);
 
   const handleDetectedQr = useCallback((value) => {
-    if (!value) return;
+    const scanned = String(value || '').trim();
+    if (!scanned) return;
     if (scanTarget !== 'codeBarres') return;
 
-    setFormData((prev) => ({ ...prev, codeBarres: value }));
-    lookupAndSetProduct(value);
+    setFormData((prev) => ({ ...prev, codeBarres: scanned }));
+    lookupAndSetProduct(scanned, { focusNext: true });
   }, [lookupAndSetProduct, scanTarget]);
 
   const validateForm = useCallback(() => {
@@ -255,6 +261,7 @@ const EntreeStock = ({ userName, onLogout }) => {
                         id="codeBarres"
                         type="text"
                         maxLength={80}
+                        list="recentProductCodes"
                         value={formData.codeBarres}
                         onChange={(e) => setFormData((prev) => ({ ...prev, codeBarres: e.target.value }))}
                         placeholder="Scanner ou saisir le code"
@@ -265,12 +272,15 @@ const EntreeStock = ({ userName, onLogout }) => {
                           }
                         }}
                       />
+                      <datalist id="recentProductCodes">
+                        {recentProductCodes.map((v) => <option key={v} value={v} />)}
+                      </datalist>
                       <button type="button" className="scan-btn" onClick={handleScanBarcode}>
                         <ScanLine size={18} />
                         Scanner
                       </button>
                       <button type="button" className="scan-btn" onClick={() => setScanTarget('codeBarres')}>
-                        <ScanLine size={18} />
+                        <Camera size={18} />
                         Caméra
                       </button>
                     </div>
@@ -295,6 +305,7 @@ const EntreeStock = ({ userName, onLogout }) => {
 
                 {scanTarget && (
                   <InlineQrScanner
+                    mode="any"
                     onDetected={handleDetectedQr}
                     onClose={() => setScanTarget('')}
                   />
@@ -309,6 +320,7 @@ const EntreeStock = ({ userName, onLogout }) => {
                       <div className="input-with-unit">
                         <input
                           id="quantite"
+                          ref={quantiteInputRef}
                           type="number"
                           min="1"
                           max="1000000000"

@@ -3,11 +3,13 @@ import { Text, View, StyleSheet } from 'react-native';
 import NetInfo from '@react-native-community/netinfo';
 import { Screen } from '../../ui/Screen';
 import { Button } from '../../ui/Button';
+import { Card } from '../../ui/Card';
 import { colors } from '../../ui/theme';
 import { OutboxRepo } from '../../core/db/outboxRepo';
-import { SyncService } from '../../core/services/syncService';
+import { describeConnectionState, formatSyncSummary, SyncService } from '../../core/services/syncService';
 import { SyncStateStore } from '../../core/settings/syncStateStore';
 import { SessionStore } from '../../core/session/sessionStore';
+import { SettingsStore } from '../../core/settings/settingsStore';
 
 export function DashboardScreen(props: {
   onOpenMission: () => void;
@@ -21,9 +23,13 @@ export function DashboardScreen(props: {
   onLogout: () => void;
 }) {
   const [online, setOnline] = useState(true);
+  const [connectionLabel, setConnectionLabel] = useState<'ONLINE' | 'FAIBLE' | 'OFFLINE'>('ONLINE');
   const [pending, setPending] = useState(0);
   const [syncing, setSyncing] = useState(false);
   const [last, setLast] = useState<{ at: number | null; summary: string | null }>({ at: null, summary: null });
+  const [syncMsg, setSyncMsg] = useState<string>('');
+  const [site, setSite] = useState<string>('');
+  const [apiBaseUrl, setApiBaseUrl] = useState<string>('');
 
   const lastLabel = useMemo(() => {
     if (!last.at) return '—';
@@ -35,12 +41,18 @@ export function DashboardScreen(props: {
     setPending(p);
     const st = await SyncStateStore.get().catch(() => ({ lastSyncAt: null, lastSyncSummary: null }));
     setLast({ at: st.lastSyncAt, summary: st.lastSyncSummary });
+    setSite(await SettingsStore.getActiveSite().catch(() => ''));
+    setApiBaseUrl(await SettingsStore.getApiBaseUrl().catch(() => ''));
   };
 
   useEffect(() => {
     refresh();
-    const unsub = NetInfo.addEventListener((state) => setOnline(Boolean(state.isConnected)));
-    const t = setInterval(refresh, 1500);
+    const unsub = NetInfo.addEventListener((state) => {
+      const connection = describeConnectionState(state);
+      setOnline(connection.canSync);
+      setConnectionLabel(connection.label);
+    });
+    const t = setInterval(refresh, 5000);
     return () => {
       unsub();
       clearInterval(t);
@@ -49,8 +61,12 @@ export function DashboardScreen(props: {
 
   const doSync = async () => {
     setSyncing(true);
+    setSyncMsg('');
     try {
-      await SyncService.pushPending();
+      const result = await SyncService.pushPending();
+      setSyncMsg(formatSyncSummary(result));
+    } catch (e: any) {
+      setSyncMsg(e?.message || 'Erreur synchronisation');
     } finally {
       setSyncing(false);
       refresh();
@@ -64,20 +80,24 @@ export function DashboardScreen(props: {
 
   return (
     <Screen
-      title="Dashboard"
+      title="Tableau de bord"
+      scroll
       right={
-        <Text style={{ color: online ? colors.ok : colors.warn, fontWeight: '900' }}>
-          {online ? 'ONLINE' : 'OFFLINE'}
+        <Text style={{ color: connectionLabel === 'ONLINE' ? colors.ok : colors.warn, fontWeight: '900' }}>
+          {connectionLabel}
         </Text>
       }
     >
-      <View style={styles.card}>
+      <Card>
         <Text style={styles.k}>Outbox en attente</Text>
         <Text style={styles.v}>{pending}</Text>
+        <Text style={styles.meta}>Site: {site || '—'}</Text>
+        <Text style={styles.meta}>Backend: {apiBaseUrl || '—'}</Text>
         <Text style={styles.meta}>Dernière sync: {lastLabel}</Text>
         {last.summary ? <Text style={styles.meta}>{last.summary}</Text> : null}
+        {syncMsg ? <Text style={[styles.meta, { color: syncMsg.includes('Erreur') || syncMsg.includes('attente') || syncMsg.includes('faible') ? colors.warn : colors.ok }]}>{syncMsg}</Text> : null}
         <Button title="Synchroniser maintenant" onPress={doSync} loading={syncing} disabled={!online || pending === 0} />
-      </View>
+      </Card>
 
       <View style={{ height: 12 }} />
       <Button title="Mission (précharger)" onPress={props.onOpenMission} />
@@ -94,7 +114,6 @@ export function DashboardScreen(props: {
 }
 
 const styles = StyleSheet.create({
-  card: { borderWidth: 1, borderColor: colors.border, backgroundColor: colors.card, borderRadius: 14, padding: 12 },
   k: { color: colors.muted, fontWeight: '800' },
   v: { color: colors.text, fontSize: 28, fontWeight: '900', marginTop: 4, marginBottom: 4 },
   meta: { color: colors.muted, marginBottom: 6 },

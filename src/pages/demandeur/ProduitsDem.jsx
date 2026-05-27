@@ -6,6 +6,7 @@ import LoadingSpinner from '../../components/shared/LoadingSpinner';
 import ProtectedImage from '../../components/shared/ProtectedImage';
 import { useToast } from '../../components/shared/Toast';
 import { get, post } from '../../services/api';
+import { getUiErrorMessage } from '../../services/uiError';
 import { asPositiveInt, isSafeText, sanitizeText } from '../../utils/formGuards';
 import { normalizeChemicalClass } from '../../utils/chemicalRegister';
 import './ProduitsDem.css';
@@ -109,7 +110,7 @@ const ProduitsDem = ({ userName, onLogout }) => {
         }));
       setProducts(mapped);
     } catch (err) {
-      toast.error(err.message || 'Impossible de charger les produits');
+      toast.error(getUiErrorMessage(err, 'Impossible de charger les produits'));
     } finally {
       setIsLoadingProducts(false);
     }
@@ -203,7 +204,7 @@ const ProduitsDem = ({ userName, onLogout }) => {
       setSelectedProduct(null);
       setFormData({ quantite: '', motif: '', urgence: 'normale', commentaire: '', directionLaboratoire: '', beneficiaire: demandeurName });
     } catch (err) {
-      toast.error(err.message || "Echec d'envoi de la demande");
+      toast.error(getUiErrorMessage(err, "Echec d'envoi de la demande"));
     } finally {
       setIsSubmitting(false);
     }

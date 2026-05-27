@@ -2,18 +2,25 @@ import { useEffect, useState } from 'react';
 import logoETAP from '../../assets/logoETAP.png';
 import './SplashScreen.css';
 
+const SPLASH_DURATION_MS = 450;
+const SPLASH_FADE_MS = 180;
+
 const SplashScreen = ({ onComplete }) => {
   const [fadeOut, setFadeOut] = useState(false);
 
   useEffect(() => {
+    let completeTimer = null;
     const timer = setTimeout(() => {
       setFadeOut(true);
-      setTimeout(() => {
+      completeTimer = setTimeout(() => {
         onComplete();
-      }, 500);
-    }, 2500);
+      }, SPLASH_FADE_MS);
+    }, SPLASH_DURATION_MS);
 
-    return () => clearTimeout(timer);
+    return () => {
+      clearTimeout(timer);
+      if (completeTimer) clearTimeout(completeTimer);
+    };
   }, [onComplete]);
 
   return (

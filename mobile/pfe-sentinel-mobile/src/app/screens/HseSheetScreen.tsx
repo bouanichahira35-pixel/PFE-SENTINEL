@@ -1,16 +1,19 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { Text, View, StyleSheet, Pressable } from 'react-native';
 import { Screen } from '../../ui/Screen';
 import { Button } from '../../ui/Button';
+import { Card } from '../../ui/Card';
 import { colors } from '../../ui/theme';
 import { Input } from '../../ui/Input';
+import { ProductsRepo, type ProductRow } from '../../core/db/productsRepo';
 import type { HseAcknowledgement, StockOutDraft } from '../../core/stock/stockOutDraft';
+import { formatProductLabel } from '../lib/productDisplay';
 
 const CHECKS = [
-  'Produit verifie avant sortie',
+  'Produit vérifié avant sortie',
   'Consignes HSE lues',
   'EPI disponibles',
-  'Beneficiaire informe',
+  'Bénéficiaire informé',
 ];
 
 export function HseSheetScreen(props: {
@@ -20,9 +23,14 @@ export function HseSheetScreen(props: {
 }) {
   const [checked, setChecked] = useState<Record<string, boolean>>({});
   const [comment, setComment] = useState('');
+  const [product, setProduct] = useState<ProductRow | null>(null);
 
   const allChecked = useMemo(() => CHECKS.every((item) => checked[item]), [checked]);
   const riskLevel = props.draft.quantity >= 10 || Boolean(props.draft.photoBase64) ? 'sensitive' : 'standard';
+
+  useEffect(() => {
+    ProductsRepo.getById(props.draft.productId).then(setProduct).catch(() => setProduct(null));
+  }, [props.draft.productId]);
 
   const toggle = (item: string) => {
     setChecked((prev) => ({ ...prev, [item]: !prev[item] }));
@@ -38,10 +46,10 @@ export function HseSheetScreen(props: {
   };
 
   return (
-    <Screen title="Controle HSE" onBack={props.onBack}>
-      <View style={styles.card}>
-        <Text style={styles.title}>Validation securite avant sortie</Text>
-        <Text style={styles.meta}>Produit: {props.draft.productId.slice(-6)} • Quantite: {props.draft.quantity}</Text>
+    <Screen title="Contrôle HSE" onBack={props.onBack} scroll>
+      <Card>
+        <Text style={styles.title}>Validation sécurité avant sortie</Text>
+        <Text style={styles.meta}>Produit: {formatProductLabel(product, props.draft.productId)} • Quantité: {props.draft.quantity}</Text>
         <Text style={[styles.badge, riskLevel === 'sensitive' ? styles.sensitive : styles.standard]}>
           Risque {riskLevel === 'sensitive' ? 'sensible' : 'standard'}
         </Text>
@@ -57,14 +65,13 @@ export function HseSheetScreen(props: {
         ))}
 
         <Input label="Commentaire HSE (optionnel)" value={comment} onChangeText={setComment} placeholder="Observation terrain..." />
-        <Button title="Confirmer HSE et passer a la signature" onPress={confirm} disabled={!allChecked} />
-      </View>
+        <Button title="Confirmer HSE et passer à la signature" onPress={confirm} disabled={!allChecked} />
+      </Card>
     </Screen>
   );
 }
 
 const styles = StyleSheet.create({
-  card: { borderWidth: 1, borderColor: colors.border, backgroundColor: colors.card, borderRadius: 14, padding: 12 },
   title: { color: colors.text, fontSize: 16, fontWeight: '900' },
   meta: { color: colors.muted, marginTop: 6, marginBottom: 10 },
   badge: { alignSelf: 'flex-start', paddingHorizontal: 10, paddingVertical: 5, borderRadius: 999, fontWeight: '900', overflow: 'hidden' },
@@ -76,4 +83,3 @@ const styles = StyleSheet.create({
   boxText: { color: colors.text, fontWeight: '900' },
   checkText: { color: colors.text, flex: 1, fontWeight: '700' },
 });
-

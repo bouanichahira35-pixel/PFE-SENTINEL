@@ -83,6 +83,8 @@ async function runGovernedAutoTrain() {
 
 function startAiAutoTrainingJob() {
   if (intervalRef) return;
+  if (String(process.env.AI_AUTO_TRAINING_JOB_ENABLED || 'true').trim().toLowerCase() === 'false') return;
+
   const everyMinutes = Number(process.env.AI_AUTO_TRAINING_EVERY_MINUTES || 360);
   const intervalMs = Math.max(5, everyMinutes) * 60 * 1000;
   intervalRef = setInterval(() => {

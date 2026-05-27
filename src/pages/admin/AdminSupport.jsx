@@ -5,6 +5,7 @@ import HeaderPage from '../../components/shared/HeaderPage';
 import LoadingSpinner from '../../components/shared/LoadingSpinner';
 import { get, patch, post } from '../../services/api';
 import { useToast } from '../../components/shared/Toast';
+import { getUiErrorMessage } from '../../services/uiError';
 import './AdminDashboard.css';
 import './AdminSupport.css';
 
@@ -131,7 +132,7 @@ export default function AdminSupport({ userName, onLogout }) {
     try {
       await Promise.all([loadSummary(), loadTickets({ offset: 0 })]);
     } catch (err) {
-      toast.error(err.message || 'Chargement support échoué');
+      toast.error(getUiErrorMessage(err, 'Chargement support échoué'));
     } finally {
       setLoading(false);
     }
@@ -145,7 +146,7 @@ export default function AdminSupport({ userName, onLogout }) {
       const res = await get(`/admin/support/tickets/${encodeURIComponent(tid)}`);
       setTicket(res?.ticket || null);
     } catch (err) {
-      toast.error(err.message || 'Chargement ticket échoué');
+      toast.error(getUiErrorMessage(err, 'Chargement ticket échoué'));
       setTicket(null);
     } finally {
       setDetailLoading(false);
@@ -186,7 +187,7 @@ export default function AdminSupport({ userName, onLogout }) {
       toast.success('Statut mis à jour.');
       await Promise.all([loadSummary(), loadTickets({ offset: ticketsRes?.page?.offset || 0 }), loadDetail(selectedId)]);
     } catch (err) {
-      toast.error(err.message || 'Mise à jour échouée');
+      toast.error(getUiErrorMessage(err, 'Mise à jour échouée'));
     }
   }, [loadDetail, loadSummary, loadTickets, selectedId, ticketsRes?.page?.offset, toast]);
 
@@ -197,7 +198,7 @@ export default function AdminSupport({ userName, onLogout }) {
       toast.success('Priorité mise à jour.');
       await Promise.all([loadSummary(), loadTickets({ offset: ticketsRes?.page?.offset || 0 }), loadDetail(selectedId)]);
     } catch (err) {
-      toast.error(err.message || 'Mise à jour échouée');
+      toast.error(getUiErrorMessage(err, 'Mise à jour échouée'));
     }
   }, [loadDetail, loadSummary, loadTickets, selectedId, ticketsRes?.page?.offset, toast]);
 
@@ -215,7 +216,7 @@ export default function AdminSupport({ userName, onLogout }) {
       setReplyDraft('');
       await Promise.all([loadSummary(), loadTickets({ offset: ticketsRes?.page?.offset || 0 }), loadDetail(selectedId)]);
     } catch (err) {
-      toast.error(err.message || 'Réponse échouée');
+      toast.error(getUiErrorMessage(err, 'Réponse échouée'));
     } finally {
       setReplySending(false);
     }
@@ -466,4 +467,3 @@ export default function AdminSupport({ userName, onLogout }) {
     </div>
   );
 }
-

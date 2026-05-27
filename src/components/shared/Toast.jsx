@@ -1,5 +1,6 @@
 import { useRef, useState, createContext, useContext } from 'react';
 import { CheckCircle, XCircle, AlertTriangle, Info, X } from 'lucide-react';
+import { sanitizeUiText } from '../../services/uiError';
 import './Toast.css';
 
 const ToastContext = createContext(null);
@@ -17,9 +18,14 @@ export const ToastProvider = ({ children }) => {
   const idCounterRef = useRef(0);
 
   const addToast = (message, type = 'info', duration = 4000) => {
+    const raw = String(message ?? '');
+    const safeMessage = type === 'error' || type === 'warning'
+      ? sanitizeUiText(raw, raw ? 'Action impossible. Veuillez réessayer.' : 'Une erreur est survenue.')
+      : raw;
+
     idCounterRef.current += 1;
     const id = `${Date.now()}-${idCounterRef.current}`;
-    setToasts(prev => [...prev, { id, message, type }]);
+    setToasts(prev => [...prev, { id, message: safeMessage, type }]);
     
     if (duration > 0) {
       setTimeout(() => {

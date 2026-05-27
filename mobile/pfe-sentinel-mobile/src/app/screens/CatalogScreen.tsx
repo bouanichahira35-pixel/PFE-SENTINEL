@@ -30,6 +30,7 @@ export function CatalogScreen(props: { onBack: () => void; onOpenProduct: (id: s
         data={items}
         keyExtractor={(it) => it.id}
         ItemSeparatorComponent={() => <View style={{ height: 8 }} />}
+        contentContainerStyle={{ paddingBottom: 20 }}
         renderItem={({ item }) => (
           <Pressable style={styles.row} onPress={() => props.onOpenProduct(item.id)}>
             <Text style={styles.name}>{item.name || item.codeProduct}</Text>
@@ -46,4 +47,3 @@ const styles = StyleSheet.create({
   name: { color: colors.text, fontWeight: '900' },
   meta: { color: colors.muted, marginTop: 4 },
 });
-

@@ -33,6 +33,21 @@ function perimeterLabel(inv) {
   return [zone, fam, cat].filter(Boolean).join(' | ') || '-';
 }
 
+function assignedMagasiniersLabel(inv) {
+  const names = [];
+  const seen = new Set();
+  const pushName = (u) => {
+    const name = String(u?.username || '').trim();
+    if (!name || seen.has(name)) return;
+    seen.add(name);
+    names.push(name);
+  };
+
+  if (Array.isArray(inv?.magasinier_ids)) inv.magasinier_ids.forEach(pushName);
+  pushName(inv?.magasinier_id);
+  return names.length ? names.join(', ') : '-';
+}
+
 const InventairesAValiderResp = ({ userName, onLogout }) => {
   const toast = useToast();
   const navigate = useNavigate();
@@ -70,7 +85,7 @@ const InventairesAValiderResp = ({ userName, onLogout }) => {
       const inv = x.inventory || {};
       const ref = String(inv.reference || '').toLowerCase();
       const mag = String(inv.magasin_id?.name || '').toLowerCase();
-      const magUser = String(inv.magasinier_id?.username || '').toLowerCase();
+      const magUser = assignedMagasiniersLabel(inv).toLowerCase();
       return ref.includes(q) || mag.includes(q) || magUser.includes(q);
     });
   }, [items, query]);
@@ -148,7 +163,7 @@ const InventairesAValiderResp = ({ userName, onLogout }) => {
                 <div className="inv-validate-actions">
                   <div className="inv-validate-search">
                     <Search size={16} />
-                    <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Rechercher (réf, magasin, magasinier)..." />
+                    <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Rechercher (réf, magasin, magasiniers)..." />
                   </div>
                   <button className="inv-btn primary" type="button" onClick={() => navigate('/responsable/inventaires/lancer')} disabled={isLoading}>
                     <Rocket size={16} /> Lancer un inventaire
@@ -195,7 +210,7 @@ const InventairesAValiderResp = ({ userName, onLogout }) => {
                             <span>Type: <strong>{String(inv.type_inventaire) === 'GLOBAL' ? 'Général' : 'Tournant'}</strong></span>
                             <span>Magasin: <strong>{inv.magasin_id?.name || '-'}</strong></span>
                             <span>Périmètre: <strong>{perimeterLabel(inv)}</strong></span>
-                            <span>Magasinier: <strong>{inv.magasinier_id?.username || '-'}</strong></span>
+                            <span>Magasiniers: <strong>{assignedMagasiniersLabel(inv)}</strong></span>
                             <span>Soumis: <strong>{formatDt(inv.submitted_at)}</strong></span>
                           </div>
                           <div className="inv-validate-stats">

@@ -6,6 +6,7 @@ import {
   Save,
   X,
   ScanLine,
+  Camera,
   Calendar,
   User,
   Hash,
@@ -22,6 +23,7 @@ import LoadingSpinner from '../../components/shared/LoadingSpinner';
 import InlineQrScanner from '../../components/shared/InlineQrScanner';
 import { useToast } from '../../components/shared/Toast';
 import { get, patch, post, uploadFile } from '../../services/api';
+import { getUiErrorMessage } from '../../services/uiError';
 import { asPositiveInt, isSafeText, sanitizeText } from '../../utils/formGuards';
 import { loadRecentList, saveRecentValue } from '../../utils/recentInputs';
 import './EntreeStock.css';
@@ -54,6 +56,7 @@ const SortieStock = ({ userName, onLogout }) => {
   const [recentDirections, setRecentDirections] = useState(() => loadRecentList('mag_recent_directions_v1'));
   const [recentBeneficiaries, setRecentBeneficiaries] = useState(() => loadRecentList('mag_recent_beneficiaries_v1'));
   const [recentWithdrawalPapers, setRecentWithdrawalPapers] = useState(() => loadRecentList('mag_recent_withdrawal_papers_v1'));
+  const [recentProductCodes, setRecentProductCodes] = useState(() => loadRecentList('mag_recent_product_codes_v1'));
 
   const [formData, setFormData] = useState({
     codeBarres: initialProduct?.code || '',
@@ -98,6 +101,8 @@ const SortieStock = ({ userName, onLogout }) => {
       const mapped = mapProductFromLookup(p);
       setProductInfo(mapped);
       setErrors((prev) => ({ ...prev, product: undefined }));
+      saveRecentValue('mag_recent_product_codes_v1', code);
+      setRecentProductCodes(loadRecentList('mag_recent_product_codes_v1'));
       if (!options.silent) toast.success(`Produit identifie: ${mapped.nom || mapped.code || ''}`);
       return mapped;
     } catch (err) {
@@ -172,7 +177,7 @@ const SortieStock = ({ userName, onLogout }) => {
       } catch (err) {
         setBondResolution(null);
         setErrors((prev) => ({ ...prev, internalBondQr: 'QR interne invalide ou expire' }));
-        if (!silent) toast.error(err.message || 'Verification QR bon interne impossible');
+        if (!silent) toast.error(getUiErrorMessage(err, 'Verification QR bon interne impossible'));
         return null;
       } finally {
         setIsResolvingBond(false);
@@ -312,7 +317,7 @@ const SortieStock = ({ userName, onLogout }) => {
       await resolveInternalBond(generated?.qr_value || '', { silent: true });
       toast.success(`Bon interne ${generated?.bond_id || ''} genere`);
     } catch (err) {
-      toast.error(err.message || 'Generation bon interne impossible');
+      toast.error(getUiErrorMessage(err, 'Generation bon interne impossible'));
     } finally {
       setIsGeneratingBond(false);
     }
@@ -341,7 +346,7 @@ const SortieStock = ({ userName, onLogout }) => {
       popup.document.close();
       popup.focus();
     } catch (err) {
-      toast.error(err.message || 'Impression bon interne impossible');
+      toast.error(getUiErrorMessage(err, 'Impression bon interne impossible'));
     }
   };
 
@@ -467,7 +472,7 @@ const SortieStock = ({ userName, onLogout }) => {
 
       navigate('/magasinier/historique');
     } catch (err) {
-      toast.error(err.message || 'Echec enregistrement sortie');
+      toast.error(getUiErrorMessage(err, 'Echec enregistrement sortie'));
     } finally {
       setIsSubmitting(false);
     }
@@ -521,16 +526,26 @@ const SortieStock = ({ userName, onLogout }) => {
                           id="codeBarres"
                           type="text"
                           maxLength={80}
+                          list="recentProductCodes"
                           value={formData.codeBarres}
                           onChange={(e) => setFormData({ ...formData, codeBarres: e.target.value })}
                           placeholder="Scanner ou saisir le code"
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter') {
+                              e.preventDefault();
+                              handleScanBarcode();
+                            }
+                          }}
                         />
+                        <datalist id="recentProductCodes">
+                          {recentProductCodes.map((v) => <option key={v} value={v} />)}
+                        </datalist>
                         <button type="button" className="scan-btn" onClick={handleScanBarcode}>
                           <ScanLine size={18} />
                           Scanner
                         </button>
                         <button type="button" className="scan-btn" onClick={() => setScanTarget('codeBarres')}>
-                          <ScanLine size={18} />
+                          <Camera size={18} />
                           Camera
                         </button>
                       </div>
@@ -897,6 +912,7 @@ const SortieStock = ({ userName, onLogout }) => {
 
                 {scanTarget && (
                   <InlineQrScanner
+                    mode={scanTarget === 'codeBarres' ? 'any' : 'qr'}
                     onDetected={handleDetectedQr}
                     onClose={() => setScanTarget('')}
                   />

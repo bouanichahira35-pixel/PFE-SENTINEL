@@ -9,13 +9,18 @@ const strictBody = require('../middlewares/strictBody');
 const { summarize } = require('../services/perfMonitorService');
 const mongoose = require('../db');
 const { SUPPLIER_EMAIL_POLICY_KEY, SUPPLIER_EMAIL_POLICY_DEFAULT } = require('../services/purchaseOrderSupplierMailService');
-const { getRbacPolicy, setRbacPolicy, getDefaultPolicy, TECHNICAL_ONLY_FOR_ADMIN } = require('../services/rbacPolicyService');
+const {
+  getRbacPolicy,
+  setRbacPolicy,
+  getDefaultPolicy,
+  getRolePermissions,
+  TECHNICAL_ONLY_FOR_ADMIN,
+} = require('../services/rbacPolicyService');
 const { PERMISSIONS, PERMISSION_META } = require('../constants/permissions');
 const { logSecurityEvent } = require('../services/securityAuditService');
 const { isSafeText } = require('../utils/validation');
 const { enqueueMail } = require('../services/mailQueueService');
 const { getUserPreferences, canSendNotificationEmail } = require('../services/userPreferencesService');
-const { getAdminWeeklyAiSummary } = require('../services/adminWeeklyAiSummaryService');
 
 function ensureAdmin(req, res) {
   const role = String(req.user?.role || '').toLowerCase();
@@ -333,20 +338,6 @@ router.get('/perf', requireAuth, async (req, res) => {
   }
 });
 
-// GET /api/admin/ai/weekly-summary
-// Petit rapport IA sur les 7 derniers jours (support, sécurité, perf, IA).
-router.get('/ai/weekly-summary', requireAuth, async (req, res) => {
-  try {
-    if (!ensureAdmin(req, res)) return;
-    const windowDays = Number(req.query?.days || req.query?.window_days || 7);
-    const limit = Number(req.query?.limit || 6);
-    const result = await getAdminWeeklyAiSummary({ window_days: windowDays, limit });
-    return res.json(result);
-  } catch (err) {
-    return res.status(500).json({ error: 'Failed to generate weekly AI summary', details: err.message });
-  }
-});
-
 // GET /api/admin/rbac
 // UI: matrice rôles/permissions (policy stockée en base).
 router.get('/rbac', requireAuth, async (req, res) => {
@@ -365,6 +356,68 @@ router.get('/rbac', requireAuth, async (req, res) => {
     });
   } catch (err) {
     return res.status(500).json({ error: 'Failed to fetch RBAC policy', details: err.message });
+  }
+});
+
+// GET /api/admin/rbac/roles
+// Liste des rôles + nombre d'utilisateurs (pour UI RBAC 3 panneaux).
+router.get('/rbac/roles', requireAuth, async (req, res) => {
+  try {
+    if (!ensureAdmin(req, res)) return;
+
+    const defaults = getDefaultPolicy();
+    const roles = Object.keys(defaults?.role_permissions || {}).sort();
+
+    const counts = await User.aggregate([
+      { $group: { _id: '$role', count: { $sum: 1 } } },
+    ]);
+    const byRole = new Map(counts.map((x) => [String(x._id || '').toLowerCase(), Number(x.count || 0)]));
+
+    const roleLabels = {
+      admin: 'Admin',
+      responsable: 'Responsable',
+      magasinier: 'Magasinier',
+      demandeur: 'Demandeur',
+    };
+
+    return res.json({
+      ok: true,
+      roles: roles.map((id) => ({
+        id,
+        label: roleLabels[id] || id,
+        users_count: byRole.get(id) || 0,
+      })),
+    });
+  } catch (err) {
+    return res.status(500).json({ error: 'Failed to fetch roles', details: err.message });
+  }
+});
+
+// GET /api/admin/rbac/roles/:roleId/available-permissions
+// Retourne les permissions possibles pour un rôle (politique RBAC), + meta (label/area).
+router.get('/rbac/roles/:roleId/available-permissions', requireAuth, async (req, res) => {
+  try {
+    if (!ensureAdmin(req, res)) return;
+
+    const roleId = String(req.params.roleId || '').trim().toLowerCase();
+    const defaults = getDefaultPolicy();
+    if (!defaults?.role_permissions?.[roleId]) {
+      return res.status(404).json({ error: 'Role inconnu' });
+    }
+
+    const set = await getRolePermissions(roleId);
+    const permissions = Array.from((set && typeof set.values === 'function') ? set.values() : []).sort();
+
+    const permission_meta = {};
+    for (const p of permissions) {
+      const meta = PERMISSION_META?.[p];
+      if (!meta) continue;
+      permission_meta[p] = meta;
+    }
+
+    return res.json({ ok: true, roleId, permissions, permission_meta });
+  } catch (err) {
+    return res.status(500).json({ error: 'Failed to fetch available permissions', details: err.message });
   }
 });
 
@@ -421,8 +474,13 @@ router.post('/sessions/:id/revoke', requireAuth, strictBody(['reason']), async (
     const id = String(req.params.id || '').trim();
     if (!id) return res.status(400).json({ error: 'session id invalide' });
 
-    const reason = String(req.body?.reason || 'admin_revoke').slice(0, 140).trim();
-    if (!isSafeText(reason, { min: 1, max: 140 })) return res.status(400).json({ error: 'reason invalide' });
+    const reason = String(req.body?.reason || '').slice(0, 140).trim();
+    if (!isSafeText(reason, { min: 5, max: 140 })) {
+      return res.status(400).json({
+        error: 'Motif obligatoire',
+        details: 'Le motif de revocation doit contenir entre 5 et 140 caracteres.',
+      });
+    }
     const now = new Date();
 
     const session = await UserSession.findById(id).populate('user', 'username email role').lean();
@@ -432,6 +490,9 @@ router.post('/sessions/:id/revoke', requireAuth, strictBody(['reason']), async (
       { _id: id, is_active: true },
       { $set: { is_active: false, logout_time: now, revoked_reason: reason } }
     );
+    if (typeof requireAuth.invalidateSessionCache === 'function') {
+      requireAuth.invalidateSessionCache(session.session_id, session?.user?._id);
+    }
 
     await logSecurityEvent({
       event_type: 'session_revoked',

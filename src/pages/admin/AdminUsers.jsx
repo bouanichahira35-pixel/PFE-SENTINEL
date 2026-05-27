@@ -23,6 +23,7 @@ import LoadingSpinner from '../../components/shared/LoadingSpinner';
 import ProtectedImage from '../../components/shared/ProtectedImage';
 import { get, patch, post } from '../../services/api';
 import { useToast } from '../../components/shared/Toast';
+import { getUiErrorMessage } from '../../services/uiError';
 import './AdminDashboard.css';
 import './AdminUsers.css';
 
@@ -146,7 +147,7 @@ export default function AdminUsers({ userName, onLogout }) {
       const res = await get('/users');
       setAllUsers(Array.isArray(res?.users) ? res.users : []);
     } catch (err) {
-      toast.error(err.message || 'Chargement utilisateurs échoué');
+      toast.error(getUiErrorMessage(err, 'Chargement utilisateurs échoué'));
       setAllUsers([]);
     } finally {
       setIsLoading(false);
@@ -190,6 +191,17 @@ export default function AdminUsers({ userName, onLogout }) {
       })
       .sort((a, b) => safeStr(a?.username).localeCompare(safeStr(b?.username)));
   }, [allUsers, q, roleFilter, serviceFilter, statusFilter]);
+
+  const hasFilters = useMemo(() => (
+    Boolean(safeStr(q) || safeStr(roleFilter) || safeStr(statusFilter) || safeStr(serviceFilter))
+  ), [q, roleFilter, serviceFilter, statusFilter]);
+
+  const clearFilters = useCallback(() => {
+    setQ('');
+    setRoleFilter('');
+    setStatusFilter('');
+    setServiceFilter('');
+  }, []);
 
   const selectedUser = useMemo(() => {
     const id = detailUserId || editUserId;
@@ -250,7 +262,7 @@ export default function AdminUsers({ userName, onLogout }) {
       closeReason();
       await loadUsers();
     } catch (err) {
-      toast.error(err.message || 'Action échouée');
+      toast.error(getUiErrorMessage(err, 'Action échouée'));
     } finally {
       setIsLoading(false);
     }
@@ -333,7 +345,7 @@ export default function AdminUsers({ userName, onLogout }) {
       setCreateOpen(false);
       await loadUsers();
     } catch (err) {
-      toast.error(err.message || 'Création utilisateur échouée');
+      toast.error(getUiErrorMessage(err, 'Création utilisateur échouée'));
     } finally {
       setIsLoading(false);
     }
@@ -346,25 +358,32 @@ export default function AdminUsers({ userName, onLogout }) {
 
     setIsLoading(true);
     try {
-      if (u.role === 'demandeur') {
-        const serviceDirection = safeStr(editDraft.service_direction);
-        if (serviceDirection && serviceDirection.length < 2) {
-          toast.warning('Service/Direction invalide (min 2 caractères).');
-          return;
-        }
-        await patch(`/users/${encodeURIComponent(u._id)}/service-direction`, { service_direction: serviceDirection });
+      const serviceDirection = safeStr(editDraft.service_direction);
+      if (serviceDirection && serviceDirection.length < 2) {
+        toast.warning('Service/Direction invalide (min 2 caractères).');
+        return;
+      }
 
+      const serviceChanged = safeStr(u.service_direction) !== serviceDirection;
+      if (serviceChanged) {
+        await patch(`/users/${encodeURIComponent(u._id)}/service-direction`, { service_direction: serviceDirection });
+      }
+
+      if (u.role === 'demandeur') {
         const profile = safeStr(editDraft.demandeur_profile || '').toLowerCase();
         if (profile && profile !== safeStr(u.demandeur_profile || '').toLowerCase()) {
           await patch(`/users/${encodeURIComponent(u._id)}/demandeur-profile`, { demandeur_profile: profile });
         }
+      } else if (!serviceChanged) {
+        toast.info('Aucun changement détecté.');
+        return;
       }
 
       toast.success('Mise à jour enregistrée.');
       setEditUserId(null);
       await loadUsers();
     } catch (err) {
-      toast.error(err.message || 'Erreur mise à jour');
+      toast.error(getUiErrorMessage(err, 'Erreur mise à jour'));
     } finally {
       setIsLoading(false);
     }
@@ -451,10 +470,17 @@ export default function AdminUsers({ userName, onLogout }) {
               <option value="">Tous les services/directions</option>
               {serviceOptions.map((s) => <option key={s} value={s}>{s}</option>)}
             </select>
+            <button className="admin-btn" type="button" onClick={clearFilters} disabled={isLoading || !hasFilters}>
+              <span>Réinitialiser</span>
+            </button>
             <button className="admin-btn" type="button" onClick={loadUsers} disabled={isLoading}>
               <RefreshCw size={16} />
               <span>Actualiser</span>
             </button>
+          </div>
+
+          <div className="admin-note" style={{ marginBottom: 10 }}>
+            Résultats : <strong>{filteredUsers.length}</strong> / {allUsers.length}
           </div>
 
           <div className="users-table-wrap">
@@ -715,22 +741,24 @@ export default function AdminUsers({ userName, onLogout }) {
                   </button>
                 </div>
                 <div className="drawer-body">
-                  {selectedUser.role === 'demandeur' ? (
-                    <div className="form-grid">
-                      <label>
-                        Service / Direction
-                        <input value={editDraft.service_direction} onChange={(e) => setEditDraft((p) => ({ ...p, service_direction: e.target.value }))} disabled={isLoading} maxLength={80} />
-                      </label>
+                  <div className="form-grid">
+                    <label>
+                      Service / Direction
+                      <input value={editDraft.service_direction} onChange={(e) => setEditDraft((p) => ({ ...p, service_direction: e.target.value }))} disabled={isLoading} maxLength={80} />
+                      <div className="helper-text">Champ facultatif (2–80). Utilisé pour l’organisation interne.</div>
+                    </label>
+                    {selectedUser.role === 'demandeur' ? (
                       <label>
                         Profil catalogue
                         <select value={editDraft.demandeur_profile} onChange={(e) => setEditDraft((p) => ({ ...p, demandeur_profile: e.target.value }))} disabled={isLoading}>
                           {CATALOG_PROFILES.map((p) => <option key={p.id} value={p.id}>{p.label}</option>)}
                         </select>
+                        <div className="helper-text">Permet de limiter le catalogue visible pour le demandeur.</div>
                       </label>
-                    </div>
-                  ) : (
-                    <div className="admin-note">Aucune modification disponible ici pour ce rôle (service/profil concerne les demandeurs).</div>
-                  )}
+                    ) : (
+                      <div className="admin-note">Le profil catalogue concerne uniquement les demandeurs.</div>
+                    )}
+                  </div>
                 </div>
                 <div className="drawer-footer">
                   <button className="admin-btn" type="button" onClick={closeDrawer} disabled={isLoading}>Annuler</button>
@@ -790,4 +818,3 @@ export default function AdminUsers({ userName, onLogout }) {
     </div>
   );
 }
-

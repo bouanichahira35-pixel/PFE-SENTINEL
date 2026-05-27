@@ -88,10 +88,10 @@ const AjouterProduit = ({ userName, onLogout }) => {
       setShowDoublonWarning(exists);
       setDuplicateProduct(result?.product || null);
       if (exists) {
-        toast.warning('QR code deja utilise par un autre produit');
+        toast.warning('Code deja utilise par un autre produit');
       }
     } catch (err) {
-      toast.error(err.message || 'Echec de verification du QR code');
+      toast.error(err.message || 'Echec de verification du code');
     }
   }, [toast]);
 
@@ -126,11 +126,11 @@ const AjouterProduit = ({ userName, onLogout }) => {
   }, []);
 
   const handleDetectedQrCode = useCallback(async (value) => {
-    const qrValue = String(value || '').trim();
-    if (!qrValue) return;
-    setFormData((prev) => ({ ...prev, qrCode: qrValue }));
-    toast.success('QR Code detecte avec succes');
-    await verifyQrCodeUniqueness(qrValue);
+    const scanned = String(value || '').trim();
+    if (!scanned) return;
+    setFormData((prev) => ({ ...prev, qrCode: scanned }));
+    toast.success('Code detecte avec succes');
+    await verifyQrCodeUniqueness(scanned);
     if (nameInputRef.current) {
       nameInputRef.current.focus();
     }
@@ -265,8 +265,8 @@ const AjouterProduit = ({ userName, onLogout }) => {
 
   const validateForm = useCallback(() => {
     const newErrors = {};
-    if (!String(formData.qrCode || '').trim()) newErrors.qrCode = 'QR Code requis';
-    if (!isSafeText(formData.qrCode, { min: 3, max: 220 })) newErrors.qrCode = 'QR Code invalide (3-220, sans < >)';
+    if (!String(formData.qrCode || '').trim()) newErrors.qrCode = 'Code-barres / QR requis';
+    if (!isSafeText(formData.qrCode, { min: 3, max: 220 })) newErrors.qrCode = 'Code invalide (3-220, sans < >)';
 
     if (!isSafeText(formData.nom, { min: 3, max: 80 })) {
       newErrors.nom = 'Nom requis (3-80, sans < >)';
@@ -312,7 +312,7 @@ const AjouterProduit = ({ userName, onLogout }) => {
       return;
     }
     if (duplicateProduct) {
-      toast.error('Ce QR code existe deja. Utilisez un QR code unique.');
+      toast.error('Ce code existe deja. Utilisez un code unique.');
       return;
     }
     if (formData.famille === 'produit_chimique' && !fdsFile) {
@@ -460,7 +460,7 @@ const AjouterProduit = ({ userName, onLogout }) => {
                   <div>
                     <strong>Produit similaire detecte</strong>
                     <p>
-                      Ce QR code est deja utilise
+                      Ce code est deja utilise
                       {duplicateProduct ? ` par ${duplicateProduct.code_product} (${duplicateProduct.name}).` : '.'}
                     </p>
                     {duplicateProduct?._id ? (
@@ -517,11 +517,11 @@ const AjouterProduit = ({ userName, onLogout }) => {
                 <div className="form-section">
                   <h3>Identification</h3>
                   
-                  {/* QR Code Scanner */}
+                  {/* Code-barres / QR Scanner */}
                   <div className="form-group">
                     <label htmlFor="qrCode">
                       <QrCode size={16} />
-                      QR Code
+                      Code-barres / QR
                     </label>
                     <div className="input-with-btn">
                       <input
@@ -536,7 +536,7 @@ const AjouterProduit = ({ userName, onLogout }) => {
                           setShowDoublonWarning(false);
                         }}
                         onBlur={() => verifyQrCodeUniqueness(formData.qrCode)}
-                        placeholder="Scanner ou saisir le QR Code"
+                        placeholder="Scanner ou saisir le code-barres (EAN/UPC) ou QR"
                         className={errors.qrCode ? 'error' : ''}
                         aria-invalid={errors.qrCode ? 'true' : 'false'}
                       />
@@ -546,11 +546,11 @@ const AjouterProduit = ({ userName, onLogout }) => {
                           className="scan-btn"
                           onClick={() => {
                             setScanTarget('product_qr');
-                            toast.info('Camera activee - Presentez le QR Code');
+                            toast.info('Camera activee - Presentez le code-barres ou le QR');
                           }}
                         >
                           <Camera size={18} />
-                          Scanner QR
+                          Scanner
                         </button>
                       ) : (
                         <button type="button" className="scan-btn scanning" onClick={() => setScanTarget('')}>
@@ -577,7 +577,7 @@ const AjouterProduit = ({ userName, onLogout }) => {
                       )}
                     </div>
                     {keyboardScanMode && (
-                      <span className="input-hint">Fallback actif: scanner USB/clavier capture le code QR.</span>
+                      <span className="input-hint">Fallback actif: douchette USB/clavier capture le code.</span>
                     )}
                     {errors.qrCode && (
                       <span className="error-text" role="alert">{errors.qrCode}</span>
@@ -586,6 +586,7 @@ const AjouterProduit = ({ userName, onLogout }) => {
 
                   {scanTarget === 'product_qr' && (
                     <InlineQrScanner
+                      mode="any"
                       onDetected={handleDetectedQrCode}
                       onClose={() => setScanTarget('')}
                     />
@@ -839,7 +840,7 @@ const AjouterProduit = ({ userName, onLogout }) => {
 
                 <div className="form-actions">
                   <div className="form-summary" aria-label="Résumé">
-                    <span><strong>QR:</strong> {String(formData.qrCode || '').trim() ? String(formData.qrCode).trim() : '—'}</span>
+                    <span><strong>Code:</strong> {String(formData.qrCode || '').trim() ? String(formData.qrCode).trim() : '—'}</span>
                     <span><strong>Nom:</strong> {String(formData.nom || '').trim() ? String(formData.nom).trim() : '—'}</span>
                     <span><strong>Catégorie:</strong> {(() => {
                       const cat = categoriesList.find((c) => String(c.id) === String(formData.categorie));

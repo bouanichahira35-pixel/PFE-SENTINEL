@@ -5,6 +5,7 @@ import HeaderPage from '../../components/shared/HeaderPage';
 import LoadingSpinner from '../../components/shared/LoadingSpinner';
 import { get } from '../../services/api';
 import { useToast } from '../../components/shared/Toast';
+import { getUiErrorMessage } from '../../services/uiError';
 import './AdminDashboard.css';
 import './AdminSecurity.css';
 
@@ -27,7 +28,7 @@ const AdminSecurity = ({ userName, onLogout }) => {
       const res = await get('/security-audit');
       setItems(Array.isArray(res) ? res : []);
     } catch (err) {
-      toast.error(err.message || 'Erreur chargement audit sécurité');
+      toast.error(getUiErrorMessage(err, 'Erreur chargement audit sécurité'));
       setItems([]);
     } finally {
       setIsLoading(false);

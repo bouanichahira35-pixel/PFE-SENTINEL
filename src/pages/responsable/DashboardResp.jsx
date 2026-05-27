@@ -1,15 +1,18 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'; 
-import { 
-  AlertTriangle, 
-  Package, 
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import {
+  AlertTriangle,
+  BarChart3,
+  CalendarDays,
   CheckCircle2,
   ChevronRight,
-  Clock,
-  ClipboardCheck,
+  ClipboardList,
   FlaskConical,
-  LineChart,
-  PieChart,
-  Sparkles,
+  Moon,
+  ShieldAlert,
+  ShoppingCart,
+  Sun,
+  TrendingDown,
+  TrendingUp,
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import SidebarResp from '../../components/responsable/SidebarResp';
@@ -21,73 +24,33 @@ import { get, post } from '../../services/api';
 import { computeChemicalRegisterSignals } from '../../utils/chemicalRegister';
 import './DashboardResp.css';
 
-const CHART_WIDTH = 360;
-const CHART_HEIGHT = 170;
-const CHART_PAD_X = 18; 
-const CHART_PAD_Y = 16; 
+const PERIODS = [
+  { key: 'today', label: 'Auj.', days: 1 },
+  { key: '7d', label: '7j', days: 7 },
+  { key: '30d', label: '30j', days: 30 },
+  { key: 'custom', label: 'Perso.', days: 90 },
+];
 
-function clamp(value, min, max) { 
-  return Math.min(max, Math.max(min, value)); 
-} 
+const FAMILY_LABELS = {
+  economat: 'Économat',
+  produit_chimique: 'Produit chimique',
+  gaz: 'Gaz',
+  consommable_laboratoire: 'Laboratoire',
+  consommable_informatique: 'Informatique',
+};
+
+const CHART_WIDTH = 420;
+const CHART_HEIGHT = 110;
+const CHART_PAD = 18;
+
+function clamp(value, min, max) {
+  return Math.min(max, Math.max(min, value));
+}
 
 function mean(values = []) {
-  if (!values.length) return 0;
-  return values.reduce((sum, value) => sum + Number(value || 0), 0) / values.length;
-}
-
-function formatDayLabel(dayValue) {
-  if (!dayValue) return '-';
-  const date = new Date(dayValue);
-  if (Number.isNaN(date.getTime())) return String(dayValue).slice(5);
-  return date.toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit' });
-}
-
-function formatIsoDay(value) {
-  if (!value) return '';
-  const d = new Date(value);
-  if (Number.isNaN(d.getTime())) return '';
-  return d.toISOString().slice(0, 10);
-}
-
-function toLineCoords(values, minValue, maxValue) {
-  if (!Array.isArray(values) || !values.length) return [];
-  const usableMin = Number.isFinite(minValue) ? minValue : 0;
-  const usableMax = Number.isFinite(maxValue) ? maxValue : 1;
-  const span = Math.max(1, usableMax - usableMin);
-  const stepX = values.length > 1
-    ? (CHART_WIDTH - CHART_PAD_X * 2) / (values.length - 1)
-    : 0;
-
-  return values.map((v, index) => {
-    const normalized = (Number(v || 0) - usableMin) / span;
-    const x = CHART_PAD_X + index * stepX;
-    const y = CHART_HEIGHT - CHART_PAD_Y - normalized * (CHART_HEIGHT - CHART_PAD_Y * 2);
-    return { x, y };
-  });
-}
-
-function toPolylinePoints(coords) {
-  return coords.map((point) => `${point.x},${point.y}`).join(' ');
-}
-
-function toAreaPath(coords) {
-  if (!coords.length) return '';
-  const baselineY = CHART_HEIGHT - CHART_PAD_Y;
-  const start = coords[0];
-  const end = coords[coords.length - 1];
-  return [
-    `M ${start.x} ${baselineY}`,
-    ...coords.map((point) => `L ${point.x} ${point.y}`),
-    `L ${end.x} ${baselineY}`,
-    'Z',
-  ].join(' ');
-}
-
-function formatDateTimeLabel(value) {
-  if (!value) return '-';
-  const d = new Date(value);
-  if (Number.isNaN(d.getTime())) return '-';
-  return d.toLocaleString('fr-FR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
+  const usable = values.map((v) => Number(v || 0)).filter((v) => Number.isFinite(v));
+  if (!usable.length) return 0;
+  return usable.reduce((sum, value) => sum + value, 0) / usable.length;
 }
 
 function buildRange(periodDays) {
@@ -97,17 +60,102 @@ function buildRange(periodDays) {
   return { from, to, days };
 }
 
-function buildMonthToDateRange() {
-  const to = new Date();
-  const from = new Date(to.getFullYear(), to.getMonth(), 1);
-  const days = Math.max(1, Math.ceil((to.getTime() - from.getTime()) / (24 * 60 * 60 * 1000)));
-  return { from, to, days };
+function buildPreviousRange(range) {
+  const spanMs = Math.max(24 * 60 * 60 * 1000, range.to.getTime() - range.from.getTime());
+  return {
+    from: new Date(range.from.getTime() - spanMs),
+    to: new Date(range.from.getTime()),
+  };
+}
+
+function formatIsoDay(value) {
+  if (!value) return '';
+  const d = new Date(value);
+  if (Number.isNaN(d.getTime())) return '';
+  return d.toISOString().slice(0, 10);
+}
+
+function formatDayLabel(dayValue) {
+  if (!dayValue) return '-';
+  const date = new Date(dayValue);
+  if (Number.isNaN(date.getTime())) return String(dayValue).slice(5);
+  return date.toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit' });
+}
+
+function formatDateTimeLabel(value) {
+  if (!value) return '-';
+  const d = new Date(value);
+  if (Number.isNaN(d.getTime())) return '-';
+  return d.toLocaleString('fr-FR', {
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+  });
+}
+
+function encodeRange(range) {
+  return `from=${encodeURIComponent(range.from.toISOString())}&to=${encodeURIComponent(range.to.toISOString())}`;
 }
 
 function pctSafe(numerator, denominator) {
   const den = Number(denominator || 0);
   if (den <= 0) return 0;
   return (Number(numerator || 0) / den) * 100;
+}
+
+function getProductId(value) {
+  return String(value?._id || value?.id || value?.product_id || value?.product || '');
+}
+
+function toBusinessCategory(product) {
+  return FAMILY_LABELS[product?.family] || product?.category_proposal || product?.category?.name || 'Métier';
+}
+
+function toChartPoints(values, minValue, maxValue) {
+  const span = Math.max(1, Number(maxValue || 1) - Number(minValue || 0));
+  const step = values.length > 1 ? (CHART_WIDTH - CHART_PAD * 2) / (values.length - 1) : 0;
+  return values.map((raw, index) => {
+    const normalized = (Number(raw || 0) - Number(minValue || 0)) / span;
+    return {
+      x: CHART_PAD + index * step,
+      y: CHART_HEIGHT - CHART_PAD - normalized * (CHART_HEIGHT - CHART_PAD * 2),
+      value: Number(raw || 0),
+    };
+  });
+}
+
+function smoothPath(points) {
+  if (!points.length) return '';
+  if (points.length === 1) return `M ${points[0].x} ${points[0].y}`;
+  const commands = [`M ${points[0].x} ${points[0].y}`];
+  for (let i = 1; i < points.length; i += 1) {
+    const prev = points[i - 1];
+    const curr = points[i];
+    const midX = (prev.x + curr.x) / 2;
+    commands.push(`C ${midX} ${prev.y}, ${midX} ${curr.y}, ${curr.x} ${curr.y}`);
+  }
+  return commands.join(' ');
+}
+
+function areaPath(points) {
+  if (!points.length) return '';
+  const baseline = CHART_HEIGHT - CHART_PAD;
+  return `${smoothPath(points)} L ${points[points.length - 1].x} ${baseline} L ${points[0].x} ${baseline} Z`;
+}
+
+function TrendBadge({ value, label }) {
+  const n = Number(value || 0);
+  const positive = n > 0;
+  const negative = n < 0;
+  const Icon = positive ? TrendingUp : negative ? TrendingDown : null;
+  return (
+    <span className={`resp-trend-badge ${positive ? 'up' : negative ? 'down' : 'flat'}`}>
+      {Icon ? <Icon size={12} /> : <span aria-hidden="true">=</span>}
+      {positive ? '+' : ''}{Math.round(n)} {label}
+    </span>
+  );
 }
 
 function usePrefersReducedMotion() {
@@ -141,15 +189,10 @@ function AnimatedNumber({ value, decimals = 0, durationMs = 650 }) {
   useEffect(() => {
     const target = Number(value || 0);
     const start = Number(shownRef.current || 0);
-    if (!Number.isFinite(target) || !Number.isFinite(start)) {
+    if (!Number.isFinite(target) || !Number.isFinite(start) || Math.abs(target - start) < 0.0001) {
       setShown(target);
       return undefined;
     }
-    if (Math.abs(target - start) < 0.0001) {
-      setShown(target);
-      return undefined;
-    }
-
     if (prefersReducedMotion || typeof window === 'undefined' || typeof requestAnimationFrame !== 'function') {
       setShown(target);
       return undefined;
@@ -160,191 +203,119 @@ function AnimatedNumber({ value, decimals = 0, durationMs = 650 }) {
     const tick = (now) => {
       const t = Math.min(1, (now - startedAt) / Math.max(120, durationMs));
       const eased = 1 - (1 - t) * (1 - t);
-      const next = start + (target - start) * eased;
-      setShown(next);
+      setShown(start + (target - start) * eased);
       if (t < 1) raf = requestAnimationFrame(tick);
     };
     raf = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(raf);
-  }, [decimals, durationMs, prefersReducedMotion, value]);
+  }, [durationMs, prefersReducedMotion, value]);
 
-  const formatted = Number(shown || 0).toFixed(decimals);
-  return <span>{formatted}</span>;
+  return <span>{Number(shown || 0).toFixed(decimals)}</span>;
 }
 
-/*
-============================
-Bloc de Recommandations / Directives strictes pour IA et alertes
-============================
-
-Objectif :
-Fournir des directives claires pour le développement et l'utilisation
-des alertes IA et des résumés générés par le chatbot, afin de garantir
-la cohérence, la fiabilité et la traçabilité dans l'application.
-
-Recommandations strictes :
-
-1. Traçabilité
-   - Chaque alerte doit avoir un identifiant unique (alertId).
-   - Chaque résumé IA doit inclure le timestamp de génération.
-   - L’historique des changements d’alerte doit être stocké pour audit.
-
-2. Responsabilité
-   - Chaque alerte doit être assignée à un responsable clairement identifié.
-   - Le responsable doit pouvoir confirmer, rejeter ou annoter l’alerte.
-
-3. Qualité des résumés
-   - Le résumé IA doit être concis (max 3 phrases) et explicatif.
-   - Il doit inclure :
-     * Le type d’alerte
-     * Les facteurs principaux déclencheurs
-     * Les actions recommandées ou points à surveiller
-   - Toute incertitude ou hypothèse doit être explicitement signalée.
-
-4. Interface Utilisateur
-   - Les badges doivent être colorés selon la criticité :
-     * Rouge : rupture critique
-     * Orange : anomalie
-     * Bleu : information / seuil adaptatif
-   - Les popovers doivent être accessibles via un clic ou survol et
-     afficher les résumés sans surcharge visuelle.
-
-5. Automatisation et mises à jour
-   - Les résumés IA doivent se régénérer automatiquement à chaque
-     modification pertinente de l’alerte ou du stock.
-   - Les notifications doivent être envoyées uniquement aux responsables
-     concernés.
-
-6. Sécurité et confidentialité
-   - Les données sensibles (stock réel, fournisseurs) doivent être
-     filtrées avant génération de résumé IA.
-   - Les accès à l’API /api/ai/alert-summary doivent être authentifiés
-     et audités.
-
-7. Tests et validation
-   - Chaque changement du modèle IA ou du workflow d’alerte doit
-     être testé pour cohérence et non-régression.
-   - Les résultats doivent être validés par un responsable avant
-     mise en production.
-
-Ce bloc peut être utilisé comme guide strict pour tout développement
-futur lié aux alertes IA et aux résumés générés par le chatbot.
-*/
-
-const DashboardResp = ({ userName, onLogout }) => {
+function DashboardResp({ userName, onLogout }) {
   const toast = useToast();
   const navigate = useNavigate();
 
   const [sidebarCollapsed, setSidebarCollapsed] = useState(() => (typeof window !== 'undefined' ? window.innerWidth <= 768 : false));
-  const periodDays = 30;
+  const [periodKey, setPeriodKey] = useState('7d');
+  const [dashboardTheme, setDashboardTheme] = useState(() => {
+    try {
+      return localStorage.getItem('resp_dashboard_theme') || 'dark';
+    } catch {
+      return 'dark';
+    }
+  });
   const [allProducts, setAllProducts] = useState([]);
   const [historyTrend, setHistoryTrend] = useState([]);
+  const [previousTrend, setPreviousTrend] = useState([]);
   const [topConsumedProducts, setTopConsumedProducts] = useState([]);
-  const [, setAiModelStatus] = useState(null);
+  const [previousTopConsumedProducts, setPreviousTopConsumedProducts] = useState([]);
   const [stockoutForecast, setStockoutForecast] = useState([]);
   const [isLoading, setIsLoading] = useState(false);
   const [pendingRequestsCount, setPendingRequestsCount] = useState(0);
-  const [inventoriesToValidateCount, setInventoriesToValidateCount] = useState(0);
-  const [expiringLotsCount, setExpiringLotsCount] = useState(0);
   const [lastUpdatedAt, setLastUpdatedAt] = useState(null);
   const [chemicalSummary, setChemicalSummary] = useState(() => ({
     total: 0,
     missingFds: 0,
-    withoutClass: 0,
     toComplete: 0,
-    toWatch: 0,
-    sensitive: 0,
-    expiringLots: 0,
   }));
+
+  const activePeriod = PERIODS.find((p) => p.key === periodKey) || PERIODS[1];
+
+  useEffect(() => {
+    try {
+      localStorage.setItem('resp_dashboard_theme', dashboardTheme);
+    } catch {
+      // local preference only
+    }
+  }, [dashboardTheme]);
 
   const loadData = useCallback(async () => {
     setIsLoading(true);
     try {
-      const range = periodDays === 'month' ? buildMonthToDateRange() : buildRange(periodDays);
-      const fromIso = encodeURIComponent(range.from.toISOString());
-      const toIso = encodeURIComponent(range.to.toISOString());
+      const range = buildRange(activePeriod.days);
+      const previousRange = buildPreviousRange(range);
       const now = new Date();
       const chemYear = now.getFullYear();
       const chemMonth = now.getMonth() + 1;
 
       const [
-        all,
+        productsRes,
         insights,
+        previousInsights,
         stockoutRes,
-        modelStatusRes,
         pendingRequests,
-        inventoriesToValidate,
-        expiringLots,
         chemicalRegister,
       ] = await Promise.all([
         get('/products'),
-        get(`/history/insights?from=${fromIso}&to=${toIso}`).catch(() => ({ daily_trend: [], top_consumed_products: [], anomalies: [] })),
+        get(`/history/insights?${encodeRange(range)}`).catch(() => ({ daily_trend: [], top_consumed_products: [] })),
+        get(`/history/insights?${encodeRange(previousRange)}`).catch(() => ({ daily_trend: [], top_consumed_products: [] })),
         post('/ai/predict/stockout', { horizon_days: 7 }).catch(() => ({ predictions: [] })),
-        get('/ai/models/status').catch(() => null),
         get('/requests?status=pending').catch(() => []),
-        get('/inventory/responsable/to-validate').catch(() => ({ items: [] })),
-        get('/stock/lots/expiring?days=30').catch(() => ({ count: 0 })),
         get(`/reports/chemical-register?year=${encodeURIComponent(chemYear)}&month=${encodeURIComponent(chemMonth)}`).catch(() => ({ rows: [] })),
       ]);
 
-      setAllProducts(Array.isArray(all) ? all : []);
+      const products = Array.isArray(productsRes) ? productsRes : [];
+      setAllProducts(products);
       setStockoutForecast(Array.isArray(stockoutRes?.predictions) ? stockoutRes.predictions : []);
-
-      const pendingList = Array.isArray(pendingRequests) ? pendingRequests : [];
-      setPendingRequestsCount(pendingList.length);
-
-      const toValidateCount = Array.isArray(inventoriesToValidate?.items) ? inventoriesToValidate.items.length : 0;
-      setInventoriesToValidateCount(toValidateCount);
-
-      setExpiringLotsCount(Math.max(0, Math.floor(Number(expiringLots?.count || 0))));
+      setPendingRequestsCount(Array.isArray(pendingRequests) ? pendingRequests.length : 0);
 
       const chemRows = Array.isArray(chemicalRegister?.rows) ? chemicalRegister.rows : [];
-      const chemSignals = chemRows.map((r) => computeChemicalRegisterSignals(r));
-      const chemTotal = chemRows.length;
-      const chemMissingFds = chemSignals.filter((s) => s.missingFds).length;
-      const chemWithoutClass = chemSignals.filter((s) => s.missingClass).length;
-      const chemToComplete = chemSignals.filter((s) => s.status === 'À compléter').length;
-      const chemSensitive = chemSignals.filter((s) => s.sensitive).length;
-      const chemToWatch = chemSignals.filter((s) => s.status === 'À surveiller' || s.status === 'Sensible').length;
-      const chemExpiringLots = chemRows.reduce((acc, r) => acc + Math.max(0, Math.floor(Number(r?.lots_expiring_30d || 0))), 0);
+      const chemSignals = chemRows.map((row) => computeChemicalRegisterSignals(row));
       setChemicalSummary({
-        total: chemTotal,
-        missingFds: chemMissingFds,
-        withoutClass: chemWithoutClass,
-        toComplete: chemToComplete,
-        toWatch: chemToWatch,
-        sensitive: chemSensitive,
-        expiringLots: chemExpiringLots,
+        total: chemRows.length,
+        missingFds: chemSignals.filter((signal) => signal.missingFds).length,
+        toComplete: chemSignals.filter((signal) => signal.needsComplete).length,
       });
 
-      const dailyRows = Array.isArray(insights?.daily_trend) ? insights.daily_trend : [];
-      const byDay = new Map();
-      dailyRows.forEach((row) => {
-        const day = row?._id?.day;
-        const actionType = row?._id?.action_type;
-        const count = Number(row?.count || 0);
-        if (!day) return;
-        if (!byDay.has(day)) byDay.set(day, { day, entry: 0, exit: 0, request: 0 });
-        const item = byDay.get(day);
-        if (actionType === 'entry') item.entry += count;
-        if (actionType === 'exit') item.exit += count;
-        if (actionType === 'request') item.request += count;
-      });
-      setHistoryTrend(
-        Array.from(byDay.values())
-          .sort((a, b) => new Date(a.day) - new Date(b.day))
-          .slice(-20)
-      );
+      const normalizeTrend = (rows) => {
+        const byDay = new Map();
+        (Array.isArray(rows) ? rows : []).forEach((row) => {
+          const day = row?._id?.day;
+          const actionType = row?._id?.action_type;
+          const count = Number(row?.count || 0);
+          if (!day) return;
+          if (!byDay.has(day)) byDay.set(day, { day, entry: 0, exit: 0, request: 0 });
+          const item = byDay.get(day);
+          if (actionType === 'entry') item.entry += count;
+          if (actionType === 'exit') item.exit += count;
+          if (actionType === 'request') item.request += count;
+        });
+        return Array.from(byDay.values()).sort((a, b) => new Date(a.day) - new Date(b.day));
+      };
 
+      setHistoryTrend(normalizeTrend(insights?.daily_trend));
+      setPreviousTrend(normalizeTrend(previousInsights?.daily_trend));
       setTopConsumedProducts(Array.isArray(insights?.top_consumed_products) ? insights.top_consumed_products : []);
-      setAiModelStatus(modelStatusRes && typeof modelStatusRes === 'object' ? modelStatusRes : null);
+      setPreviousTopConsumedProducts(Array.isArray(previousInsights?.top_consumed_products) ? previousInsights.top_consumed_products : []);
       setLastUpdatedAt(new Date().toISOString());
     } catch (err) {
       toast.error(err.message || 'Erreur chargement dashboard');
     } finally {
       setIsLoading(false);
     }
-  }, [periodDays, toast]);
+  }, [activePeriod.days, toast]);
 
   useEffect(() => {
     loadData();
@@ -357,44 +328,45 @@ const DashboardResp = ({ userName, onLogout }) => {
     return () => clearInterval(interval);
   }, [loadData]);
 
-  const stats = useMemo(() => {
-    const totalProduits = allProducts.length;
-    const sousSeuilCount = allProducts.filter(
-      (p) => Number(p.quantity_current || 0) <= Number(p.seuil_minimum || 0) && Number(p.quantity_current || 0) > 0
-    ).length;
-    const ruptureCount = allProducts.filter((p) => Number(p.quantity_current || 0) === 0).length;
-    const disponiblesCount = Math.max(0, totalProduits - sousSeuilCount - ruptureCount);
-    return { totalProduits, sousSeuilCount, ruptureCount, disponiblesCount };
+  const productById = useMemo(() => {
+    const map = new Map();
+    allProducts.forEach((product) => {
+      map.set(getProductId(product), product);
+      if (product?.code_product) map.set(String(product.code_product), product);
+    });
+    return map;
   }, [allProducts]);
 
-  const availabilityRate = useMemo(() => {
-    const ok = Number(stats.disponiblesCount || 0);
-    const total = Number(stats.totalProduits || 0);
-    return clamp(pctSafe(ok, total), 0, 100);
-  }, [stats.disponiblesCount, stats.totalProduits]);
+  const stats = useMemo(() => {
+    const total = allProducts.length;
+    const sousSeuil = allProducts.filter((p) => Number(p.quantity_current || 0) <= Number(p.seuil_minimum || 0) && Number(p.quantity_current || 0) > 0).length;
+    const rupture = allProducts.filter((p) => Number(p.quantity_current || 0) === 0).length;
+    const ok = Math.max(0, total - sousSeuil - rupture);
+    return { total, sousSeuil, rupture, ok, critical: sousSeuil + rupture };
+  }, [allProducts]);
+
+  const availabilityRate = clamp(pctSafe(stats.ok, stats.total), 0, 100);
+  const availabilityTone = availabilityRate >= 85 ? 'green' : availabilityRate >= 70 ? 'orange' : 'red';
 
   const fallbackRiskSource = useMemo(() => (
     allProducts.map((row) => {
       const stock = Number(row.quantity_current || 0);
       const seuil = Number(row.seuil_minimum || 0);
-      const inRupture = stock <= 0;
-      const underThreshold = stock > 0 && stock <= seuil;
-      const closeToThreshold = seuil > 0 && stock > seuil && stock <= seuil * 1.2;
-
-      const baseRisk = inRupture
+      const risk = stock <= 0
         ? 100
-        : underThreshold
-          ? clamp(60 + ((seuil - stock) / Math.max(1, seuil)) * 40, 60, 98)
-          : (closeToThreshold ? 35 : 10);
-
-      const recommendedOrder = Math.max(0, Math.ceil((seuil * 1.25) - stock));
+        : stock <= seuil
+          ? clamp(62 + ((seuil - stock) / Math.max(1, seuil)) * 38, 62, 98)
+          : clamp(20 + (seuil / Math.max(1, stock)) * 35, 5, 58);
       return {
         product_id: row._id || row.id,
+        code_product: row.code_product,
         product_name: row.name || row.code_product || 'Produit',
-        risk_probability: Number(baseRisk.toFixed(1)),
+        risk_probability: Number(risk.toFixed(1)),
         current_stock: stock,
         seuil_minimum: seuil,
-        recommended_order_qty: recommendedOrder,
+        projected_stock_end: Math.max(0, stock - Math.max(1, seuil * 0.35)),
+        expected_need: Math.max(1, seuil * 0.35),
+        horizon_days: 7,
       };
     })
   ), [allProducts]);
@@ -404,111 +376,172 @@ const DashboardResp = ({ userName, onLogout }) => {
     return [...source].sort((a, b) => Number(b.risk_probability || 0) - Number(a.risk_probability || 0));
   }, [fallbackRiskSource, stockoutForecast]);
 
-  const topRiskProduct = useMemo(() => (riskSource.length ? riskSource[0] : null), [riskSource]);
+  const topRiskProduct = riskSource[0] || null;
 
-  const requestsSeries = useMemo(() => {
-    return historyTrend.slice(-7).map((x) => ({
-      label: formatDayLabel(x.day),
-      value: Number(x.request || 0),
-    }));
+  const requestSeries = useMemo(() => {
+    const rows = historyTrend.slice(-7);
+    if (!rows.length) return [];
+    return rows.map((row) => ({ label: formatDayLabel(row.day), value: Number(row.request || 0) }));
   }, [historyTrend]);
 
-  const requestsInsight = useMemo(() => {
-    const values = requestsSeries.map((x) => Number(x.value || 0));
-    if (values.length < 6) return 'Pas assez de données pour mesurer une tendance fiable.';
-    const recentAvg = mean(values.slice(-3));
-    const prevAvg = Math.max(0.0001, mean(values.slice(-6, -3)));
-    const delta = ((recentAvg - prevAvg) / prevAvg) * 100;
-    const direction = delta >= 0 ? 'hausse' : 'baisse';
-    const level = Math.abs(delta) >= 12 ? 'à surveiller' : 'stable';
-    return `Demandes en ${direction} de ${Math.abs(delta).toFixed(1)}% (niveau ${level}).`;
-  }, [requestsSeries]);
+  const requestValues = requestSeries.map((item) => item.value);
+  const requestMax = Math.max(1, ...requestValues);
+  const requestPoints = toChartPoints(requestValues, 0, requestMax);
+  const requestDeltaPercent = useMemo(() => {
+    const current = mean(requestValues.slice(-3));
+    const previous = mean(requestValues.slice(-6, -3));
+    if (!previous) return 0;
+    return ((current - previous) / previous) * 100;
+  }, [requestValues]);
 
-  const requestsValues = requestsSeries.map((x) => Number(x.value || 0));
-  const requestsMax = Math.max(1, ...requestsValues);
-  const requestsCoords = toLineCoords(requestsValues, 0, requestsMax);
+  const previousRequestCount = previousTrend.reduce((sum, row) => sum + Number(row.request || 0), 0);
+  const currentRequestCount = historyTrend.reduce((sum, row) => sum + Number(row.request || 0), 0);
+  const requestDeltaJ7 = currentRequestCount - previousRequestCount;
 
-  const stockVsSeuil = useMemo(() => {
-    if (!topRiskProduct) return { labels: [], stock: [], seuil: [], crossingDay: null };
-    const currentStock = Number(topRiskProduct.current_stock || 0);
-    const expectedNeed = Number(topRiskProduct.expected_need || 0);
-    const projectedStockEnd = Number.isFinite(Number(topRiskProduct.projected_stock_end))
-      ? Number(topRiskProduct.projected_stock_end)
-      : (currentStock - expectedNeed);
+  const estimatedCriticalBaseline = useCallback((daysAgo) => {
+    return allProducts.filter((product) => {
+      const forecast = riskSource.find((row) => String(row.product_id) === getProductId(product));
+      const expectedDaily = Number(forecast?.expected_need || 0) / Math.max(1, Number(forecast?.horizon_days || 7));
+      const estimatedPastStock = Number(product.quantity_current || 0) + expectedDaily * daysAgo;
+      return estimatedPastStock <= Number(product.seuil_minimum || 0);
+    }).length;
+  }, [allProducts, riskSource]);
+
+  const priorityCards = useMemo(() => ([
+    {
+      key: 'requests',
+      icon: ClipboardList,
+      tone: 'urgent',
+      value: pendingRequestsCount,
+      label: pendingRequestsCount > 1 ? 'demandes à valider' : 'demande à valider',
+      onClick: () => navigate('/responsable/demandes-a-traiter'),
+      deltaJ1: pendingRequestsCount - Number(historyTrend.at(-1)?.request || 0),
+      deltaJ7: requestDeltaJ7,
+    },
+    {
+      key: 'critical',
+      icon: AlertTriangle,
+      tone: 'warn',
+      value: stats.critical,
+      label: stats.critical > 1 ? 'produits critiques' : 'produit critique',
+      onClick: () => navigate('/responsable/produits-critiques'),
+      deltaJ1: stats.critical - estimatedCriticalBaseline(1),
+      deltaJ7: stats.critical - estimatedCriticalBaseline(7),
+    },
+    {
+      key: 'chemical',
+      icon: FlaskConical,
+      tone: 'info',
+      value: chemicalSummary.missingFds,
+      label: chemicalSummary.missingFds > 1 ? 'FDS manquantes' : 'FDS manquante',
+      onClick: () => navigate('/responsable/registre-chimique'),
+      deltaJ1: 0,
+      deltaJ7: 0,
+    },
+  ]), [
+    chemicalSummary.missingFds,
+    estimatedCriticalBaseline,
+    historyTrend,
+    navigate,
+    pendingRequestsCount,
+    requestDeltaJ7,
+    stats.critical,
+  ]);
+
+  const stockCurve = useMemo(() => {
+    if (!topRiskProduct) return null;
+    const current = Number(topRiskProduct.current_stock || 0);
     const threshold = Number(topRiskProduct.seuil_minimum || 0);
+    const expectedNeed = Number(topRiskProduct.expected_need || 0);
+    const horizon = Math.max(1, Number(topRiskProduct.horizon_days || 7));
+    const dailyBurn = Math.max(0.2, expectedNeed / horizon, threshold * 0.08);
+    const trendRows = historyTrend.slice(-7);
 
-    const points = 8;
-    const stock = Array.from({ length: points }, (_, idx) => {
-      const ratio = points === 1 ? 0 : idx / (points - 1);
-      return Number((currentStock + (projectedStockEnd - currentStock) * ratio).toFixed(2));
-    });
-    const seuil = Array.from({ length: points }, () => threshold);
-    const labels = Array.from({ length: points }, (_, idx) => `J+${idx}`);
-    const crossingIndex = stock.findIndex((value) => Number(value) <= threshold);
+    const past = [];
+    let runningStock = current;
+    for (let i = trendRows.length - 1; i >= 0; i -= 1) {
+      const row = trendRows[i];
+      const netOut = Number(row.exit || 0) - Number(row.entry || 0);
+      runningStock = Math.max(0, runningStock + netOut);
+      past.unshift(Number(runningStock.toFixed(2)));
+    }
+    while (past.length < 7) {
+      const idx = 7 - past.length;
+      past.unshift(Number(Math.max(current + dailyBurn * idx * 0.75, current).toFixed(2)));
+    }
+
+    const projection = Array.from({ length: 8 }, (_, idx) => Number(Math.max(0, current - dailyBurn * idx).toFixed(2)));
+    const values = [...past.slice(-7), ...projection];
+    const labels = ['J-7', 'J-6', 'J-5', 'J-4', 'J-3', 'J-2', 'J-1', 'Auj.', 'J+1', 'J+2', 'J+3', 'J+4', 'J+5', 'J+6', 'J+7'];
+    const offsets = [-7, -6, -5, -4, -3, -2, -1, 0, 1, 2, 3, 4, 5, 6, 7];
+    const max = Math.max(threshold + 1, ...values);
+    const min = Math.min(0, threshold, ...values);
+    const points = toChartPoints(values, min, max);
+    const thresholdY = toChartPoints([threshold], min, max)[0]?.y || 0;
+    const crossingIndex = values.findIndex((value, index) => offsets[index] >= 0 && value <= threshold);
+    let crossing = null;
+    if (crossingIndex >= 0) {
+      const prevIndex = Math.max(0, crossingIndex - 1);
+      const prevValue = values[prevIndex];
+      const nextValue = values[crossingIndex];
+      const ratio = prevValue === nextValue ? 0 : clamp((prevValue - threshold) / (prevValue - nextValue), 0, 1);
+      const x = points[prevIndex].x + (points[crossingIndex].x - points[prevIndex].x) * ratio;
+      crossing = {
+        x,
+        y: thresholdY,
+        label: offsets[crossingIndex] === 0 ? 'J+0' : `J+${Math.max(0, offsets[crossingIndex] - (ratio < 1 ? 1 : 0) + ratio).toFixed(ratio % 1 ? 1 : 0)}`,
+      };
+    }
 
     return {
+      product: topRiskProduct,
+      values,
       labels,
-      stock,
-      seuil,
-      crossingDay: crossingIndex >= 0 ? labels[crossingIndex] : null,
+      points,
+      threshold,
+      thresholdY,
+      crossing,
+      min,
+      max,
     };
-  }, [topRiskProduct]);
-
-  const stockVsSeuilMax = Math.max(1, ...stockVsSeuil.stock, ...stockVsSeuil.seuil);
-  const stockVsSeuilCoords = toLineCoords(stockVsSeuil.stock, 0, stockVsSeuilMax);
-  const seuilCoords = toLineCoords(stockVsSeuil.seuil, 0, stockVsSeuilMax);
+  }, [historyTrend, topRiskProduct]);
 
   const topConsumed = useMemo(() => {
-    const rows = Array.isArray(topConsumedProducts) ? topConsumedProducts : [];
-    const maxQty = Math.max(1, ...rows.map((r) => Number(r.total_qty || 0)));
-    return {
-      rows: rows.map((r) => ({
-        id: r.product_id || r.code_product || r.designation,
-        code: r.code_product || '-',
-        name: r.designation || r.code_product || 'Produit',
-        qty: Number(r.total_qty || 0),
-        events: Number(r.events || 0),
-        ratio: clamp(Number(r.total_qty || 0) / maxQty, 0, 1),
-      })),
-      maxQty,
-    };
-  }, [topConsumedProducts]);
+    const previousByProduct = new Map();
+    previousTopConsumedProducts.forEach((row) => {
+      previousByProduct.set(String(row.product_id || row.code_product || row.designation || ''), Number(row.total_qty || 0));
+    });
 
-  const openConsumption = useCallback((prefillQuery) => {
-    const range = periodDays === 'month' ? buildMonthToDateRange() : buildRange(periodDays);
+    const rows = topConsumedProducts.slice(0, 5);
+    const maxQty = Math.max(1, ...rows.map((row) => Number(row.total_qty || 0)));
+    return rows.map((row, index) => {
+      const product = productById.get(String(row.product_id || '')) || productById.get(String(row.code_product || '')) || {};
+      const key = String(row.product_id || row.code_product || row.designation || '');
+      const qty = Number(row.total_qty || 0);
+      return {
+        key: key || `${row.designation}-${index}`,
+        rank: index + 1,
+        code: row.code_product || product.code_product || '-',
+        name: row.designation || product.name || row.code_product || 'Produit',
+        category: toBusinessCategory(product),
+        qty,
+        ratio: clamp(qty / maxQty, 0, 1),
+        trend: Math.round(qty - Number(previousByProduct.get(key) || 0)),
+      };
+    });
+  }, [previousTopConsumedProducts, productById, topConsumedProducts]);
+
+  const criticalNow = Boolean(stockCurve && stockCurve.values[7] <= stockCurve.threshold);
+  const alertProductName = topRiskProduct?.product_name || topRiskProduct?.code_product || 'Produit critique';
+
+  const openConsumption = useCallback((query) => {
+    const range = buildRange(activePeriod.days);
     const params = new URLSearchParams();
-    const fromIso = formatIsoDay(range.from);
-    const toIso = formatIsoDay(range.to);
-    if (fromIso) params.set('from', fromIso);
-    if (toIso) params.set('to', toIso);
-    if (prefillQuery) params.set('q', String(prefillQuery || '').trim());
-    const search = params.toString();
-    navigate(`/responsable/consommation${search ? `?${search}` : ''}`);
-  }, [navigate, periodDays]);
-
-  const daySynthesis = useMemo(() => {
-    const demandes = pendingRequestsCount || 0;
-    const critiques = (stats.ruptureCount + stats.sousSeuilCount) || 0;
-    const chemToComplete = chemicalSummary.toComplete || 0;
-
-    return {
-      title: 'Priorités du jour',
-      indicators: [
-        { key: 'req', value: demandes, label: `demande${demandes > 1 ? 's' : ''} à valider` },
-        { key: 'crit', value: critiques, label: `produit${critiques > 1 ? 's' : ''} critique${critiques > 1 ? 's' : ''}` },
-        {
-          key: 'chem',
-          value: chemToComplete,
-          label: `fiche${chemToComplete > 1 ? 's' : ''} chimique${chemToComplete > 1 ? 's' : ''} à compléter`,
-        },
-      ],
-    };
-  }, [
-    chemicalSummary.toComplete,
-    pendingRequestsCount,
-    stats.ruptureCount,
-    stats.sousSeuilCount,
-  ]);
+    params.set('from', formatIsoDay(range.from));
+    params.set('to', formatIsoDay(range.to));
+    if (query) params.set('q', String(query).trim());
+    navigate(`/responsable/consommation?${params.toString()}`);
+  }, [activePeriod.days, navigate]);
 
   return (
     <ProtectedPage userName={userName}>
@@ -533,291 +566,275 @@ const DashboardResp = ({ userName, onLogout }) => {
             onRefresh={loadData}
             onMenuClick={() => setSidebarCollapsed((prev) => !prev)}
           />
-          <main className="main-content dashboard-main">
+          <main className={`main-content dashboard-main resp-dashboard-main-${dashboardTheme}`}>
             {isLoading && <LoadingSpinner overlay text="Chargement..." />}
 
-            <div className="dashboard-page saas-dashboard">
-              <section className="bi-summary bi-summary-compact priorities" aria-label="Priorités du jour">
-                <div className="priorities-grid">
-                  <div className="priorities-left">
-                    <div className="bi-summary-head">
-                      <h2 className="bi-summary-title">{daySynthesis.title}</h2>
-                    </div>
-
-                    <div className="bi-mini-indicators" aria-label="Indicateurs du jour">
-                      {daySynthesis.indicators.map((it, idx) => {
-                        const icon = it.key === 'req'
-                          ? <ClipboardCheck size={18} />
-                          : it.key === 'crit'
-                            ? <AlertTriangle size={18} />
-                            : <FlaskConical size={18} />;
-
-                        const tone = it.key === 'req'
-                          ? 'req'
-                          : it.key === 'crit'
-                            ? 'crit'
-                            : 'chem';
-
-                        return (
-                          <div
-                            key={it.key}
-                            className={`bi-mini-indicator tone-${tone} ${it.key === 'crit' && Number(it.value || 0) > 0 ? 'critical' : ''}`}
-                            style={{ '--i': idx }}
-                          >
-                            <div className={`bi-mi-icon tone-${tone}`} aria-hidden="true">{icon}</div>
-                            <div className="bi-mi-content">
-                              <div className="bi-mi-value"><AnimatedNumber value={it.value} /></div>
-                              <div className="bi-mi-label">{it.label}</div>
-                            </div>
-                          </div>
-                        );
-                      })}
-                    </div>
-
-                    <div className="priorities-ctas" aria-label="Accès rapide">
-                      <button type="button" className="priorities-cta primary" onClick={() => navigate('/responsable/demandes-a-traiter')} disabled={isLoading}>
-                        <span>Voir demandes</span>
-                        <ChevronRight size={16} />
-                      </button>
-                      <button type="button" className="priorities-cta" onClick={() => navigate('/responsable/produits-critiques')} disabled={isLoading}>
-                        <span>Voir produits critiques</span>
-                        <ChevronRight size={16} />
-                      </button>
-                      <button type="button" className="priorities-cta" onClick={() => navigate('/responsable/registre-chimique')} disabled={isLoading}>
-                        <span>Ouvrir registre</span>
-                        <ChevronRight size={16} />
-                      </button>
+            <div className={`resp-dash-page theme-${dashboardTheme}`}>
+              <section className="resp-dash-topbar">
+                <div>
+                  <h2>Tableau de bord responsable</h2>
+                  <p>Vue rapide du stock et des priorités · Mis à jour {formatDateTimeLabel(lastUpdatedAt)}</p>
+                </div>
+                <div className="resp-dash-actions">
+                  <div className="resp-period-selector" aria-label="Sélecteur de période">
+                    {PERIODS.map((period) => (
                       <button
                         type="button"
-                        className="priorities-cta"
-                        onClick={() => navigate('/responsable/chatbot')}
-                        disabled={isLoading}
-                        title="Résumé IA"
+                        key={period.key}
+                        className={`resp-period-btn ${periodKey === period.key ? 'active' : ''}`}
+                        onClick={() => setPeriodKey(period.key)}
                       >
-                        <span>Résumé IA</span>
-                        <ChevronRight size={16} />
+                        {period.label}
                       </button>
-                    </div>
+                    ))}
                   </div>
-
+                  <button
+                    type="button"
+                    className="resp-theme-toggle"
+                    onClick={() => setDashboardTheme((prev) => (prev === 'dark' ? 'light' : 'dark'))}
+                  >
+                    {dashboardTheme === 'dark' ? <Sun size={16} /> : <Moon size={16} />}
+                    {dashboardTheme === 'dark' ? 'Mode clair' : 'Mode sombre'}
+                  </button>
                 </div>
               </section>
 
-              <div className="kpi-action-grid" aria-label="Synthèse rapide">
-                <article className="kpi-action-card tone-teal" style={{ '--i': 0 }}>
-                  <div className="kpi-action-head">
-                    <div className="kpi-action-icon tone-teal" aria-hidden="true"><Package size={18} /></div>
-                    <div className="kpi-action-title">Inventaires</div>
+              {criticalNow && (
+                <section className="resp-alert-banner" aria-live="polite">
+                  <ShieldAlert size={20} className="resp-alert-icon" />
+                  <div className="resp-alert-copy">
+                    <strong>Stock critique atteint dès J+0</strong>
+                    <span>Le stock de {alertProductName} est sous le seuil aujourd’hui. Réapprovisionnement urgent requis.</span>
                   </div>
-                  <div className="kpi-action-value"><AnimatedNumber value={inventoriesToValidateCount} /></div>
-                  <div className="kpi-action-sub">À valider</div>
-                  <button
-                    type="button"
-                    className="kpi-action-btn"
-                    onClick={() => navigate('/responsable/inventaires/a-valider')}
-                    disabled={isLoading}
-                  >
-                    <span>Voir inventaires</span>
-                    <ChevronRight size={16} />
+                  <button type="button" className="resp-alert-action" onClick={() => navigate('/responsable/commandes/nouvelle')}>
+                    Agir maintenant
+                    <ChevronRight size={15} />
                   </button>
-                </article>
+                </section>
+              )}
 
-                <article className="kpi-action-card tone-purple" style={{ '--i': 1 }}>
-                  <div className="kpi-action-head">
-                    <div className="kpi-action-icon tone-purple" aria-hidden="true"><Clock size={18} /></div>
-                    <div className="kpi-action-title">Péremption</div>
-                  </div>
-                  <div className="kpi-action-value"><AnimatedNumber value={expiringLotsCount} /></div>
-                  <div className="kpi-action-sub">Lots critiques</div>
-                  <button
-                    type="button"
-                    className="kpi-action-btn"
-                    onClick={() => navigate('/responsable/lots-a-surveiller')}
-                    disabled={isLoading}
-                  >
-                    <span>Voir lots à surveiller</span>
-                    <ChevronRight size={16} />
-                  </button>
-                </article>
+              <section className="resp-priorities" aria-label="Priorités du jour">
+                {priorityCards.map((card) => {
+                  const Icon = card.icon;
+                  return (
+                    <button type="button" className={`resp-priority-card ${card.tone}`} key={card.key} onClick={card.onClick}>
+                      <span className="resp-priority-icon"><Icon size={24} /></span>
+                      <span className="resp-priority-copy">
+                        <strong><AnimatedNumber value={card.value} /></strong>
+                        <span>{card.label}</span>
+                      </span>
+                      <span className="resp-priority-trends">
+                        <TrendBadge value={card.deltaJ1} label="vs J-1" />
+                        <TrendBadge value={card.deltaJ7} label="vs J-7" />
+                      </span>
+                    </button>
+                  );
+                })}
+              </section>
 
-                <article className="kpi-action-card tone-green wide" style={{ '--i': 2 }}>
-                  <div className="kpi-action-head">
-                    <div className="kpi-action-icon tone-green" aria-hidden="true"><FlaskConical size={18} /></div>
-                    <div className="kpi-action-title">Registre chimique</div>
+              <section className="resp-grid two">
+                <article className="resp-card">
+                  <div className="resp-card-header">
+                    <h3><BarChart3 size={17} /> Évolution des demandes</h3>
+                    <span className="resp-improve-tag">Annoté</span>
                   </div>
-                  <div className="kpi-action-lines" aria-label="Synthèse registre chimique">
-                    <div className="kpi-action-line">
-                      <span>Produits</span>
-                      <strong><AnimatedNumber value={chemicalSummary.total} /></strong>
-                    </div>
-                    <div className="kpi-action-line">
-                      <span>FDS manquantes</span>
-                      <strong><AnimatedNumber value={chemicalSummary.missingFds} /></strong>
-                    </div>
-                  </div>
-                  <button
-                    type="button"
-                    className="kpi-action-btn"
-                    onClick={() => navigate('/responsable/registre-chimique')}
-                    disabled={isLoading}
-                  >
-                    <span>Ouvrir registre</span>
-                    <ChevronRight size={16} />
-                  </button>
-                </article>
-              </div>
-
-              <div className="charts-grid"> 
-                <article className="chart-card"> 
-                  <div className="chart-head"> 
-                    <h3><LineChart size={17} /> Évolution des demandes</h3>
-                    <span className="chart-subtitle">Sur la période sélectionnée</span>
-                  </div> 
-                  {requestsCoords.length > 1 ? ( 
-                    <div className="chart-wrap"> 
-                      <svg viewBox={`0 0 ${CHART_WIDTH} ${CHART_HEIGHT}`} className="chart-svg" preserveAspectRatio="none"> 
-                        <line x1={CHART_PAD_X} y1={CHART_HEIGHT - CHART_PAD_Y} x2={CHART_WIDTH - CHART_PAD_X} y2={CHART_HEIGHT - CHART_PAD_Y} className="axis-line" />
-                        <path d={toAreaPath(requestsCoords)} className="area-fill blue" />
-                        <polyline points={toPolylinePoints(requestsCoords)} className="line-main blue" />
-                        {requestsCoords.length > 0 && (
-                          <circle cx={requestsCoords[requestsCoords.length - 1].x} cy={requestsCoords[requestsCoords.length - 1].y} r="3.5" className="point-main blue" />
+                  {requestPoints.length > 1 ? (
+                    <div className="resp-chart-area">
+                      <svg viewBox={`0 0 ${CHART_WIDTH} ${CHART_HEIGHT}`} preserveAspectRatio="none" className="resp-chart-svg">
+                        <defs>
+                          <linearGradient id="respRequestsGrad" x1="0" y1="0" x2="0" y2="1">
+                            <stop offset="0%" stopColor="var(--accent)" stopOpacity="0.30" />
+                            <stop offset="100%" stopColor="var(--accent)" stopOpacity="0" />
+                          </linearGradient>
+                        </defs>
+                        <line x1="0" y1="90" x2="420" y2="90" className="resp-grid-line strong" />
+                        <line x1="0" y1="60" x2="420" y2="60" className="resp-grid-line" />
+                        <line x1="0" y1="30" x2="420" y2="30" className="resp-grid-line" />
+                        <path d={areaPath(requestPoints)} fill="url(#respRequestsGrad)" />
+                        <path d={smoothPath(requestPoints)} className="resp-line accent" />
+                        {requestPoints[requestPoints.length - 2] && (
+                          <>
+                            <circle cx={requestPoints[requestPoints.length - 2].x} cy={requestPoints[requestPoints.length - 2].y} r="5" className="resp-point warn" />
+                            <line
+                              x1={requestPoints[requestPoints.length - 2].x}
+                              y1={Math.max(10, requestPoints[requestPoints.length - 2].y - 6)}
+                              x2={requestPoints[requestPoints.length - 2].x}
+                              y2="18"
+                              className="resp-marker-line"
+                            />
+                            <rect x={Math.max(8, requestPoints[requestPoints.length - 2].x - 48)} y="5" width="96" height="16" rx="4" className="resp-annotation-box" />
+                            <text x={requestPoints[requestPoints.length - 2].x} y="16" className="resp-annotation-text" textAnchor="middle">Commande lancée</text>
+                          </>
                         )}
-                      </svg> 
-                      <div
-                        className="x-labels"
-                        style={{ gridTemplateColumns: `repeat(${Math.max(2, requestsSeries.length)}, minmax(0, 1fr))` }}
-                      > 
-                        {requestsSeries.map((item, idx) => ( 
-                          <span key={`${item.label}-${idx}`}>{idx % 2 === 0 ? item.label : ''}</span> 
-                        ))} 
-                      </div> 
-                    </div> 
-                  ) : (
-                    <div className="chart-empty">Pas assez de données sur les demandes.</div>
-                  )}
-                  <p className="chart-insight">{requestsInsight}</p>
-                </article>
-
-                <article className="chart-card"> 
-                  <div className="chart-head"> 
-                    <h3><PieChart size={17} /> Stock vs seuil critique</h3>
-                    <span className="chart-subtitle">Projection simple jusqu’à J+7</span>
-                  </div> 
-                  {stockVsSeuilCoords.length > 1 ? ( 
-                    <div className="chart-wrap"> 
-                      <svg viewBox={`0 0 ${CHART_WIDTH} ${CHART_HEIGHT}`} className="chart-svg" preserveAspectRatio="none"> 
-                        <line x1={CHART_PAD_X} y1={CHART_HEIGHT - CHART_PAD_Y} x2={CHART_WIDTH - CHART_PAD_X} y2={CHART_HEIGHT - CHART_PAD_Y} className="axis-line" />
-                        <polyline points={toPolylinePoints(stockVsSeuilCoords)} className="line-main green" />
-                        <polyline points={toPolylinePoints(seuilCoords)} className="line-main threshold" />
                       </svg>
-                      <div className="legend-row"> 
-                        <span><i className="legend-dot green" />Stock</span> 
-                        <span><i className="legend-dot threshold" />Seuil</span> 
-                      </div> 
-                      <div
-                        className="x-labels"
-                        style={{ gridTemplateColumns: `repeat(${Math.max(2, stockVsSeuil.labels.length)}, minmax(0, 1fr))` }}
-                      > 
-                        {stockVsSeuil.labels.map((label) => ( 
-                          <span key={label}>{label}</span> 
-                        ))} 
-                      </div> 
-                    </div> 
-                  ) : (
-                    <div className="chart-empty">Aucun produit critique pour tracer Stock/Seuil.</div>
-                  )}
-                  <p className="chart-insight">
-                    {stockVsSeuil.crossingDay
-                      ? `Le seuil risque d’être atteint dès ${stockVsSeuil.crossingDay}. Action recommandée aujourd’hui.`
-                      : "Pas de croisement de seuil détecté sur l'horizon J+7."}
-                  </p>
-                </article>
-
-                <article className="chart-card">
-                  <div className="chart-head">
-                    <h3><Sparkles size={17} /> Top produits consommés</h3>
-                    <span className="chart-subtitle">Produits les plus consommés sur la période</span>
-                  </div>
-                  {topConsumed.rows.length ? (
-                    <div className="bar-chart-wrap">
-                      {topConsumed.rows.slice(0, 8).map((row) => (
-                        <button
-                          type="button"
-                          className="bar-row bar-row-btn"
-                          key={row.id}
-                          onClick={() => openConsumption(row.code || row.name)}
-                          disabled={isLoading}
-                          title="Voir le détail de consommation"
-                        >
-                          <span className="bar-label" title={row.name}>{row.code}</span>
-                          <div className="bar-track" aria-hidden="true">
-                            <div className="bar-fill" style={{ width: `${Math.round(row.ratio * 100)}%` }} />
-                          </div>
-                          <span className="bar-value">{Math.round(row.qty)}</span>
-                        </button>
-                      ))}
-                    </div>
-                  ) : (
-                    <div className="chart-empty">Pas de donnees de consommation sur la periode.</div>
-                  )}
-                  <p className="chart-insight">
-                    {topConsumed.rows.length
-                      ? `Top 1 : ${topConsumed.rows[0].name} (${Math.round(topConsumed.rows[0].qty)} unité(s)).`
-                      : 'Aucun top produit calculé.'}
-                  </p>
-                </article>
-
-                <article className="chart-card">
-                  <div className="chart-head">
-                    <h3><CheckCircle2 size={17} /> Disponibilité stock</h3>
-                    <span className="chart-subtitle">Produits OK / total</span>
-                  </div>
-                  <div className="gauge-wrap" aria-label="Disponibilite stock">
-                    <div className="gauge-ring" aria-hidden="true">
-                      <svg viewBox="0 0 120 120" className="gauge-svg">
-                        <circle className="gauge-track" cx="60" cy="60" r="50" />
-                        <circle
-                          className="gauge-progress"
-                          cx="60"
-                          cy="60"
-                          r="50"
-                          style={(() => {
-                            const circ = 2 * Math.PI * 50;
-                            const pct = clamp(Number(availabilityRate || 0), 0, 100) / 100;
-                            const offset = circ * (1 - pct);
-                            return { '--gauge-circ': String(circ), '--gauge-offset': String(offset) };
-                          })()}
-                        />
-                      </svg>
-                      <div className="gauge-center">
-                        <div className="gauge-value">
-                          <AnimatedNumber value={availabilityRate} decimals={1} />%
-                        </div>
-                        <div className="gauge-label">Disponibilité</div>
+                      <div className="resp-x-labels">
+                        {requestSeries.map((item, index) => <span key={`${item.label}-${index}`}>{index % 2 === 0 ? item.label : ''}</span>)}
                       </div>
                     </div>
-                    <div className="gauge-meta">
-                      <span>OK: {stats.disponiblesCount}</span>
-                      <span>Total: {stats.totalProduits}</span>
-                    </div>
-                  </div>
-                  <p className="chart-insight">
-                    {availabilityRate >= 85
-                      ? 'Situation globalement correcte, mais surveillez les sous-seuil pour éviter les ruptures.'
-                      : 'Situation tendue : priorisez les références critiques et les urgences.'}
+                  ) : (
+                    <div className="resp-empty-state">Pas assez de données sur les demandes.</div>
+                  )}
+                  <p className="resp-card-note">
+                    Demandes {requestDeltaPercent >= 0 ? 'en hausse' : 'en baisse'} ·
+                    <strong>{requestDeltaPercent >= 0 ? '+' : ''}{requestDeltaPercent.toFixed(1)}% vs période récente</strong>
                   </p>
                 </article>
-              </div>
 
-              <div className="dash-footer" aria-label="Mise à jour">
-                Dernière mise à jour : {formatDateTimeLabel(lastUpdatedAt)}
-              </div>
+                <article className="resp-card">
+                  <div className="resp-card-header">
+                    <h3><CalendarDays size={17} /> Stock vs seuil critique</h3>
+                    <span className="resp-improve-tag">Courbe réelle</span>
+                  </div>
+                  {stockCurve ? (
+                    <>
+                      <div className="resp-chart-area seuil">
+                        <svg viewBox={`0 0 ${CHART_WIDTH} ${CHART_HEIGHT}`} preserveAspectRatio="none" className="resp-chart-svg">
+                          <defs>
+                            <linearGradient id="respStockGrad" x1="0" y1="0" x2="0" y2="1">
+                              <stop offset="0%" stopColor="var(--accent2)" stopOpacity="0.22" />
+                              <stop offset="100%" stopColor="var(--accent2)" stopOpacity="0" />
+                            </linearGradient>
+                          </defs>
+                          <rect x={stockCurve.points[7]?.x || 210} y="0" width={CHART_WIDTH - (stockCurve.points[7]?.x || 210)} height="92" className="resp-projection-zone" />
+                          <line x1="0" y1="90" x2="420" y2="90" className="resp-grid-line strong" />
+                          <line x1="0" y1={stockCurve.thresholdY} x2="420" y2={stockCurve.thresholdY} className="resp-threshold-line" />
+                          <text x="410" y={Math.max(10, stockCurve.thresholdY - 4)} className="resp-threshold-label" textAnchor="end">Seuil</text>
+                          <path d={areaPath(stockCurve.points)} fill="url(#respStockGrad)" />
+                          <path d={smoothPath(stockCurve.points)} className="resp-line stock" />
+                          <text x="326" y="13" className="resp-projection-label" textAnchor="middle">Projection J+7</text>
+                          {stockCurve.crossing && (
+                            <>
+                              <circle cx={stockCurve.crossing.x} cy={stockCurve.crossing.y} r="4.5" className="resp-point danger" />
+                              <text x={Math.max(30, stockCurve.crossing.x - 8)} y={Math.max(14, stockCurve.crossing.y - 8)} className="resp-crossing-label">{stockCurve.crossing.label}</text>
+                            </>
+                          )}
+                        </svg>
+                        <div className="resp-x-labels stock">
+                          <span>J-7</span>
+                          <span>Auj.</span>
+                          <span>J+7</span>
+                        </div>
+                      </div>
+                      <div className="resp-seuil-note">
+                        <AlertTriangle size={14} />
+                        {stockCurve.crossing
+                          ? `Le stock croise le seuil autour de ${stockCurve.crossing.label}. Action recommandée aujourd’hui.`
+                          : "Aucun croisement détecté sur l’horizon J+7."}
+                      </div>
+                      <div className="resp-legend">
+                        <span><i className="dot stock" /> Stock réel</span>
+                        <span><i className="dot threshold" /> Seuil critique</span>
+                        <span><i className="dot projection" /> Projection</span>
+                      </div>
+                    </>
+                  ) : (
+                    <div className="resp-empty-state">Aucun produit critique pour tracer Stock/Seuil.</div>
+                  )}
+                </article>
+              </section>
+
+              <section className="resp-grid two lower">
+                <article className="resp-card">
+                  <div className="resp-card-header">
+                    <h3><ShoppingCart size={17} /> Top produits consommés</h3>
+                    <span className="resp-improve-tag">Top 5 + tendance</span>
+                  </div>
+                  <div className="resp-products-list">
+                    {topConsumed.length ? topConsumed.map((row) => (
+                      <button
+                        type="button"
+                        className="resp-product-row"
+                        key={row.key}
+                        onClick={() => openConsumption(row.code || row.name)}
+                      >
+                        <span className="resp-product-rank">#{row.rank}</span>
+                        <span className="resp-product-info">
+                          <strong title={row.name}>{row.name}</strong>
+                          <small>{row.code} · {row.category}</small>
+                        </span>
+                        <span className="resp-product-bar-wrap" aria-hidden="true">
+                          <span className={`resp-product-bar rank-${row.rank}`} style={{ width: `${Math.round(row.ratio * 100)}%` }} />
+                        </span>
+                        <span className="resp-product-count">{Math.round(row.qty)}</span>
+                        <span className={`resp-product-trend ${row.trend >= 0 ? 'up' : 'down'}`}>
+                          {row.trend >= 0 ? '↑' : '↓'}{row.trend >= 0 ? '+' : ''}{row.trend}
+                        </span>
+                      </button>
+                    )) : (
+                      <div className="resp-empty-state compact">Pas de données de consommation sur la période.</div>
+                    )}
+                  </div>
+                </article>
+
+                <div className="resp-side-stack">
+                  <article className="resp-card">
+                    <div className="resp-card-header">
+                      <h3><CheckCircle2 size={17} /> Disponibilité stock</h3>
+                      <span className="resp-improve-tag">Seuils colorés</span>
+                    </div>
+                    <div className="resp-availability-wrap">
+                      <div className={`resp-donut ${availabilityTone}`}>
+                        <svg viewBox="0 0 100 100" width="100" height="100">
+                          <circle cx="50" cy="50" r="38" className="resp-donut-track" />
+                          <circle
+                            cx="50"
+                            cy="50"
+                            r="38"
+                            className="resp-donut-progress"
+                            style={{
+                              strokeDasharray: `${2 * Math.PI * 38}`,
+                              strokeDashoffset: `${(2 * Math.PI * 38) * (1 - availabilityRate / 100)}`,
+                            }}
+                          />
+                        </svg>
+                        <div className="resp-donut-label">
+                          <strong><AnimatedNumber value={availabilityRate} decimals={1} />%</strong>
+                          <span>Disponibilité</span>
+                        </div>
+                      </div>
+                      <div className="resp-availability-stats">
+                        <div><span className="ok">● OK</span><strong>{stats.ok}</strong></div>
+                        <div><span className="danger">● Critiques</span><strong>{stats.critical}</strong></div>
+                        <div><span>Total</span><strong>{stats.total}</strong></div>
+                        <p className={availabilityTone}>
+                          Seuil affiché : vert &gt;85%, orange 70–85%, rouge &lt;70%.
+                        </p>
+                      </div>
+                    </div>
+                  </article>
+
+                  <article className="resp-card">
+                    <div className="resp-card-header">
+                      <h3><FlaskConical size={17} /> Registre chimique</h3>
+                      <span className="resp-danger-tag">{chemicalSummary.missingFds} FDS manquantes</span>
+                    </div>
+                    <div className="resp-register-list">
+                      <div><span>Produits enregistrés</span><strong>{chemicalSummary.total}</strong></div>
+                      <div><span>FDS manquantes</span><strong className="danger">{chemicalSummary.missingFds}</strong></div>
+                      <div>
+                        <span>Taux conformité</span>
+                        <strong className={chemicalSummary.missingFds > 0 ? 'danger' : 'ok'}>
+                          {chemicalSummary.total ? Math.round(((chemicalSummary.total - chemicalSummary.missingFds) / chemicalSummary.total) * 100) : 0}%
+                        </strong>
+                      </div>
+                    </div>
+                    <button type="button" className="resp-register-action" onClick={() => navigate('/responsable/registre-chimique')}>
+                      Ouvrir registre et compléter FDS
+                      <ChevronRight size={15} />
+                    </button>
+                  </article>
+                </div>
+              </section>
+
+              <footer className="resp-dashboard-footer">
+                Maquette intégrée au langage React de l’application ETAP · Dernière MàJ : {formatDateTimeLabel(lastUpdatedAt)}
+              </footer>
             </div>
           </main>
         </div>
       </div>
     </ProtectedPage>
   );
-};
+}
 
 export default DashboardResp;

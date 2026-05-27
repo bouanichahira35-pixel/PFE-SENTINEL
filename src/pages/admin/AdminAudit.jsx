@@ -5,6 +5,7 @@ import HeaderPage from '../../components/shared/HeaderPage';
 import LoadingSpinner from '../../components/shared/LoadingSpinner';
 import { get } from '../../services/api';
 import { useToast } from '../../components/shared/Toast';
+import { getUiErrorMessage } from '../../services/uiError';
 import './AdminDashboard.css';
 import './AdminAudit.css';
 
@@ -49,7 +50,7 @@ export default function AdminAudit({ userName, onLogout }) {
       const rows = Array.isArray(res?.items) ? res.items : [];
       setItems(rows);
     } catch (err) {
-      toast.error(err.message || 'Erreur chargement historique');
+      toast.error(getUiErrorMessage(err, 'Erreur chargement historique'));
       setItems([]);
     } finally {
       setIsLoading(false);
@@ -164,4 +165,3 @@ export default function AdminAudit({ userName, onLogout }) {
     </div>
   );
 }
-

@@ -756,7 +756,7 @@ router.patch(
 router.patch(
   '/:id/cancel',
   requireAuth,
-  requirePermission(PERMISSIONS.REQUEST_CREATE),
+  requirePermission(PERMISSIONS.REQUEST_UPDATE_OWN),
   strictBody(['note']),
   async (req, res) => {
   try {

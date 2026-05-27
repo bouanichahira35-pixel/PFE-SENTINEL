@@ -6,6 +6,7 @@ import LoadingSpinner from '../../components/shared/LoadingSpinner';
 import useProtectedFileUrl from '../../hooks/useProtectedFileUrl';
 import { get, patch, post, uploadFile } from '../../services/api';
 import { useToast } from '../../components/shared/Toast';
+import { getUiErrorMessage } from '../../services/uiError';
 import { setUiLanguage, useUiLanguage } from '../../utils/uiLanguage';
 import './ParametresDem.css';
 
@@ -97,7 +98,7 @@ const ParametresDem = ({ userName, onLogout }) => {
       setLangue(nextLang);
       setUiLanguage(nextLang);
     } catch (err) {
-      toast.error(err.message || 'Erreur chargement paramètres');
+      toast.error(getUiErrorMessage(err, 'Erreur chargement paramètres'));
     } finally {
       setIsLoading(false);
     }
@@ -148,7 +149,7 @@ const ParametresDem = ({ userName, onLogout }) => {
       setAvatarPreviewUrl('');
       toast.success('Profil mis a jour');
     } catch (err) {
-      toast.error(err.message || 'Erreur enregistrement profil');
+      toast.error(getUiErrorMessage(err, 'Erreur enregistrement profil'));
     } finally {
       setIsSaving(false);
     }
@@ -176,7 +177,7 @@ const ParametresDem = ({ userName, onLogout }) => {
         onLogout('Mot de passe modifié. Veuillez vous reconnecter.', { remote: false });
       }
     } catch (err) {
-      toast.error(err.message || 'Erreur modification mot de passe');
+      toast.error(getUiErrorMessage(err, 'Erreur modification mot de passe'));
     } finally {
       setIsSaving(false);
     }
@@ -191,7 +192,7 @@ const ParametresDem = ({ userName, onLogout }) => {
       });
       toast.success('Préférences enregistrées');
     } catch (err) {
-      toast.error(err.message || 'Erreur enregistrement préférences');
+      toast.error(getUiErrorMessage(err, 'Erreur enregistrement préférences'));
     } finally {
       setIsSaving(false);
     }
@@ -209,7 +210,7 @@ const ParametresDem = ({ userName, onLogout }) => {
       await post('/settings/me/test-email', {});
       toast.success('Email de test envoye');
     } catch (err) {
-      toast.error(err.message || 'Echec envoi email');
+      toast.error(getUiErrorMessage(err, 'Echec envoi email'));
     } finally {
       setIsSaving(false);
     }

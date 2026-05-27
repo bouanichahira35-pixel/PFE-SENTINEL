@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { Text, View, StyleSheet } from 'react-native';
 import { Screen } from '../../ui/Screen';
 import { Button } from '../../ui/Button';
+import { Card } from '../../ui/Card';
 import { colors } from '../../ui/theme';
 import { ProductsRepo, type ProductRow } from '../../core/db/productsRepo';
 import { FdsService } from '../../core/services/fdsService';
@@ -32,11 +33,11 @@ export function ProductScreen(props: { productId: string; onBack: () => void; on
   };
 
   return (
-    <Screen title="Produit" onBack={props.onBack}>
+    <Screen title="Produit" onBack={props.onBack} scroll>
       {!item ? (
         <Text style={{ color: colors.muted }}>Produit introuvable</Text>
       ) : (
-        <View style={styles.card}>
+        <Card>
           <Text style={styles.name}>{item.name || item.codeProduct}</Text>
           <Text style={styles.meta}>{item.codeProduct} {item.category ? `• ${item.category}` : ''}</Text>
           {msg ? <Text style={styles.err}>{msg}</Text> : null}
@@ -45,16 +46,14 @@ export function ProductScreen(props: { productId: string; onBack: () => void; on
           <View style={{ height: 10 }} />
           <Button title="Entrée stock (offline)" onPress={() => props.onStockIn(item.id)} />
           <Button title="Sortie stock (offline)" onPress={() => props.onStockOut(item.id)} style={{ marginTop: 10 }} />
-        </View>
+        </Card>
       )}
     </Screen>
   );
 }
 
 const styles = StyleSheet.create({
-  card: { borderWidth: 1, borderColor: colors.border, backgroundColor: colors.card, borderRadius: 14, padding: 12 },
   name: { color: colors.text, fontWeight: '900', fontSize: 16 },
   meta: { color: colors.muted, marginTop: 4 },
   err: { color: colors.danger, marginTop: 10, fontWeight: '800' },
 });
-

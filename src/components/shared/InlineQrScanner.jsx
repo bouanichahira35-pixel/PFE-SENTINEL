@@ -3,7 +3,7 @@ import { Camera, StopCircle } from 'lucide-react';
 import { useToast } from './Toast';
 import './InlineQrScanner.css';
 
-const InlineQrScanner = ({ onDetected, onClose }) => {
+const InlineQrScanner = ({ onDetected, onClose, mode = 'qr' }) => {
   const toast = useToast();
   const videoRef = useRef(null);
   const scanLoopRef = useRef(null);
@@ -13,6 +13,7 @@ const InlineQrScanner = ({ onDetected, onClose }) => {
   const streamRef = useRef(null);
   const [starting, setStarting] = useState(true);
   const lockRef = useRef(false);
+  const [modeLabel, setModeLabel] = useState('');
 
   const cleanup = () => {
     if (scanLoopRef.current) {
@@ -57,7 +58,40 @@ const InlineQrScanner = ({ onDetected, onClose }) => {
         }
 
         if (window.BarcodeDetector) {
-          const detector = new window.BarcodeDetector({ formats: ['qr_code'] });
+          const desiredFormats = mode === 'any'
+            ? [
+              'qr_code',
+              'ean_13',
+              'ean_8',
+              'upc_a',
+              'upc_e',
+              'code_128',
+              'code_39',
+              'code_93',
+              'itf',
+              'codabar',
+              'data_matrix',
+              'pdf417',
+              'aztec',
+            ]
+            : ['qr_code'];
+
+          let formats = desiredFormats;
+          try {
+            const supported = await window.BarcodeDetector.getSupportedFormats?.();
+            if (Array.isArray(supported) && supported.length) {
+              formats = desiredFormats.filter((f) => supported.includes(f));
+            }
+          } catch {
+            // ignore: fallback to desiredFormats, then to QR only if needed
+          }
+
+          let detector;
+          try {
+            detector = new window.BarcodeDetector({ formats });
+          } catch {
+            detector = new window.BarcodeDetector({ formats: ['qr_code'] });
+          }
           detectorRef.current = detector;
 
           const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });
@@ -80,21 +114,31 @@ const InlineQrScanner = ({ onDetected, onClose }) => {
             scanLoopRef.current = requestAnimationFrame(scan);
           };
           scanLoopRef.current = requestAnimationFrame(scan);
+          if (mounted) setModeLabel(mode === 'any' ? 'Code-barres / QR' : 'QR');
           if (mounted) setStarting(false);
           return;
         }
 
         const { BrowserMultiFormatReader } = await import('@zxing/browser');
-        const reader = new BrowserMultiFormatReader();
+        let reader;
+        if (mode === 'qr') {
+          const { BarcodeFormat, DecodeHintType } = await import('@zxing/library');
+          const hints = new Map();
+          hints.set(DecodeHintType.POSSIBLE_FORMATS, [BarcodeFormat.QR_CODE]);
+          reader = new BrowserMultiFormatReader(hints);
+        } else {
+          reader = new BrowserMultiFormatReader();
+        }
         zxingReaderRef.current = reader;
         if (!mounted || !videoRef.current) return;
         const controls = await reader.decodeFromVideoDevice(undefined, videoRef.current, (result) => {
           if (result?.getText) finish(result.getText());
         });
         zxingControlsRef.current = controls;
+        if (mounted) setModeLabel(mode === 'any' ? 'Code-barres / QR' : 'QR');
         if (mounted) setStarting(false);
       } catch {
-        toast.error('Impossible de demarrer le scan QR');
+        toast.error(mode === 'any' ? 'Impossible de demarrer le scan code-barres / QR' : 'Impossible de demarrer le scan QR');
         cleanup();
       }
     };
@@ -104,26 +148,30 @@ const InlineQrScanner = ({ onDetected, onClose }) => {
       mounted = false;
       cleanup();
     };
-  }, [onClose, onDetected, toast]);
+  }, [mode, onClose, onDetected, toast]);
 
   return (
-    <div className="inline-qr-scanner">
-      <div className="inline-qr-toolbar">
-        <span className="inline-qr-title">
-          <Camera size={16} />
-          Scanner QR
-        </span>
-        <button type="button" className="inline-qr-stop" onClick={onClose}>
-          <StopCircle size={16} />
-          Fermer
-        </button>
-      </div>
+      <div className="inline-qr-scanner">
+        <div className="inline-qr-toolbar">
+          <span className="inline-qr-title">
+            <Camera size={16} />
+            Scanner {modeLabel || (mode === 'any' ? 'code-barres / QR' : 'QR')}
+          </span>
+          <button type="button" className="inline-qr-stop" onClick={onClose}>
+            <StopCircle size={16} />
+            Fermer
+          </button>
+        </div>
       <div className="inline-qr-video-wrap">
         <video ref={videoRef} autoPlay playsInline className="inline-qr-video" />
         <div className="inline-qr-frame" />
       </div>
       {starting && <div className="inline-qr-hint">Demarrage camera...</div>}
-      {!starting && <div className="inline-qr-hint">Pointez le QR dans le cadre</div>}
+      {!starting && (
+        <div className="inline-qr-hint">
+          {mode === 'any' ? 'Pointez le code-barres ou le QR dans le cadre' : 'Pointez le QR dans le cadre'}
+        </div>
+      )}
     </div>
   );
 };

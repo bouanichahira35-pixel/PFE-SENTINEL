@@ -63,6 +63,21 @@ function perimeterLabel(inv) {
   return [zone, fam, cat].filter(Boolean).join(' | ') || '-';
 }
 
+function assignedMagasiniersLabel(inv) {
+  const names = [];
+  const seen = new Set();
+  const pushName = (u) => {
+    const name = String(u?.username || '').trim();
+    if (!name || seen.has(name)) return;
+    seen.add(name);
+    names.push(name);
+  };
+
+  if (Array.isArray(inv?.magasinier_ids)) inv.magasinier_ids.forEach(pushName);
+  pushName(inv?.magasinier_id);
+  return names.length ? names.join(', ') : '-';
+}
+
 function toCsv(lines = []) {
   const header = [
     'reference',
@@ -317,7 +332,7 @@ const AnalyseInventaireResp = ({ userName, onLogout }) => {
                   <span>Type: <strong>{inventory?.type_inventaire || '-'}</strong></span>
                   <span>Magasin: <strong>{inventory?.magasin_id?.name || '-'}</strong></span>
                   <span>Périmètre: <strong>{perimeterLabel(inventory)}</strong></span>
-                  <span>Magasinier: <strong>{inventory?.magasinier_id?.username || '-'}</strong></span>
+                  <span>Magasiniers: <strong>{assignedMagasiniersLabel(inventory)}</strong></span>
                   <span>Soumis: <strong>{formatDt(inventory?.submitted_at)}</strong></span>
                 </div>
               </div>

@@ -53,6 +53,122 @@
   font-weight: 800;
 }
 
+.admin-session-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 430;
+  display: grid;
+  place-items: center;
+  padding: 12px;
+  background: rgba(15, 23, 42, 0.45);
+}
+
+.admin-session-modal {
+  width: min(520px, 100%);
+  overflow: hidden;
+  border: 1px solid #e7ebf3;
+  border-radius: 14px;
+  background: #ffffff;
+  box-shadow: 0 18px 40px rgba(15, 23, 42, 0.18);
+}
+
+.admin-session-modal-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 14px 16px;
+  border-bottom: 1px solid #e7ebf3;
+}
+
+.admin-session-modal-head strong {
+  display: block;
+  color: #0f172a;
+  font-weight: 950;
+}
+
+.admin-session-modal-head span {
+  display: block;
+  margin-top: 3px;
+  color: #64748b;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.admin-session-icon-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  border: 1px solid #e7ebf3;
+  border-radius: 10px;
+  background: #ffffff;
+  color: #475569;
+  cursor: pointer;
+}
+
+.admin-session-icon-btn:disabled {
+  cursor: not-allowed;
+  opacity: 0.65;
+}
+
+.admin-session-modal-body {
+  display: grid;
+  gap: 12px;
+  padding: 16px;
+}
+
+.admin-session-modal-body p {
+  margin: 0;
+  color: #475569;
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.admin-session-reason-label {
+  display: grid;
+  gap: 7px;
+  color: #0f172a;
+  font-size: 12px;
+  font-weight: 950;
+}
+
+.admin-session-reason-label textarea {
+  width: 100%;
+  min-height: 108px;
+  resize: vertical;
+  border: 1px solid #e7ebf3;
+  border-radius: 12px;
+  padding: 10px 12px;
+  color: #0f172a;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 800;
+  line-height: 1.45;
+}
+
+.admin-session-reason-label textarea:focus {
+  outline: none;
+  border-color: #2563eb;
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.12);
+}
+
+.admin-session-reason-count {
+  color: #64748b;
+  font-size: 12px;
+  font-weight: 800;
+  text-align: right;
+}
+
+.admin-session-modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  padding: 14px 16px;
+  border-top: 1px solid #e7ebf3;
+}
+
 @media (max-width: 768px) {
   .admin-sessions-table table {
     min-width: 760px;
@@ -62,6 +178,14 @@
   .admin-sessions-table td {
     padding: 9px 10px;
     font-size: 12px;
+  }
+
+  .admin-session-modal-actions {
+    flex-direction: column-reverse;
+  }
+
+  .admin-session-modal-actions .admin-btn {
+    width: 100%;
   }
 }
 

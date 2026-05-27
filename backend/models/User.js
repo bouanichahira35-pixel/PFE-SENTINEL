@@ -25,6 +25,13 @@ const userSchema = new mongoose.Schema(
       enum: ['demandeur', 'magasinier', 'responsable', 'admin'],
       required: true,
     },
+    // RBAC utilisateur (optionnel) : sous-ensemble des permissions de son rôle.
+    // - undefined / absent : l'utilisateur hérite de toutes les permissions du rôle
+    // - [] : aucune permission (sous-ensemble vide)
+    rbac_permissions: {
+      type: [String],
+      default: undefined,
+    },
   // Pour les demandeurs: limite le catalogue visible (ex: bureautique / menage / petrole).
   // Les roles magasinier/responsable voient tout le catalogue.
   demandeur_profile: {

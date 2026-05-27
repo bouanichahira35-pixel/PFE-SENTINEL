@@ -2,6 +2,8 @@
 
 const requireAuth = require('../middlewares/requireAuth');
 const requirePermission = require('../middlewares/requirePermission');
+const requireAnyPermission = require('../middlewares/requireAnyPermission');
+const requireRole = require('../middlewares/requireRole');
 const strictBody = require('../middlewares/strictBody');
 const { PERMISSIONS } = require('../constants/permissions');
 const { normalizeRole, isTechnicalRole } = require('../constants/roles');
@@ -14,10 +16,21 @@ const History = require('../models/History');
 const { enqueueMail } = require('../services/mailQueueService');
 const { logSecurityEvent } = require('../services/securityAuditService');
 const { getUserPreferences, canSendNotificationEmail } = require('../services/userPreferencesService');
+const { getRolePermissions } = require('../services/rbacPolicyService');
 const { ERROR_CODES } = require('../constants/errorCodes');
 const { normalizeEmail, normalizePhone, isValidEmail, isValidPhone, isSafeText, isStrongPassword } = require('../utils/validation');
 
 const PROFILE_VALUES = ['bureautique', 'menage', 'petrole'];
+const LIMITED_MANAGED_ROLES = new Set(['magasinier', 'demandeur']);
+
+function getActorRole(req) {
+  return normalizeRole(req.user?.role);
+}
+
+function canManageTargetRole(actorRole, targetRole) {
+  if (actorRole === 'admin') return true;
+  return LIMITED_MANAGED_ROLES.has(targetRole);
+}
 
 function normalizeServiceDirection(value) {
   const raw = String(value || '').trim();
@@ -45,14 +58,23 @@ router.use(requireAuth);
 
 // GET /api/users?role=magasinier|demandeur|responsable&status=active|blocked
 // Retourne la liste des utilisateurs (sans password_hash) + nombre de sessions actives.
-router.get('/', requirePermission(PERMISSIONS.USER_MANAGE), async (req, res) => {
+router.get('/', requireAnyPermission(PERMISSIONS.USER_LIST, PERMISSIONS.USER_MANAGE), async (req, res) => {
   try {
-    const role = req.query.role;
+    const actorRole = getActorRole(req);
+    const role = normalizeRole(req.query.role);
     const status = req.query.status;
 
     const q = {};
-    if (role) q.role = role;
     if (status) q.status = status;
+
+    if (role) {
+      if (!canManageTargetRole(actorRole, role)) {
+        return res.status(403).json({ error: 'Accès refusé pour ce rôle (cible)' });
+      }
+      q.role = role;
+    } else if (actorRole !== 'admin') {
+      return res.status(400).json({ error: 'role obligatoire (magasinier|demandeur)' });
+    }
 
     const users = await User.find(q)
       .select('_id username email telephone role status date_creation last_login demandeur_profile service_direction image_profile')
@@ -99,6 +121,80 @@ router.get('/', requirePermission(PERMISSIONS.USER_MANAGE), async (req, res) => 
   }
 });
 
+// GET /api/users/:id/permissions
+// RBAC utilisateur: sous-ensemble des permissions du rôle (admin uniquement).
+router.get('/:id/permissions', requireRole('admin'), async (req, res) => {
+  try {
+    const user = await User.findById(req.params.id)
+      .select('_id username email role rbac_permissions')
+      .lean();
+
+    if (!user) return res.status(404).json({ error: 'Utilisateur introuvable' });
+
+    const roleId = normalizeRole(user.role);
+    const rolePerms = await getRolePermissions(roleId);
+    const roleSet = rolePerms instanceof Set ? rolePerms : new Set();
+
+    const inherits_role = !Array.isArray(user.rbac_permissions);
+    const effective = inherits_role
+      ? Array.from(roleSet.values())
+      : user.rbac_permissions
+        .map((p) => String(p || '').trim())
+        .filter((p) => p && roleSet.has(p));
+
+    return res.json({
+      ok: true,
+      userId: String(user._id),
+      roleId,
+      inherits_role,
+      permissions: Array.from(new Set(effective)).sort(),
+    });
+  } catch (err) {
+    return res.status(500).json({ error: 'Failed to fetch user permissions', details: err.message });
+  }
+});
+
+// PATCH /api/users/:id/permissions
+// Body: { permissions: string[] } (admin uniquement).
+router.patch('/:id/permissions', requireRole('admin'), strictBody(['permissions']), async (req, res) => {
+  try {
+    const user = await User.findById(req.params.id)
+      .select('_id role rbac_permissions')
+      .lean();
+
+    if (!user) return res.status(404).json({ error: 'Utilisateur introuvable' });
+
+    const roleId = normalizeRole(user.role);
+    const rolePerms = await getRolePermissions(roleId);
+    const roleSet = rolePerms instanceof Set ? rolePerms : new Set();
+
+    const input = Array.isArray(req.body?.permissions) ? req.body.permissions : [];
+    const next = Array.from(new Set(
+      input
+        .map((p) => String(p || '').trim())
+        .filter((p) => p && roleSet.has(p))
+    )).sort();
+
+    const roleList = Array.from(roleSet.values()).sort();
+    const shouldInherit = next.length === roleList.length && next.every((p, i) => p === roleList[i]);
+
+    // Safety guard: avoid self lock-out. An admin can only keep full inherited permissions on itself.
+    if (String(req.user?.id) === String(user._id) && !shouldInherit) {
+      return res.status(400).json({ error: 'Impossible de restreindre ses propres permissions' });
+    }
+
+    if (shouldInherit) {
+      await User.updateOne({ _id: user._id }, { $unset: { rbac_permissions: 1 } });
+    } else {
+      await User.updateOne({ _id: user._id }, { $set: { rbac_permissions: next } });
+    }
+
+    return res.json({ ok: true, userId: String(user._id), roleId, inherits_role: shouldInherit, permissions: next });
+  } catch (err) {
+    return res.status(500).json({ error: 'Failed to update user permissions', details: err.message });
+  }
+});
+
 // GET /api/users/active-sessions?role=magasinier
 // Liste des sessions actives (utile pour "voir qui est connecte")
 router.get(
@@ -139,10 +235,11 @@ router.get(
 // Si on bloque un user, on rvoke aussi toutes ses sessions.
 router.patch(
   '/:id/status',
-  requirePermission(PERMISSIONS.USER_MANAGE),
+  requireAnyPermission(PERMISSIONS.USER_STATUS_UPDATE, PERMISSIONS.USER_MANAGE),
   strictBody(['status', 'reason']),
   async (req, res) => {
     try {
+      const actorRole = getActorRole(req);
       const { status } = req.body || {};
       const reason = String(req.body?.reason || '').trim();
       if (!['active', 'blocked'].includes(status)) {
@@ -175,11 +272,18 @@ router.patch(
           reason: 'Separation des pouvoirs: un responsable ne peut pas s auto-bloquer.',
         });
       }
-      if (user.role === 'responsable') {
-        return res.status(400).json({
-          error: 'Operation interdite: impossible de bloquer un responsable',
+      if (!canManageTargetRole(actorRole, normalizeRole(user.role))) {
+        return res.status(403).json({
+          error: 'Operation interdite: rôle cible non autorisé',
           code: ERROR_CODES.USER_STATUS_FORBIDDEN_ROLE,
-          reason: 'Ce flux gere uniquement les comptes magasinier/demandeur.',
+          reason: 'Ce flux gère uniquement les comptes demandeur/magasinier (sauf admin).',
+        });
+      }
+      if (user.role === 'responsable' || user.role === 'admin') {
+        return res.status(400).json({
+          error: 'Operation interdite: impossible de bloquer un compte admin/responsable',
+          code: ERROR_CODES.USER_STATUS_FORBIDDEN_ROLE,
+          reason: 'Ce flux gère uniquement les comptes magasinier/demandeur.',
         });
       }
 
@@ -198,6 +302,9 @@ router.patch(
             },
           }
         );
+        if (typeof requireAuth.invalidateUserSessionsCache === 'function') {
+          requireAuth.invalidateUserSessionsCache(user._id);
+        }
       }
 
       const actorName = req.user.username || 'Responsable';
@@ -274,13 +381,18 @@ router.patch(
 // Body: { reason?: string }
 router.post(
   '/:id/revoke-sessions',
-  requirePermission(PERMISSIONS.SESSION_REVOKE),
+  requireAnyPermission(PERMISSIONS.SESSION_REVOKE, PERMISSIONS.USER_MANAGE),
   async (req, res) => {
     try {
+      const actorRole = getActorRole(req);
       const reason = String(req.body?.reason || 'revoked_by_responsable');
 
       const user = await User.findById(req.params.id).select('_id role username').lean();
       if (!user) return res.status(404).json({ error: 'Utilisateur introuvable' });
+
+      if (!canManageTargetRole(actorRole, normalizeRole(user.role))) {
+        return res.status(403).json({ error: 'Accès refusé pour ce rôle (cible)' });
+      }
 
       const r = await UserSession.updateMany(
         { user: user._id, is_active: true },
@@ -292,6 +404,9 @@ router.post(
           },
         }
       );
+      if (typeof requireAuth.invalidateUserSessionsCache === 'function') {
+        requireAuth.invalidateUserSessionsCache(user._id);
+      }
 
       await logSecurityEvent({
         event_type: 'sessions_revoked',
@@ -314,7 +429,8 @@ router.post(
 // Body: { username, email, telephone, role, password, demandeur_profile? }
 router.post(
   '/',
-  requirePermission(PERMISSIONS.USER_MANAGE),
+  requireRole('admin'),
+  requireAnyPermission(PERMISSIONS.USER_CREATE, PERMISSIONS.USER_MANAGE),
   strictBody(['username', 'email', 'telephone', 'role', 'password']),
   async (req, res) => {
     try {
@@ -415,7 +531,8 @@ router.post(
 // Body: { role, reason }
 router.patch(
   '/:id/role',
-  requirePermission(PERMISSIONS.USER_MANAGE),
+  requireRole('admin'),
+  requireAnyPermission(PERMISSIONS.USER_ROLE_UPDATE, PERMISSIONS.USER_MANAGE),
   strictBody(['role', 'reason']),
   async (req, res) => {
     try {
@@ -459,7 +576,7 @@ router.patch(
         details: `Changed user role ${user._id} ${before}->${role}. reason=${reason}`,
       });
 
-  return res.json({ message: 'Role mis a jour', user: { id: user._id, role }, reason });
+      return res.json({ message: 'Role mis a jour', user: { id: user._id, role }, reason });
     } catch (err) {
       return res.status(500).json({ error: 'Failed to update role', details: err.message });
     }
@@ -468,13 +585,16 @@ router.patch(
 
 // PATCH /api/users/:id/service-direction
 // Body: { service_direction: "RH" | "Finance" | "HSE" | ... }
-// Pour les demandeurs uniquement. Met à jour aussi le profil catalogue automatiquement.
-router.patch(
-  '/:id/service-direction',
-  requirePermission(PERMISSIONS.USER_MANAGE),
-  strictBody(['service_direction']),
-  async (req, res) => {
+  // Met à jour le champ service_direction.
+  // - Pour les demandeurs : met à jour aussi le profil catalogue automatiquement.
+  // - Pour les autres rôles : met à jour uniquement service_direction.
+  router.patch(
+    '/:id/service-direction',
+    requireAnyPermission(PERMISSIONS.USER_PROFILE_UPDATE, PERMISSIONS.USER_MANAGE),
+    strictBody(['service_direction']),
+    async (req, res) => {
     try {
+      const actorRole = getActorRole(req);
       const serviceDirection = normalizeServiceDirection(req.body?.service_direction);
       if (serviceDirection && !isSafeText(serviceDirection, { min: 2, max: 80 })) {
         return res.status(400).json({ error: 'service_direction invalide (2-80, sans < >)' });
@@ -482,17 +602,23 @@ router.patch(
 
       const user = await User.findById(req.params.id).select('_id role username service_direction demandeur_profile').lean();
       if (!user) return res.status(404).json({ error: 'Utilisateur introuvable' });
-      if (user.role !== 'demandeur') {
-        return res.status(400).json({ error: 'service_direction concerne uniquement les demandeurs' });
+      if (!canManageTargetRole(actorRole, normalizeRole(user.role))) {
+        return res.status(403).json({ error: 'Accès refusé pour ce rôle (cible)' });
       }
 
       const beforeService = user.service_direction || '';
-      const profileFromService = mapServiceToProfile(serviceDirection);
-      const nextProfile = profileFromService || (user.demandeur_profile || 'bureautique');
+      const isDemandeur = user.role === 'demandeur';
+      const profileFromService = isDemandeur ? mapServiceToProfile(serviceDirection) : null;
+      const nextProfile = isDemandeur ? (profileFromService || (user.demandeur_profile || 'bureautique')) : undefined;
 
       await User.updateOne(
         { _id: user._id },
-        { $set: { service_direction: serviceDirection, demandeur_profile: nextProfile } }
+        {
+          $set: {
+            service_direction: serviceDirection,
+            ...(isDemandeur ? { demandeur_profile: nextProfile } : {}),
+          },
+        }
       );
 
       await History.create({
@@ -511,14 +637,14 @@ router.patch(
         },
       });
 
-      return res.json({
-        message: 'Service/direction mis a jour',
-        user: {
-          id: user._id,
-          service_direction: serviceDirection,
-          demandeur_profile: nextProfile,
-        },
-      });
+        return res.json({
+          message: 'Service/direction mis a jour',
+          user: {
+            id: user._id,
+            service_direction: serviceDirection,
+            demandeur_profile: isDemandeur ? nextProfile : undefined,
+          },
+        });
     } catch (err) {
       return res.status(500).json({ error: 'Failed to update service_direction', details: err.message });
     }
@@ -529,7 +655,8 @@ router.patch(
 // Body: { new_password?, reason }
 router.post(
   '/:id/reset-password',
-  requirePermission(PERMISSIONS.USER_MANAGE),
+  requireRole('admin'),
+  requireAnyPermission(PERMISSIONS.USER_PASSWORD_RESET, PERMISSIONS.USER_MANAGE),
   strictBody(['reason']),
   async (req, res) => {
     try {
@@ -551,6 +678,9 @@ router.post(
         { user: user._id, is_active: true },
         { $set: { is_active: false, logout_time: new Date(), revoked_reason: 'password_reset' } }
       );
+      if (typeof requireAuth.invalidateUserSessionsCache === 'function') {
+        requireAuth.invalidateUserSessionsCache(user._id);
+      }
 
       await History.create({
         action_type: 'user_update',
@@ -594,10 +724,11 @@ router.post(
 // Body: { demandeur_profile: "bureautique" | "menage" | "petrole" }
 router.patch(
   '/:id/demandeur-profile',
-  requirePermission(PERMISSIONS.USER_MANAGE),
+  requireAnyPermission(PERMISSIONS.USER_PROFILE_UPDATE, PERMISSIONS.USER_MANAGE),
   strictBody(['demandeur_profile']),
   async (req, res) => {
     try {
+      const actorRole = getActorRole(req);
       const demandeurProfile = String(req.body?.demandeur_profile || '').trim().toLowerCase();
       const allowed = new Set(['bureautique', 'menage', 'petrole']);
       if (!allowed.has(demandeurProfile)) {
@@ -622,6 +753,9 @@ router.patch(
           code: ERROR_CODES.VALIDATION_FAILED,
           reason: 'Le profil catalogue ne concerne que les demandeurs.',
         });
+      }
+      if (!canManageTargetRole(actorRole, normalizeRole(user.role))) {
+        return res.status(403).json({ error: 'Accès refusé pour ce rôle (cible)' });
       }
 
       const before = user.demandeur_profile || 'bureautique';

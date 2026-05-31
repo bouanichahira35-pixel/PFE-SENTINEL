@@ -1,6 +1,10 @@
 import { useState, useCallback, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Package, X, QrCode, Tag, Hash, Layers, AlertCircle, CheckCircle, Lightbulb, Camera, StopCircle, Keyboard } from 'lucide-react';
+import {
+  Package, X, QrCode, Tag, Hash, Layers, AlertCircle,
+  CheckCircle, Lightbulb, Camera, StopCircle, Keyboard,
+  FlaskConical, Gauge, Info, ImagePlus,
+} from 'lucide-react';
 import SidebarMag from '../../components/magasinier/SidebarMag';
 import HeaderPage from '../../components/shared/HeaderPage';
 import LoadingSpinner from '../../components/shared/LoadingSpinner';
@@ -13,26 +17,60 @@ import './AjouterProduit.css';
 const unites = ['Unite', 'Ramette', 'Boite', 'Carton', 'Kg', 'Litre', 'Metre'];
 
 const FAMILY_LABELS = {
-  economat: 'Economat',
+  economat: 'Économat',
   produit_chimique: 'Produit chimique',
   gaz: 'Gaz',
   consommable_informatique: 'Consommable informatique',
   consommable_laboratoire: 'Consommable laboratoire',
 };
 
-const categorySuggestions = {
-  'cable': 'Informatique', 'hdmi': 'Informatique', 'usb': 'Informatique',
-  'souris': 'Informatique', 'clavier': 'Informatique', 'ecran': 'Informatique',
-  'pc': 'Informatique', 'ordinateur': 'Informatique', 'imprimante': 'Informatique',
-  'papier': 'Fournitures', 'stylo': 'Fournitures', 'cartouche': 'Fournitures',
-  'encre': 'Fournitures', 'classeur': 'Fournitures', 'enveloppe': 'Fournitures',
-  'chaise': 'Mobilier', 'bureau': 'Mobilier', 'armoire': 'Mobilier', 'etagere': 'Mobilier',
-  'acide': 'Produit chimique', 'solvant': 'Produit chimique', 'reactif': 'Produit chimique',
-  'azote': 'Gaz', 'argon': 'Gaz', 'helium': 'Gaz',
-  'lampe': 'Electronique', 'ventilateur': 'Electronique', 'projecteur': 'Electronique',
-  'tournevis': 'Outillage', 'marteau': 'Outillage', 'pince': 'Outillage'
+const FAMILY_COLORS = {
+  economat: 'fam-blue',
+  produit_chimique: 'fam-red',
+  gaz: 'fam-green',
+  consommable_informatique: 'fam-purple',
+  consommable_laboratoire: 'fam-amber',
 };
 
+const categorySuggestions = {
+  'cable':'Informatique','hdmi':'Informatique','usb':'Informatique',
+  'souris':'Informatique','clavier':'Informatique','ecran':'Informatique',
+  'pc':'Informatique','ordinateur':'Informatique','imprimante':'Informatique',
+  'papier':'Fournitures','stylo':'Fournitures','cartouche':'Fournitures',
+  'encre':'Fournitures','classeur':'Fournitures','enveloppe':'Fournitures',
+  'chaise':'Mobilier','bureau':'Mobilier','armoire':'Mobilier','etagere':'Mobilier',
+  'acide':'Produit chimique','solvant':'Produit chimique','reactif':'Produit chimique',
+  'azote':'Gaz','argon':'Gaz','helium':'Gaz',
+  'lampe':'Electronique','ventilateur':'Electronique','projecteur':'Electronique',
+  'tournevis':'Outillage','marteau':'Outillage','pince':'Outillage',
+};
+
+/* ── Barre de progression compacte ── */
+const FormProgress = ({ qrCode, nom, categorie, famille, seuilMinimum }) => {
+  const steps = [
+    { key:'code',  label:'Code',      done: String(qrCode||'').trim().length >= 3 },
+    { key:'nom',   label:'Nom',       done: String(nom||'').trim().length >= 3 },
+    { key:'cat',   label:'Catégorie', done: Boolean(categorie) && Boolean(famille) },
+    { key:'seuil', label:'Seuil',     done: String(seuilMinimum||'').trim() !== '' },
+  ];
+  const firstPending = steps.findIndex(s => !s.done);
+  return (
+    <div className="form-progress" role="progressbar" aria-label="Progression">
+      {steps.map((s, i) => {
+        const state = s.done ? 'done' : (i === firstPending ? 'active' : '');
+        return (
+          <div key={s.key} className={`progress-step ${state}`}>
+            <span className="progress-dot">{s.done ? '✓' : i + 1}</span>
+            <span className="progress-label">{s.label}</span>
+            {i < steps.length - 1 && <span className="progress-line" />}
+          </div>
+        );
+      })}
+    </div>
+  );
+};
+
+/* ════════════════════════════════════════════════════════════ */
 const AjouterProduit = ({ userName, onLogout }) => {
   const navigate = useNavigate();
   const toast = useToast();
@@ -43,7 +81,10 @@ const AjouterProduit = ({ userName, onLogout }) => {
   const keyboardBufferRef = useRef('');
   const keyboardTimeoutRef = useRef(null);
   const nameCheckTimeoutRef = useRef(null);
-  const [sidebarCollapsed, setSidebarCollapsed] = useState(() => (typeof window !== 'undefined' ? window.innerWidth <= 768 : false));
+
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(
+    () => (typeof window !== 'undefined' ? window.innerWidth <= 768 : false)
+  );
   const [showDoublonWarning, setShowDoublonWarning] = useState(false);
   const [duplicateProduct, setDuplicateProduct] = useState(null);
   const [showNameDoublonWarning, setShowNameDoublonWarning] = useState(false);
@@ -54,809 +95,603 @@ const AjouterProduit = ({ userName, onLogout }) => {
   const [keyboardScanMode, setKeyboardScanMode] = useState(false);
   const [showAdvancedFields, setShowAdvancedFields] = useState(false);
   const [categoriesList, setCategoriesList] = useState([]);
-  
+  const [imagePreview, setImagePreview] = useState(null);
+
   const [formData, setFormData] = useState({
-    qrCode: '',
-    nom: '',
-    categorie: '',
-    famille: '',
-    unite: 'Unite',
-    seuilMinimum: '',
-    stockInitial: '0',
-    emplacement: '',
-    chemicalClass: '',
-    physicalState: '',
-    gasPressure: '',
-    gasPurity: '',
-    description: ''
+    qrCode:'', nom:'', categorie:'', famille:'',
+    unite:'Unite', seuilMinimum:'', stockInitial:'0',
+    emplacement:'', chemicalClass:'', physicalState:'',
+    gasPressure:'', gasPurity:'', description:'',
   });
 
   const [errors, setErrors] = useState({});
   const [fdsFile, setFdsFile] = useState(null);
   const [productImageFile, setProductImageFile] = useState(null);
 
+  /* ── Unicité QR ── */
   const verifyQrCodeUniqueness = useCallback(async (value) => {
-    const qr = String(value || '').trim();
-    if (!qr) {
-      setShowDoublonWarning(false);
-      setDuplicateProduct(null);
-      return;
-    }
+    const qr = String(value||'').trim();
+    if (!qr) { setShowDoublonWarning(false); setDuplicateProduct(null); return; }
     try {
       const result = await get(`/products/qr-check?value=${encodeURIComponent(qr)}`);
       const exists = Boolean(result?.exists);
       setShowDoublonWarning(exists);
       setDuplicateProduct(result?.product || null);
-      if (exists) {
-        toast.warning('Code deja utilise par un autre produit');
-      }
-    } catch (err) {
-      toast.error(err.message || 'Echec de verification du code');
-    }
+      if (exists) toast.warning('Code déjà utilisé par un autre produit');
+    } catch (err) { toast.error(err.message || 'Échec de vérification du code'); }
   }, [toast]);
 
+  /* ── Unicité nom ── */
   const verifyNameUniqueness = useCallback(async (value) => {
-    const raw = String(value || '').replace(/\s+/g, ' ').trim();
-    if (!raw || raw.length < 3) {
-      setShowNameDoublonWarning(false);
-      setDuplicateNameProduct(null);
-      return;
-    }
+    const raw = String(value||'').replace(/\s+/g,' ').trim();
+    if (!raw || raw.length < 3) { setShowNameDoublonWarning(false); setDuplicateNameProduct(null); return; }
     try {
       const result = await get(`/products/name-check?value=${encodeURIComponent(raw)}`);
-      const exists = Boolean(result?.exists);
-      setShowNameDoublonWarning(exists);
+      setShowNameDoublonWarning(Boolean(result?.exists));
       setDuplicateNameProduct(result?.product || null);
-    } catch {
-      // best-effort: do not block the form on name-check errors
-    }
+    } catch { /* best-effort */ }
   }, []);
 
+  /* ── Douchette USB ── */
   const stopKeyboardScanMode = useCallback(() => {
     setKeyboardScanMode(false);
     keyboardBufferRef.current = '';
-    if (keyboardTimeoutRef.current) {
-      clearTimeout(keyboardTimeoutRef.current);
-      keyboardTimeoutRef.current = null;
-    }
-    if (nameCheckTimeoutRef.current) {
-      clearTimeout(nameCheckTimeoutRef.current);
-      nameCheckTimeoutRef.current = null;
-    }
+    if (keyboardTimeoutRef.current) { clearTimeout(keyboardTimeoutRef.current); keyboardTimeoutRef.current = null; }
+    if (nameCheckTimeoutRef.current) { clearTimeout(nameCheckTimeoutRef.current); nameCheckTimeoutRef.current = null; }
   }, []);
 
   const handleDetectedQrCode = useCallback(async (value) => {
-    const scanned = String(value || '').trim();
+    const scanned = String(value||'').trim();
     if (!scanned) return;
-    setFormData((prev) => ({ ...prev, qrCode: scanned }));
-    toast.success('Code detecte avec succes');
+    setFormData(prev => ({ ...prev, qrCode: scanned }));
+    toast.success('Code détecté avec succès');
     await verifyQrCodeUniqueness(scanned);
-    if (nameInputRef.current) {
-      nameInputRef.current.focus();
-    }
+    if (nameInputRef.current) nameInputRef.current.focus();
     setScanTarget('');
     stopKeyboardScanMode();
   }, [stopKeyboardScanMode, toast, verifyQrCodeUniqueness]);
 
-  useEffect(() => () => {
-    stopKeyboardScanMode();
-  }, [stopKeyboardScanMode]);
+  useEffect(() => () => { stopKeyboardScanMode(); }, [stopKeyboardScanMode]);
 
+  /* ── Famille auto ── */
   useEffect(() => {
-    const cat = categoriesList.find((c) => String(c.id) === String(formData.categorie));
+    const cat = categoriesList.find(c => String(c.id) === String(formData.categorie));
     const family = String(cat?.parent_family || '');
-    if (family && family !== formData.famille) {
-      setFormData((prev) => ({ ...prev, famille: family }));
-    }
-    if (!family && formData.famille) {
-      setFormData((prev) => ({ ...prev, famille: '' }));
-    }
+    if (family && family !== formData.famille) setFormData(prev => ({ ...prev, famille: family }));
+    if (!family && formData.famille) setFormData(prev => ({ ...prev, famille: '' }));
   }, [categoriesList, formData.categorie, formData.famille]);
 
+  /* ── Chargement catégories ── */
   useEffect(() => {
     let ignore = false;
-
-    const loadCategories = async () => {
+    const load = async () => {
       try {
         const data = await get('/categories');
         if (ignore) return;
         const items = Array.isArray(data) ? data : [];
-        setCategoriesList(items.map((c) => ({
-          id: c._id,
-          name: c.name,
+        setCategoriesList(items.map(c => ({
+          id: c._id, name: c.name,
           parent_family: c.parent_family || '',
           requires_fds: Boolean(c.requires_fds),
         })));
-      } catch {
-        if (!ignore) setCategoriesList([]);
-      }
+      } catch { if (!ignore) setCategoriesList([]); }
     };
-
-    loadCategories();
+    load();
     return () => { ignore = true; };
   }, []);
 
+  /* ── Reset chimique/gaz ── */
   useEffect(() => {
     if (formData.famille !== 'produit_chimique') {
-      setFormData((prev) => ({
-        ...prev,
-        chemicalClass: '',
-        physicalState: '',
-      }));
+      setFormData(prev => ({ ...prev, chemicalClass:'', physicalState:'' }));
       setFdsFile(null);
     }
     if (formData.famille !== 'gaz') {
-      setFormData((prev) => ({
-        ...prev,
-        gasPressure: '',
-        gasPurity: '',
-      }));
+      setFormData(prev => ({ ...prev, gasPressure:'', gasPurity:'' }));
     }
   }, [formData.famille]);
 
+  /* ── Mode douchette clavier ── */
   useEffect(() => {
     if (!keyboardScanMode) return undefined;
-
     const onKeyDown = async (event) => {
       if (!keyboardScanMode) return;
-
       if (event.key === 'Enter') {
         const scanned = keyboardBufferRef.current.trim();
         keyboardBufferRef.current = '';
-        if (keyboardTimeoutRef.current) {
-          clearTimeout(keyboardTimeoutRef.current);
-          keyboardTimeoutRef.current = null;
-        }
-        if (scanned.length >= 3) {
-          await handleDetectedQrCode(scanned);
-        }
+        if (keyboardTimeoutRef.current) { clearTimeout(keyboardTimeoutRef.current); keyboardTimeoutRef.current = null; }
+        if (scanned.length >= 3) await handleDetectedQrCode(scanned);
         return;
       }
-
       if (event.key.length === 1) {
         keyboardBufferRef.current += event.key;
         if (keyboardTimeoutRef.current) clearTimeout(keyboardTimeoutRef.current);
         keyboardTimeoutRef.current = setTimeout(() => {
-          keyboardBufferRef.current = '';
-          keyboardTimeoutRef.current = null;
+          keyboardBufferRef.current = ''; keyboardTimeoutRef.current = null;
         }, 250);
       }
     };
-
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
   }, [handleDetectedQrCode, keyboardScanMode]);
 
+  /* ── Nom + suggestion ── */
   const handleNomChange = useCallback((value) => {
     setFormData(prev => ({ ...prev, nom: value }));
-    if (showNameDoublonWarning) {
-      setShowNameDoublonWarning(false);
-      setDuplicateNameProduct(null);
-    }
-
-    if (nameCheckTimeoutRef.current) {
-      clearTimeout(nameCheckTimeoutRef.current);
-      nameCheckTimeoutRef.current = null;
-    }
-    nameCheckTimeoutRef.current = setTimeout(() => {
-      verifyNameUniqueness(value);
-    }, 550);
-
-    const lowerValue = value.toLowerCase();
-    for (const [keyword, category] of Object.entries(categorySuggestions)) {
-      if (lowerValue.includes(keyword)) {
-        setSuggestedCategory(category);
-        return;
-      }
+    if (showNameDoublonWarning) { setShowNameDoublonWarning(false); setDuplicateNameProduct(null); }
+    if (nameCheckTimeoutRef.current) { clearTimeout(nameCheckTimeoutRef.current); nameCheckTimeoutRef.current = null; }
+    nameCheckTimeoutRef.current = setTimeout(() => { verifyNameUniqueness(value); }, 550);
+    const lower = value.toLowerCase();
+    for (const [kw, cat] of Object.entries(categorySuggestions)) {
+      if (lower.includes(kw)) { setSuggestedCategory(cat); return; }
     }
     setSuggestedCategory('');
   }, [showNameDoublonWarning, verifyNameUniqueness]);
 
   const applySuggestedCategory = useCallback(() => {
     if (suggestedCategory) {
-      const match = categoriesList.find((c) => String(c.name) === String(suggestedCategory));
-      if (match?.id) {
-        setFormData((prev) => ({ ...prev, categorie: match.id }));
-      }
+      const match = categoriesList.find(c => String(c.name) === String(suggestedCategory));
+      if (match?.id) setFormData(prev => ({ ...prev, categorie: match.id }));
       setSuggestedCategory('');
-      toast.success('Categorie appliquee');
+      toast.success('Catégorie appliquée');
     }
   }, [categoriesList, suggestedCategory, toast]);
 
+  /* ── Photo preview ── */
+  const handleImageChange = useCallback((file) => {
+    if (!file) { setProductImageFile(null); setImagePreview(null); return; }
+    setProductImageFile(file);
+    const reader = new FileReader();
+    reader.onload = e => setImagePreview(e.target.result);
+    reader.readAsDataURL(file);
+  }, []);
+
+  /* ── Validation ── */
   const validateForm = useCallback(() => {
     const newErrors = {};
-    if (!String(formData.qrCode || '').trim()) newErrors.qrCode = 'Code-barres / QR requis';
-    if (!isSafeText(formData.qrCode, { min: 3, max: 220 })) newErrors.qrCode = 'Code invalide (3-220, sans < >)';
-
-    if (!isSafeText(formData.nom, { min: 3, max: 80 })) {
-      newErrors.nom = 'Nom requis (3-80, sans < >)';
-    }
-    if (!formData.categorie) newErrors.categorie = 'Categorie requise';
-    if (!formData.famille) newErrors.categorie = 'Categorie invalide pour la famille metier';
-    const seuilMin = asNonNegativeInt(formData.seuilMinimum, { min: 0, max: 1000000 });
-    if (!Number.isFinite(seuilMin)) newErrors.seuilMinimum = 'Seuil minimum valide requis (0-1 000 000)';
-
-    if (formData.emplacement && !isSafeText(formData.emplacement, { min: 0, max: 80 })) {
-      newErrors.emplacement = 'Emplacement trop long (max 80, sans < >)';
-    }
-    if (formData.description && !isSafeText(formData.description, { min: 0, max: 600 })) {
-      newErrors.description = 'Description trop longue (max 600, sans < >)';
-    }
+    if (!String(formData.qrCode||'').trim()) newErrors.qrCode = 'Code-barres / QR requis';
+    if (!isSafeText(formData.qrCode, { min:3, max:220 })) newErrors.qrCode = 'Code invalide (3-220 car.)';
+    if (!isSafeText(formData.nom, { min:3, max:80 })) newErrors.nom = 'Nom requis (3-80 car.)';
+    if (!formData.categorie) newErrors.categorie = 'Catégorie requise';
+    if (!formData.famille) newErrors.categorie = 'Catégorie invalide';
+    const seuilMin = asNonNegativeInt(formData.seuilMinimum, { min:0, max:1000000 });
+    if (!Number.isFinite(seuilMin)) newErrors.seuilMinimum = 'Seuil requis (0–1 000 000)';
+    if (formData.emplacement && !isSafeText(formData.emplacement, { min:0, max:80 })) newErrors.emplacement = 'Max 80 car.';
+    if (formData.description && !isSafeText(formData.description, { min:0, max:600 })) newErrors.description = 'Max 600 car.';
     setErrors(newErrors);
-
     const firstKey = Object.keys(newErrors)[0] || '';
-    const focusMap = {
-      qrCode: qrInputRef,
-      nom: nameInputRef,
-      categorie: categorieRef,
-      seuilMinimum: seuilRef,
-    };
+    const focusMap = { qrCode:qrInputRef, nom:nameInputRef, categorie:categorieRef, seuilMinimum:seuilRef };
     const ref = focusMap[firstKey];
-    if (ref?.current) {
-      try {
-        ref.current.scrollIntoView({ block: 'center', behavior: 'smooth' });
-      } catch {
-        // ignore
-      }
-      ref.current.focus?.();
-    }
-
-    return { ok: Object.keys(newErrors).length === 0, errors: newErrors };
+    if (ref?.current) { try { ref.current.scrollIntoView({ block:'center', behavior:'smooth' }); } catch {} ref.current.focus?.(); }
+    return { ok: Object.keys(newErrors).length === 0 };
   }, [formData]);
 
+  /* ── Soumission ── */
   const handleSubmit = useCallback(async (e) => {
     e.preventDefault();
     const validation = validateForm();
-    if (!validation?.ok) {
-      toast.error('Veuillez corriger les erreurs du formulaire');
-      return;
-    }
-    if (duplicateProduct) {
-      toast.error('Ce code existe deja. Utilisez un code unique.');
-      return;
-    }
-    if (formData.famille === 'produit_chimique' && !fdsFile) {
-      toast.warning("Attention : ce produit chimique n'a pas encore de FDS.");
-    }
-
+    if (!validation?.ok) { toast.error('Veuillez corriger les erreurs du formulaire'); return; }
+    if (duplicateProduct) { toast.error('Ce code existe déjà. Utilisez un code unique.'); return; }
+    if (formData.famille === 'produit_chimique' && !fdsFile) toast.warning("Produit chimique sans FDS — recommandé.");
     setIsSubmitting(true);
     try {
       let fdsAttachment;
       if (formData.famille === 'produit_chimique' && fdsFile) {
         const uploadedFds = await uploadFile('/files/upload', fdsFile);
-        fdsAttachment = {
-          file_name: uploadedFds.file_name,
-          file_url: uploadedFds.file_url,
-        };
+        fdsAttachment = { file_name: uploadedFds.file_name, file_url: uploadedFds.file_url };
       }
-
       let productImageUrl = '';
       if (productImageFile) {
         const uploadedImage = await uploadFile('/files/upload', productImageFile);
         productImageUrl = String(uploadedImage?.file_url || '');
       }
-
-      const payload = { 
-        name: sanitizeText(formData.nom, { maxLen: 80 }), 
+      const payload = {
+        name: sanitizeText(formData.nom, { maxLen:80 }),
         category: formData.categorie || undefined,
-        family: formData.famille, 
+        family: formData.famille,
         unite: formData.unite || 'Unite',
-        description: sanitizeText(formData.description, { maxLen: 600 }) || undefined, 
-        seuil_minimum: Number(asNonNegativeInt(formData.seuilMinimum, { min: 0, max: 1000000 })), 
-        stock_initial_year: Number(asNonNegativeInt(formData.stockInitial || 0, { min: 0, max: 1000000000 })), 
-        quantity_current: Number(asNonNegativeInt(formData.stockInitial || 0, { min: 0, max: 1000000000 })), 
-        qr_code_value: sanitizeText(formData.qrCode, { maxLen: 220 }),
-        emplacement: sanitizeText(formData.emplacement, { maxLen: 80 }) || undefined,
-        chemical_class: sanitizeText(formData.chemicalClass, { maxLen: 40 }) || undefined,
-        physical_state: sanitizeText(formData.physicalState, { maxLen: 40 }) || undefined,
-        gas_pressure: sanitizeText(formData.gasPressure, { maxLen: 40 }) || undefined,
-        gas_purity: sanitizeText(formData.gasPurity, { maxLen: 40 }) || undefined,
-        fds_attachment: fdsAttachment, 
+        description: sanitizeText(formData.description, { maxLen:600 }) || undefined,
+        seuil_minimum: Number(asNonNegativeInt(formData.seuilMinimum, { min:0, max:1000000 })),
+        stock_initial_year: Number(asNonNegativeInt(formData.stockInitial||0, { min:0, max:1000000000 })),
+        quantity_current: Number(asNonNegativeInt(formData.stockInitial||0, { min:0, max:1000000000 })),
+        qr_code_value: sanitizeText(formData.qrCode, { maxLen:220 }),
+        emplacement: sanitizeText(formData.emplacement, { maxLen:80 }) || undefined,
+        chemical_class: sanitizeText(formData.chemicalClass, { maxLen:40 }) || undefined,
+        physical_state: sanitizeText(formData.physicalState, { maxLen:40 }) || undefined,
+        gas_pressure: sanitizeText(formData.gasPressure, { maxLen:40 }) || undefined,
+        gas_purity: sanitizeText(formData.gasPurity, { maxLen:40 }) || undefined,
+        fds_attachment: fdsAttachment,
         image_product: productImageUrl || undefined,
-      }; 
-
+      };
       await post('/products', payload);
-
       toast.success('Produit ajouté au catalogue avec succès');
-      setFormData({
-        qrCode: '',
-        nom: '',
-        categorie: '',
-        famille: '',
-        unite: 'Unite',
-        seuilMinimum: '',
-        stockInitial: '0',
-        emplacement: '',
-        chemicalClass: '',
-        physicalState: '',
-        gasPressure: '',
-        gasPurity: '',
-        description: '',
-      });
-      setFdsFile(null);
-      setProductImageFile(null);
-      setScanTarget('');
-      setShowDoublonWarning(false);
-      setDuplicateProduct(null);
-      setShowNameDoublonWarning(false);
-      setDuplicateNameProduct(null);
-      setShowAdvancedFields(false);
+      setFormData({ qrCode:'', nom:'', categorie:'', famille:'', unite:'Unite', seuilMinimum:'', stockInitial:'0', emplacement:'', chemicalClass:'', physicalState:'', gasPressure:'', gasPurity:'', description:'' });
+      setFdsFile(null); setProductImageFile(null); setImagePreview(null);
+      setScanTarget(''); setShowDoublonWarning(false); setDuplicateProduct(null);
+      setShowNameDoublonWarning(false); setDuplicateNameProduct(null); setShowAdvancedFields(false);
       navigate('/magasinier');
     } catch (err) {
-      toast.error(err.message || "Echec de creation du produit");
-    } finally {
-      setIsSubmitting(false);
-    }
+      toast.error(err.message || 'Échec de création du produit');
+    } finally { setIsSubmitting(false); }
   }, [duplicateProduct, fdsFile, formData, navigate, productImageFile, toast, validateForm]);
 
   const openDuplicateProduct = useCallback((p) => {
     if (!p?._id) return;
     navigate('/magasinier/voir-details', {
-      state: {
-        product: {
-          id: p._id,
-          _id: p._id,
-          code: p.code_product,
-          nom: p.name,
-          categorie: '',
-          quantite: 0,
-          seuil: 0,
-          unite: 'Unite',
-          description: '',
-        },
-      },
+      state: { product: { id:p._id, _id:p._id, code:p.code_product, nom:p.name, categorie:'', quantite:0, seuil:0, unite:'Unite', description:'' } },
     });
   }, [navigate]);
 
-  const seuilMinValue = asNonNegativeInt(formData.seuilMinimum, { min: 0, max: 1000000 });
+  const seuilMinValue = asNonNegativeInt(formData.seuilMinimum, { min:0, max:1000000 });
   const canSubmit =
-    !isSubmitting
-    && !duplicateProduct
-    && isSafeText(formData.qrCode, { min: 3, max: 220 })
-    && isSafeText(formData.nom, { min: 3, max: 80 })
-    && Boolean(formData.categorie)
-    && Boolean(formData.famille)
+    !isSubmitting && !duplicateProduct
+    && isSafeText(formData.qrCode, { min:3, max:220 })
+    && isSafeText(formData.nom, { min:3, max:80 })
+    && Boolean(formData.categorie) && Boolean(formData.famille)
     && Number.isFinite(seuilMinValue);
 
+  const currentCatName = categoriesList.find(c => String(c.id) === String(formData.categorie))?.name || '—';
+
+  /* ════════════════════════════════════════════════════════════
+     RENDU — layout 2 colonnes, une seule vue
+  ════════════════════════════════════════════════════════════ */
   return (
     <div className="app-layout">
-      <div
-        className={`sidebar-backdrop ${sidebarCollapsed ? 'hidden' : ''}`}
-        onClick={() => setSidebarCollapsed(true)}
-      />
-      <SidebarMag
-        collapsed={sidebarCollapsed}
-        onToggle={() => setSidebarCollapsed(!sidebarCollapsed)}
-        onLogout={onLogout}
-        userName={userName}
-      />
-      
+      <div className={`sidebar-backdrop ${sidebarCollapsed ? 'hidden' : ''}`} onClick={() => setSidebarCollapsed(true)} />
+      <SidebarMag collapsed={sidebarCollapsed} onToggle={() => setSidebarCollapsed(!sidebarCollapsed)} onLogout={onLogout} userName={userName} />
+
       <div className="main-container">
-        <HeaderPage 
-          userName={userName}
-          title="Ajouter un Produit"
-          showSearch={false}
-          onMenuClick={() => setSidebarCollapsed((prev) => !prev)}
-        />
-        
-        <main className="main-content">
+        <HeaderPage userName={userName} title="Ajouter un Produit" showSearch={false} onMenuClick={() => setSidebarCollapsed(prev => !prev)} />
+
+        <main className="main-content ap-main">
           {isSubmitting && <LoadingSpinner overlay text="Envoi en cours..." />}
-          
-          <div className="ajouter-produit-page">
-            <div className="ajouter-card">
-              <div className="ajouter-header">
-                <Package size={24} />
-                <h2>Nouveau produit</h2>
+
+          <div className="ap-page">
+
+            {/* ══ CARTE PRINCIPALE ══ */}
+            <div className="ap-card">
+
+              {/* ── En-tête bleu ── */}
+              <div className="ap-header">
+                <Package size={22} />
+                <div>
+                  <h2>Nouveau produit</h2>
+                  <p>Catalogue actif · ajout immédiat</p>
+                </div>
+                <FormProgress
+                  qrCode={formData.qrCode} nom={formData.nom}
+                  categorie={formData.categorie} famille={formData.famille}
+                  seuilMinimum={formData.seuilMinimum}
+                />
               </div>
 
-              <div className="validation-notice" role="status">
-                <AlertCircle size={18} />
-                <p>Ce produit sera ajouté directement au catalogue actif.</p>
-              </div>
-
+              {/* ── Alertes doublon ── */}
               {showDoublonWarning && (
-                <div className="doublon-warning" role="alert">
-                  <AlertCircle size={18} />
-                  <div>
-                    <strong>Produit similaire detecte</strong>
-                    <p>
-                      Ce code est deja utilise
-                      {duplicateProduct ? ` par ${duplicateProduct.code_product} (${duplicateProduct.name}).` : '.'}
-                    </p>
-                    {duplicateProduct?._id ? (
-                      <div className="doublon-actions">
-                        <button type="button" className="doublon-link" onClick={() => openDuplicateProduct(duplicateProduct)}>
-                          Voir le produit
-                        </button>
-                      </div>
-                    ) : null}
-                  </div>
-                  <button onClick={() => setShowDoublonWarning(false)} aria-label="Fermer l'alerte">
-                    <X size={16} />
-                  </button>
+                <div className="ap-alert ap-alert--error" role="alert">
+                  <AlertCircle size={15} />
+                  <span>
+                    Code déjà utilisé
+                    {duplicateProduct ? ` par ${duplicateProduct.code_product} — ` : ' — '}
+                    {duplicateProduct?._id && (
+                      <button className="ap-alert-link" onClick={() => openDuplicateProduct(duplicateProduct)}>Voir le produit</button>
+                    )}
+                  </span>
+                  <button className="ap-alert-close" onClick={() => setShowDoublonWarning(false)} aria-label="Fermer"><X size={13} /></button>
                 </div>
               )}
-
               {showNameDoublonWarning && (
-                <div className="doublon-warning name-doublon" role="status">
-                  <AlertCircle size={18} />
-                  <div>
-                    <strong>Nom deja utilise</strong>
-                    <p>
-                      Un produit avec le meme nom existe deja
-                      {duplicateNameProduct ? `: ${duplicateNameProduct.code_product} (${duplicateNameProduct.name}).` : '.'}
-                    </p>
-                    {duplicateNameProduct?._id ? (
-                      <div className="doublon-actions">
-                        <button type="button" className="doublon-link" onClick={() => openDuplicateProduct(duplicateNameProduct)}>
-                          Voir le produit
-                        </button>
-                      </div>
-                    ) : null}
-                  </div>
-                  <button onClick={() => setShowNameDoublonWarning(false)} aria-label="Fermer l'info">
-                    <X size={16} />
-                  </button>
+                <div className="ap-alert ap-alert--warn" role="status">
+                  <AlertCircle size={15} />
+                  <span>
+                    Nom déjà utilisé
+                    {duplicateNameProduct ? ` : ${duplicateNameProduct.name} — ` : ' — '}
+                    {duplicateNameProduct?._id && (
+                      <button className="ap-alert-link" onClick={() => openDuplicateProduct(duplicateNameProduct)}>Voir</button>
+                    )}
+                  </span>
+                  <button className="ap-alert-close" onClick={() => setShowNameDoublonWarning(false)} aria-label="Fermer"><X size={13} /></button>
                 </div>
               )}
 
-              <form onSubmit={handleSubmit} className="ajouter-form" noValidate>
-                <div className="form-mode-toggle">
-                  <button
-                    type="button"
-                    className="mode-toggle-btn"
-                    onClick={() => setShowAdvancedFields((prev) => !prev)}
-                  >
-                    {showAdvancedFields ? 'Masquer champs avances' : 'Afficher champs avances'}
+              {/* ══ CORPS DU FORMULAIRE — 2 colonnes ══ */}
+              <form onSubmit={handleSubmit} className="ap-form" noValidate>
+
+                {/* Toggle avancé */}
+                <div className="ap-mode-bar">
+                  <button type="button" className="ap-toggle-btn" onClick={() => setShowAdvancedFields(prev => !prev)}>
+                    {showAdvancedFields ? '− Masquer champs avancés' : '+ Champs avancés'}
                   </button>
-                  <span className="input-hint">
-                    Mode simple actif: seuls les champs obligatoires sont affiches.
+                  <span className="ap-mode-hint">
+                    {showAdvancedFields ? 'Mode avancé actif' : 'Mode simple · champs obligatoires seulement'}
                   </span>
                 </div>
 
-                <div className="form-section">
-                  <h3>Identification</h3>
-                  
-                  {/* Code-barres / QR Scanner */}
-                  <div className="form-group">
-                    <label htmlFor="qrCode">
-                      <QrCode size={16} />
-                      Code-barres / QR
-                    </label>
-                    <div className="input-with-btn">
-                      <input
-                        id="qrCode"
-                        ref={qrInputRef}
-                        type="text"
-                        maxLength={180}
-                        value={formData.qrCode}
-                        onChange={(e) => {
-                          setFormData({ ...formData, qrCode: e.target.value });
-                          setDuplicateProduct(null);
-                          setShowDoublonWarning(false);
-                        }}
-                        onBlur={() => verifyQrCodeUniqueness(formData.qrCode)}
-                        placeholder="Scanner ou saisir le code-barres (EAN/UPC) ou QR"
-                        className={errors.qrCode ? 'error' : ''}
-                        aria-invalid={errors.qrCode ? 'true' : 'false'}
-                      />
-                      {!scanTarget ? (
-                        <button
-                          type="button"
-                          className="scan-btn"
-                          onClick={() => {
-                            setScanTarget('product_qr');
-                            toast.info('Camera activee - Presentez le code-barres ou le QR');
-                          }}
-                        >
-                          <Camera size={18} />
-                          Scanner
-                        </button>
-                      ) : (
-                        <button type="button" className="scan-btn scanning" onClick={() => setScanTarget('')}>
-                          <StopCircle size={18} />
-                          Arreter
-                        </button>
-                      )}
-                    </div>
-                    <div className="input-hint">
-                      {!keyboardScanMode ? (
-                        <button type="button" className="scan-btn" onClick={() => {
-                          setKeyboardScanMode(true);
-                          toast.info('Mode douchette USB actif. Scannez puis appuyez sur Entree.');
-                          if (qrInputRef.current) qrInputRef.current.focus();
-                        }}>
-                          <Keyboard size={16} />
-                          Mode douchette USB
-                        </button>
-                      ) : (
-                        <button type="button" className="scan-btn scanning" onClick={stopKeyboardScanMode}>
-                          <StopCircle size={16} />
-                          Arreter mode douchette
-                        </button>
-                      )}
-                    </div>
-                    {keyboardScanMode && (
-                      <span className="input-hint">Fallback actif: douchette USB/clavier capture le code.</span>
-                    )}
-                    {errors.qrCode && (
-                      <span className="error-text" role="alert">{errors.qrCode}</span>
-                    )}
-                  </div>
+                <div className="ap-body">
 
-                  {scanTarget === 'product_qr' && (
-                    <InlineQrScanner
-                      mode="any"
-                      onDetected={handleDetectedQrCode}
-                      onClose={() => setScanTarget('')}
-                    />
-                  )}
+                  {/* ── COLONNE GAUCHE : champs obligatoires ── */}
+                  <div className="ap-col-left">
 
-                  <div className="form-group">
-                    <label htmlFor="nom">
-                      <Tag size={16} />
-                      Nom du produit
-                    </label>
-                    <input
-                      id="nom"
-                      type="text"
-                      ref={nameInputRef}
-                      maxLength={80}
-                      value={formData.nom}
-                      onChange={(e) => handleNomChange(e.target.value)}
-                      placeholder="Ex: Cable HDMI 2m"
-                      className={errors.nom ? 'error' : ''}
-                      aria-invalid={errors.nom ? 'true' : 'false'}
-                    />
-                    {errors.nom && (
-                      <span className="error-text" role="alert">{errors.nom}</span>
-                    )}
-                    {suggestedCategory && (
-                      <div className="category-suggestion">
-                        <Lightbulb size={14} />
-                        <span>Suggestion intelligente: <strong>{suggestedCategory}</strong></span>
-                        <button type="button" onClick={applySuggestedCategory}>
-                          Appliquer
-                        </button>
-                      </div>
-                    )}
-                  </div>
-                </div>
-
-                <div className="form-section">
-                  <h3>Visuel</h3>
-                  <div className="form-group">
-                    <label htmlFor="productImageFile">Photo du produit (optionnel)</label>
-                    <input
-                      id="productImageFile"
-                      type="file"
-                      accept=".png,.jpg,.jpeg,.webp"
-                      onChange={(e) => setProductImageFile(e.target.files?.[0] || null)}
-                    />
-                    <span className="input-hint">
-                      Photo reelle pour aider les demandeurs (recommande).
-                    </span>
-                  </div>
-                </div>
-
-                <div className="form-section">
-                  <h3>Classification</h3>
-                  <div className="form-row">
-                    <div className="form-group"> 
-                      <label htmlFor="categorie"> 
-                        <Layers size={16} /> 
-                        Categorie proposee 
-                      </label> 
-                      <select
-                        id="categorie"
-                        ref={categorieRef}
-                        value={formData.categorie}
-                        onChange={(e) => setFormData({ ...formData, categorie: e.target.value })}
-                        disabled={categoriesList.length === 0}
-                        className={errors.categorie ? 'error' : ''}
-                        aria-invalid={errors.categorie ? 'true' : 'false'}
-                      >
-                        <option value="">Selectionner...</option>
-                        {categoriesList.map((cat) => (
-                          <option key={cat.id} value={cat.id}>{cat.name}</option>
-                        ))}
-                      </select>
-                      {errors.categorie && (
-                        <span className="error-text" role="alert">{errors.categorie}</span>
-                      )}
-                    </div>
-                    <div className="form-group">
-                      <label htmlFor="famille_auto">
-                        <Layers size={16} />
-                        Famille metier (automatique)
+                    {/* Code-barres */}
+                    <div className="ap-field">
+                      <label className="ap-label" htmlFor="qrCode">
+                        <QrCode size={14} /> Code-barres / QR <span className="ap-req">*</span>
                       </label>
-                      <input id="famille_auto" type="text" readOnly value={FAMILY_LABELS[formData.famille] || ''} placeholder="Auto selon categorie" />
-                      <span className="input-hint">La famille est geree automatiquement pour eviter les incoherences.</span>
+                      <div className="ap-input-row">
+                        <input
+                          id="qrCode" ref={qrInputRef} type="text" maxLength={180}
+                          className={`ap-input ${errors.qrCode ? 'error' : ''}`}
+                          value={formData.qrCode}
+                          onChange={e => { setFormData({...formData, qrCode: e.target.value}); setDuplicateProduct(null); setShowDoublonWarning(false); }}
+                          onBlur={() => verifyQrCodeUniqueness(formData.qrCode)}
+                          placeholder="EAN / UPC / QR"
+                          aria-invalid={errors.qrCode ? 'true' : 'false'}
+                        />
+                        {!scanTarget ? (
+                          <button type="button" className="ap-scan-btn" onClick={() => { setScanTarget('product_qr'); toast.info('Caméra activée'); }}>
+                            <Camera size={15} /> Scanner
+                          </button>
+                        ) : (
+                          <button type="button" className="ap-scan-btn scanning" onClick={() => setScanTarget('')}>
+                            <StopCircle size={15} /> Stop
+                          </button>
+                        )}
+                      </div>
+                      {/* Douchette USB */}
+                      <button
+                        type="button"
+                        className={`ap-usb-btn ${keyboardScanMode ? 'active' : ''}`}
+                        onClick={() => { if (keyboardScanMode) { stopKeyboardScanMode(); } else { setKeyboardScanMode(true); toast.info('Douchette USB active — scannez puis Entrée'); qrInputRef.current?.focus(); } }}
+                      >
+                        <Keyboard size={12} />
+                        {keyboardScanMode ? 'Arrêter douchette' : 'Mode douchette USB'}
+                      </button>
+                      {scanTarget === 'product_qr' && (
+                        <InlineQrScanner mode="any" onDetected={handleDetectedQrCode} onClose={() => setScanTarget('')} />
+                      )}
+                      {errors.qrCode && <span className="ap-error"><AlertCircle size={12} />{errors.qrCode}</span>}
                     </div>
-                    {showAdvancedFields && (
-                      <div className="form-group">
-                        <label htmlFor="unite">
-                          <Package size={16} />
-                          Unite
+
+                    {/* Nom du produit */}
+                    <div className="ap-field">
+                      <label className="ap-label" htmlFor="nom">
+                        <Tag size={14} /> Nom du produit <span className="ap-req">*</span>
+                      </label>
+                      <input
+                        id="nom" ref={nameInputRef} type="text" maxLength={80}
+                        className={`ap-input ${errors.nom ? 'error' : ''}`}
+                        value={formData.nom}
+                        onChange={e => handleNomChange(e.target.value)}
+                        placeholder="Ex : Câble HDMI 2m"
+                        aria-invalid={errors.nom ? 'true' : 'false'}
+                      />
+                      {errors.nom && <span className="ap-error"><AlertCircle size={12} />{errors.nom}</span>}
+                      {suggestedCategory && (
+                        <div className="ap-suggestion">
+                          <Lightbulb size={13} />
+                          <span>Suggestion : <strong>{suggestedCategory}</strong></span>
+                          <button type="button" onClick={applySuggestedCategory}>Appliquer</button>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Catégorie + Famille côte à côte */}
+                    <div className="ap-row-2">
+                      <div className="ap-field">
+                        <label className="ap-label" htmlFor="categorie">
+                          <Layers size={14} /> Catégorie <span className="ap-req">*</span>
                         </label>
                         <select
-                          id="unite"
-                          value={formData.unite}
-                          onChange={(e) => setFormData({ ...formData, unite: e.target.value })}
+                          id="categorie" ref={categorieRef}
+                          className={`ap-input ${errors.categorie ? 'error' : ''}`}
+                          value={formData.categorie}
+                          onChange={e => setFormData({...formData, categorie: e.target.value})}
+                          disabled={categoriesList.length === 0}
+                          aria-invalid={errors.categorie ? 'true' : 'false'}
                         >
-                          {unites.map(unit => (
-                            <option key={unit} value={unit}>{unit}</option>
+                          <option value="">Sélectionner…</option>
+                          {categoriesList.map(cat => (
+                            <option key={cat.id} value={cat.id}>{cat.name}</option>
                           ))}
                         </select>
+                        {errors.categorie && <span className="ap-error"><AlertCircle size={12} />{errors.categorie}</span>}
                       </div>
-                    )}
-                  </div>
-                </div>
 
-                <div className="form-section">
-                  <h3>Paramètres de stock</h3>
-                  {showAdvancedFields && (
-                    <div className="form-row">
-                      <div className="form-group">
-                        <label htmlFor="stockInitial">
-                          <Hash size={16} />
-                          Stock initial
+                      <div className="ap-field">
+                        <label className="ap-label">
+                          <Layers size={14} /> Famille métier
                         </label>
-                        <input
-                          id="stockInitial"
-                          type="number"
-                          min="0"
-                          max="1000000000"
-                          step="1"
-                          value={formData.stockInitial}
-                          onChange={(e) => setFormData({ ...formData, stockInitial: e.target.value })}
-                          placeholder="Ex: 100"
-                        />
-                      </div>
-                      <div className="form-group">
-                        <label htmlFor="emplacement">Emplacement magasin</label>
-                        <input
-                          id="emplacement"
-                          type="text"
-                          maxLength={120}
-                          value={formData.emplacement}
-                          onChange={(e) => setFormData({ ...formData, emplacement: e.target.value })}
-                          placeholder="Ex: Rayon A - Etagere 3"
-                        />
+                        <div className={`ap-famille-badge ${formData.famille ? FAMILY_COLORS[formData.famille] || 'fam-blue' : 'fam-none'}`}>
+                          {formData.famille
+                            ? <><CheckCircle size={12} /> {FAMILY_LABELS[formData.famille] || formData.famille}</>
+                            : <><Info size={12} /> Auto selon catégorie</>
+                          }
+                        </div>
                       </div>
                     </div>
-                  )}
-                  <div className="form-group">
-                    <label htmlFor="seuilMinimum">
-                      <Hash size={16} />
-                      Seuil minimum d'alerte
-                    </label>
-                    <input
-                      id="seuilMinimum"
-                      type="number"
-                      ref={seuilRef}
-                      min="0"
-                      max="1000000000"
-                      step="1"
-                      value={formData.seuilMinimum}
-                      onChange={(e) => setFormData({ ...formData, seuilMinimum: e.target.value })}
-                      placeholder="Ex: 10"
-                      className={errors.seuilMinimum ? 'error' : ''}
-                      aria-invalid={errors.seuilMinimum ? 'true' : 'false'}
-                    />
-                    {errors.seuilMinimum && (
-                      <span className="error-text" role="alert">{errors.seuilMinimum}</span>
-                    )}
-                    <span className="input-hint">Alerte declenchee quand le stock passe sous ce seuil</span>
-                  </div>
-                </div>
 
-                {showAdvancedFields && formData.famille === 'produit_chimique' && (
-                  <div className="form-section">
-                    <h3>Paramètres produit chimique</h3>
-                    <div className="form-row">
-                      <div className="form-group">
-                        <label htmlFor="chemicalClass">Classe chimique</label>
-                        <input
-                          id="chemicalClass"
-                          type="text"
-                          maxLength={80}
-                          value={formData.chemicalClass}
-                          onChange={(e) => setFormData({ ...formData, chemicalClass: e.target.value })}
-                          placeholder="Ex: Acide"
-                        />
-                      </div>
-                      <div className="form-group">
-                        <label htmlFor="physicalState">Etat physique</label>
-                        <input
-                          id="physicalState"
-                          type="text"
-                          maxLength={80}
-                          value={formData.physicalState}
-                          onChange={(e) => setFormData({ ...formData, physicalState: e.target.value })}
-                          placeholder="Ex: Liquide"
-                        />
-                      </div>
-                    </div>
-                    <div className="form-group">
-                      <label htmlFor="fdsFile">FDS (Fiche de donnees de securite)</label>
+                    {/* Seuil minimum */}
+                    <div className="ap-field">
+                      <label className="ap-label" htmlFor="seuilMinimum">
+                        <Hash size={14} /> Seuil minimum d'alerte <span className="ap-req">*</span>
+                      </label>
                       <input
-                        id="fdsFile"
-                        type="file"
-                        accept=".pdf,.png,.jpg,.jpeg,.webp,.txt,.doc,.docx"
-                        onChange={(e) => setFdsFile(e.target.files?.[0] || null)}
+                        id="seuilMinimum" ref={seuilRef} type="number"
+                        min="0" max="1000000000" step="1"
+                        className={`ap-input ap-input--short ${errors.seuilMinimum ? 'error' : ''}`}
+                        value={formData.seuilMinimum}
+                        onChange={e => setFormData({...formData, seuilMinimum: e.target.value})}
+                        placeholder="Ex : 10"
+                        aria-invalid={errors.seuilMinimum ? 'true' : 'false'}
                       />
-                      <span className="input-hint">Pour un produit chimique, la fiche FDS est recommandee.</span>
+                      <span className="ap-hint">Alerte déclenchée quand le stock passe sous ce seuil</span>
+                      {errors.seuilMinimum && <span className="ap-error"><AlertCircle size={12} />{errors.seuilMinimum}</span>}
                     </div>
-                  </div>
-                )}
 
-                {showAdvancedFields && formData.famille === 'gaz' && (
-                  <div className="form-section">
-                    <h3>Paramètres gaz</h3>
-                    <div className="form-row">
-                      <div className="form-group">
-                        <label htmlFor="gasPressure">Pression</label>
+                    {/* Champs avancés gauche */}
+                    {showAdvancedFields && (
+                      <>
+                        <div className="ap-row-2">
+                          <div className="ap-field">
+                            <label className="ap-label" htmlFor="stockInitial">
+                              <Hash size={14} /> Stock initial
+                            </label>
+                            <input id="stockInitial" type="number" min="0" max="1000000000" step="1"
+                              className="ap-input" value={formData.stockInitial}
+                              onChange={e => setFormData({...formData, stockInitial: e.target.value})} placeholder="0" />
+                          </div>
+                          <div className="ap-field">
+                            <label className="ap-label" htmlFor="unite">Unité</label>
+                            <select id="unite" className="ap-input" value={formData.unite}
+                              onChange={e => setFormData({...formData, unite: e.target.value})}>
+                              {unites.map(u => <option key={u} value={u}>{u}</option>)}
+                            </select>
+                          </div>
+                        </div>
+                        <div className="ap-field">
+                          <label className="ap-label" htmlFor="emplacement">Emplacement magasin</label>
+                          <input id="emplacement" type="text" maxLength={120} className="ap-input"
+                            value={formData.emplacement}
+                            onChange={e => setFormData({...formData, emplacement: e.target.value})}
+                            placeholder="Ex : Rayon A — Étagère 3" />
+                          {errors.emplacement && <span className="ap-error"><AlertCircle size={12} />{errors.emplacement}</span>}
+                        </div>
+
+                        {/* Chimique */}
+                        {formData.famille === 'produit_chimique' && (
+                          <div className="ap-row-2">
+                            <div className="ap-field">
+                              <label className="ap-label" htmlFor="chemicalClass">
+                                <FlaskConical size={14} /> Classe chimique
+                              </label>
+                              <input id="chemicalClass" type="text" maxLength={80} className="ap-input"
+                                value={formData.chemicalClass}
+                                onChange={e => setFormData({...formData, chemicalClass: e.target.value})}
+                                placeholder="Ex : Acide" />
+                            </div>
+                            <div className="ap-field">
+                              <label className="ap-label" htmlFor="physicalState">État physique</label>
+                              <input id="physicalState" type="text" maxLength={80} className="ap-input"
+                                value={formData.physicalState}
+                                onChange={e => setFormData({...formData, physicalState: e.target.value})}
+                                placeholder="Ex : Liquide" />
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Gaz */}
+                        {formData.famille === 'gaz' && (
+                          <div className="ap-row-2">
+                            <div className="ap-field">
+                              <label className="ap-label" htmlFor="gasPressure"><Gauge size={14} /> Pression</label>
+                              <input id="gasPressure" type="text" maxLength={80} className="ap-input"
+                                value={formData.gasPressure}
+                                onChange={e => setFormData({...formData, gasPressure: e.target.value})}
+                                placeholder="Ex : 200 bar" />
+                            </div>
+                            <div className="ap-field">
+                              <label className="ap-label" htmlFor="gasPurity">Pureté</label>
+                              <input id="gasPurity" type="text" maxLength={80} className="ap-input"
+                                value={formData.gasPurity}
+                                onChange={e => setFormData({...formData, gasPurity: e.target.value})}
+                                placeholder="Ex : 99.99%" />
+                            </div>
+                          </div>
+                        )}
+
+                        <div className="ap-field">
+                          <label className="ap-label" htmlFor="description">
+                            <Info size={14} /> Description <span className="ap-opt">(optionnel)</span>
+                          </label>
+                          <textarea id="description" maxLength={600} rows={2} className="ap-input ap-textarea"
+                            value={formData.description}
+                            onChange={e => setFormData({...formData, description: e.target.value})}
+                            placeholder="Spécifications, remarques…" />
+                          {errors.description && <span className="ap-error"><AlertCircle size={12} />{errors.description}</span>}
+                        </div>
+                      </>
+                    )}
+                  </div>
+
+                  {/* ── COLONNE DROITE : photo compacte ── */}
+                  <div className="ap-col-right">
+                    <div className="ap-photo-section">
+                      <span className="ap-photo-label"><ImagePlus size={14} /> Photo du produit <span className="ap-opt">(optionnel)</span></span>
+
+                      {/* Zone photo — unique, compacte */}
+                      <label className="ap-photo-zone" htmlFor="productImageFile">
+                        {imagePreview ? (
+                          <img src={imagePreview} alt="Aperçu produit" className="ap-photo-preview" />
+                        ) : (
+                          <div className="ap-photo-placeholder">
+                            <ImagePlus size={28} />
+                            <span>Cliquez ou glissez une image</span>
+                            <span className="ap-hint">PNG, JPG, WebP · max 5 Mo</span>
+                          </div>
+                        )}
                         <input
-                          id="gasPressure"
-                          type="text"
-                          maxLength={80}
-                          value={formData.gasPressure}
-                          onChange={(e) => setFormData({ ...formData, gasPressure: e.target.value })}
-                          placeholder="Ex: 200 bar"
+                          id="productImageFile" type="file"
+                          accept=".png,.jpg,.jpeg,.webp"
+                          style={{ display:'none' }}
+                          onChange={e => handleImageChange(e.target.files?.[0] || null)}
                         />
+                      </label>
+
+                      {/* Actions photo */}
+                      {imagePreview && (
+                        <button type="button" className="ap-photo-remove" onClick={() => handleImageChange(null)}>
+                          <X size={13} /> Supprimer la photo
+                        </button>
+                      )}
+
+                      {/* FDS si chimique */}
+                      {showAdvancedFields && formData.famille === 'produit_chimique' && (
+                        <div className="ap-field" style={{ marginTop:'1rem' }}>
+                          <label className="ap-label" htmlFor="fdsFile">
+                            <FlaskConical size={14} /> Fiche FDS
+                          </label>
+                          <input id="fdsFile" type="file"
+                            accept=".pdf,.png,.jpg,.jpeg,.webp,.txt,.doc,.docx"
+                            className="ap-input ap-file-input"
+                            onChange={e => setFdsFile(e.target.files?.[0] || null)} />
+                          <span className="ap-hint">Recommandée pour tout produit chimique</span>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Récapitulatif live */}
+                    <div className="ap-recap">
+                      <div className="ap-recap-title">Récapitulatif</div>
+                      <div className="ap-recap-row">
+                        <span>Code</span>
+                        <strong>{String(formData.qrCode||'').trim() || '—'}</strong>
                       </div>
-                      <div className="form-group">
-                        <label htmlFor="gasPurity">Purete</label>
-                        <input
-                          id="gasPurity"
-                          type="text"
-                          maxLength={80}
-                          value={formData.gasPurity}
-                          onChange={(e) => setFormData({ ...formData, gasPurity: e.target.value })}
-                          placeholder="Ex: 99.99%"
-                        />
+                      <div className="ap-recap-row">
+                        <span>Nom</span>
+                        <strong>{String(formData.nom||'').trim() || '—'}</strong>
+                      </div>
+                      <div className="ap-recap-row">
+                        <span>Catégorie</span>
+                        <strong>{currentCatName}</strong>
+                      </div>
+                      <div className="ap-recap-row">
+                        <span>Seuil</span>
+                        <strong>{String(formData.seuilMinimum||'').trim() || '—'}</strong>
                       </div>
                     </div>
                   </div>
-                )}
 
-                {showAdvancedFields && (
-                  <div className="form-section">
-                    <h3>Informations complementaires</h3>
-                    <div className="form-group">
-                      <label htmlFor="description">Description (optionnel)</label>
-                      <textarea
-                        id="description"
-                        maxLength={600}
-                        value={formData.description}
-                        onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-                        placeholder="Description du produit, specifications..."
-                        rows={3}
-                      />
-                    </div>
-                  </div>
-                )}
+                </div>{/* /ap-body */}
 
-                <div className="form-actions">
-                  <div className="form-summary" aria-label="Résumé">
-                    <span><strong>Code:</strong> {String(formData.qrCode || '').trim() ? String(formData.qrCode).trim() : '—'}</span>
-                    <span><strong>Nom:</strong> {String(formData.nom || '').trim() ? String(formData.nom).trim() : '—'}</span>
-                    <span><strong>Catégorie:</strong> {(() => {
-                      const cat = categoriesList.find((c) => String(c.id) === String(formData.categorie));
-                      return cat?.name || '—';
-                    })()}</span>
-                    <span><strong>Seuil:</strong> {String(formData.seuilMinimum || '').trim() ? String(formData.seuilMinimum).trim() : '—'}</span>
-                  </div>
-                  <button type="button" className="btn-cancel" onClick={() => navigate('/magasinier')} disabled={isSubmitting}>
-                    <X size={18} />
-                    Annuler
+                {/* ══ BARRE D'ACTIONS ══ */}
+                <div className="ap-actions">
+                  <button type="button" className="ap-btn-cancel" onClick={() => navigate('/magasinier')} disabled={isSubmitting}>
+                    <X size={15} /> Annuler
                   </button>
-                  <button type="submit" className="btn-submit" disabled={!canSubmit}>
-                    <CheckCircle size={18} />
-                    Ajouter au catalogue
+                  <button type="submit" className="ap-btn-submit" disabled={!canSubmit}>
+                    <CheckCircle size={15} /> Ajouter au catalogue
                   </button>
                 </div>
+
               </form>
             </div>
           </div>
@@ -867,4 +702,3 @@ const AjouterProduit = ({ userName, onLogout }) => {
 };
 
 export default AjouterProduit;
-

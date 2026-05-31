@@ -117,7 +117,6 @@ const AdminRbac = ({ userName, onLogout }) => {
         const list = Array.isArray(res?.roles) ? res.roles : [];
         setRoles(list);
       } catch (err) {
-        // Backward-compatible fallback (older backend): derive roles from /admin/rbac
         if (Number(err?.status || 0) === 404) {
           const legacy = await get('/admin/rbac');
           const mapping = legacy?.policy?.role_permissions && typeof legacy.policy.role_permissions === 'object'
@@ -167,7 +166,6 @@ const AdminRbac = ({ userName, onLogout }) => {
         setAvailableByRole((prev) => ({ ...(prev || {}), [roleId]: item }));
         return item;
       } catch (err) {
-        // Backward-compatible fallback: use /admin/rbac payload
         if (Number(err?.status || 0) === 404) {
           const legacy = await get('/admin/rbac');
           const mapping = legacy?.policy?.role_permissions && typeof legacy.policy.role_permissions === 'object'
@@ -206,8 +204,6 @@ const AdminRbac = ({ userName, onLogout }) => {
         setPermChecked(perms);
       } catch (err) {
         if (Number(err?.status || 0) === 404) {
-          // If backend wasn't restarted yet, keep the UI usable by assuming
-          // the user inherits all permissions of the selected role.
           const roleId = selectedRoleId;
           const roleAvailable = roleId ? (availableByRole?.[roleId]?.permissions || null) : null;
           const perms = Array.isArray(roleAvailable) ? roleAvailable.slice().sort() : [];
@@ -335,7 +331,11 @@ const AdminRbac = ({ userName, onLogout }) => {
         userName={userName}
       />
       <div className={`admin-main ${sidebarCollapsed ? 'collapsed' : ''}`}>
-        <HeaderPage title="Rôles & permissions" subtitle="Ajuster les permissions par utilisateur (sous-ensemble du rôle)" icon={<KeyRound size={24} />} />
+        <HeaderPage
+          title="Rôles & permissions"
+          subtitle="Ajuster les permissions par utilisateur (sous-ensemble du rôle)"
+          icon={<KeyRound size={24} />}
+        />
         {(rolesLoading || usersLoading || availableLoading || permLoading || permSaving) && (
           <LoadingSpinner
             overlay
@@ -343,18 +343,21 @@ const AdminRbac = ({ userName, onLogout }) => {
           />
         )}
         <div className="admin-page">
+          {/* Toolbar : Actualiser uniquement — bouton Enregistrer retiré du haut */}
           <div className="admin-toolbar">
-            <button className="admin-btn" type="button" onClick={refresh} disabled={rolesLoading || usersLoading || permLoading || permSaving}>
+            <button
+              className="admin-btn"
+              type="button"
+              onClick={refresh}
+              disabled={rolesLoading || usersLoading || permLoading || permSaving}
+            >
               <RefreshCw size={16} />
               <span>Actualiser</span>
-            </button>
-            <button className="admin-btn primary" type="button" onClick={save} disabled={!isDirty || !selectedUserId || permLoading || permSaving}>
-              <Save size={16} />
-              <span>Enregistrer</span>
             </button>
           </div>
 
           <div className="rp-grid" aria-label="Rôles & permissions">
+            {/* Colonne Rôles */}
             <div className="rp-panel" aria-label="Rôles">
               <div className="rp-panel-header">Rôles</div>
               <div className="rp-list">
@@ -382,6 +385,7 @@ const AdminRbac = ({ userName, onLogout }) => {
               </div>
             </div>
 
+            {/* Colonne Utilisateurs */}
             <div className="rp-panel" aria-label="Utilisateurs">
               <div className="rp-panel-header">Utilisateurs</div>
               {!selectedRoleId ? (
@@ -425,6 +429,7 @@ const AdminRbac = ({ userName, onLogout }) => {
               )}
             </div>
 
+            {/* Colonne Permissions */}
             <div className="rp-panel rp-panel-wide" aria-label="Permissions">
               <div className="rp-panel-header">
                 <span>Permissions{isDirty ? ' *' : ''}</span>
@@ -437,7 +442,7 @@ const AdminRbac = ({ userName, onLogout }) => {
                 <>
                   <div className="rp-perm-header">
                     <div className="rp-note">
-                      Affichage limité aux permissions possibles pour le rôle <strong>{ROLE_LABELS[selectedRoleId] || selectedRoleId}</strong>.
+                      Permissions pour le rôle <strong>{ROLE_LABELS[selectedRoleId] || selectedRoleId}</strong>
                     </div>
                     <button
                       className="admin-btn primary"
@@ -472,8 +477,8 @@ const AdminRbac = ({ userName, onLogout }) => {
                                     disabled={permLoading || permSaving}
                                   />
                                   <span className="rp-perm-text">
+                                    {/* Libellé uniquement — code technique retiré */}
                                     <span className="rp-perm-label">{p.label}</span>
-                                    <span className="rp-perm-code">{p.id}</span>
                                   </span>
                                 </label>
                               );
@@ -494,7 +499,12 @@ const AdminRbac = ({ userName, onLogout }) => {
       </div>
 
       {confirmLeave.open ? (
-        <div className="admin-modal-backdrop" role="dialog" aria-modal="true" onClick={closeConfirm}>
+        <div
+          className="admin-modal-backdrop"
+          role="dialog"
+          aria-modal="true"
+          onClick={closeConfirm}
+        >
           <div className="admin-modal" onClick={(e) => e.stopPropagation()}>
             <div className="admin-modal-head">
               <strong>Modifications non enregistrées</strong>
@@ -518,4 +528,3 @@ const AdminRbac = ({ userName, onLogout }) => {
 };
 
 export default AdminRbac;
-

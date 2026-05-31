@@ -29,6 +29,7 @@ const ForgotPassword = () => {
 
   const RESEND_COOLDOWN_SEC = 60;
   const isDevUi = process.env.NODE_ENV !== 'production';
+  const showDevOtp = isDevUi && String(process.env.REACT_APP_SHOW_DEV_OTP || '').trim().toLowerCase() === 'true';
 
   const validateEmail = (value) => {
     const regex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -97,7 +98,9 @@ const ForgotPassword = () => {
       const maybeDevOtp = typeof data?.dev_otp === 'string' ? data.dev_otp : '';
       setDevOtp(maybeDevOtp);
       setStep('verify');
-      if (channel === 'email' && isDevUi && maybeDevOtp) {
+      if (channel === 'email' && maybeDevOtp && !showDevOtp) {
+        setInfo("Service email non configure. Activez le SMTP backend pour recevoir le code.");
+      } else if (channel === 'email' && showDevOtp && maybeDevOtp) {
         setInfo("SMTP non configure: en mode dev, le code s'affiche ci-dessous.");
       } else {
         setInfo("Code envoye. Verifiez votre boite de reception (et spam).");
@@ -168,7 +171,11 @@ const ForgotPassword = () => {
       const data = await post('/auth/forgot-password/request', payload);
       const maybeDevOtp = typeof data?.dev_otp === 'string' ? data.dev_otp : '';
       setDevOtp(maybeDevOtp);
-      setInfo('Code renvoye. Verifiez votre boite de reception.');
+      if (channel === 'email' && maybeDevOtp && !showDevOtp) {
+        setInfo("Service email non configure. Activez le SMTP backend pour recevoir le code.");
+      } else {
+        setInfo('Code renvoye. Verifiez votre boite de reception.');
+      }
       const cooldown = Number(data?.cooldown_seconds || RESEND_COOLDOWN_SEC);
       setResendRemainingSec(Number.isFinite(cooldown) ? Math.max(0, Math.floor(cooldown)) : RESEND_COOLDOWN_SEC);
     } catch (err) {
@@ -393,7 +400,7 @@ const ForgotPassword = () => {
                 </span>
               </button>
 
-              {isDevUi && devOtp && (
+              {showDevOtp && devOtp && (
                 <div className="forgot-error" style={{ background: 'rgba(16,185,129,0.12)', borderColor: 'rgba(16,185,129,0.35)' }}>
                   <CheckCircle size={16} />
                   <span>Mode dev: votre code est {devOtp}</span>

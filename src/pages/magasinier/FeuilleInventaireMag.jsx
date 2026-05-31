@@ -21,10 +21,12 @@ function formatDateTime(value) {
 function perimeterLabel(inv) {
   if (!inv) return '-';
   if (String(inv.type_inventaire) === 'GLOBAL') return 'Tous les articles';
-  const zone = inv.zone_id?.name ? `Zone: ${inv.zone_id.name}` : '';
+  const product = inv.product_id?.name
+    ? `Produit: ${inv.product_id.code_product || ''} ${inv.product_id.name}`.trim()
+    : '';
   const fam = inv.famille_id ? `Famille: ${inv.famille_id}` : '';
   const cat = inv.categorie_id?.name ? `Catégorie: ${inv.categorie_id.name}` : '';
-  return [zone, fam, cat].filter(Boolean).join(' | ') || 'Périmètre ciblé';
+  return [product, fam, cat].filter(Boolean).join(' | ') || 'Périmètre ciblé';
 }
 
 function canEditInventory(status) {

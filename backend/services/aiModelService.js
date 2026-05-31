@@ -1578,6 +1578,7 @@ async function askResponsableAssistant(options = {}) {
     const query = String(q || '').toLowerCase();
     const stockoutAll = Array.isArray(ctx?.stockout_top) ? ctx.stockout_top : [];
     const stockoutTop = topItems(stockoutAll, 'risk_probability', 5);
+    const consumptionTop = topItems(ctx?.consumption_top, 'expected_quantity', 5);
     const anomalyTop = topItems(ctx?.anomaly_top, 'anomaly_score', 5);
     const actionPlan = Array.isArray(ctx?.action_plan) ? ctx.action_plan : [];
     const metrics = ctx && typeof ctx === 'object' && ctx.metrics && typeof ctx.metrics === 'object' ? ctx.metrics : {};
@@ -1604,13 +1605,13 @@ async function askResponsableAssistant(options = {}) {
     // Small talk / confirmations: avoid spamming a full "mini-rapport-like" answer.
     const isGreeting = ['bonjour', 'salut', 'hello', 'bonsoir', 'coucou'].includes(queryNorm);
     if (isGreeting) {
+      const top = stockoutTop[0] || null;
       return [
-        'Bonjour !',
-        "Dis-moi ce que tu veux faire, par exemple :",
-        '- « Quels produits sont les plus critiques cette semaine ? »',
-        '- « Pourquoi Chaussures de sécurité est en alerte ? »',
-        '- « Donne-moi un plan de commande priorisé. »',
-        '- « Résume la situation en 5 lignes. »',
+        'Bonjour.',
+        top
+          ? `Signal principal: ${top.product_name || top.code_product || 'produit prioritaire'} (${pct(top.risk_probability)} de risque).`
+          : 'Aucun produit critique fort dans les signaux disponibles.',
+        'Je peux maintenant donner le top risques, expliquer une alerte, ou preparer un plan de commande priorise.',
       ].join('\n');
     }
 
@@ -1620,11 +1621,11 @@ async function askResponsableAssistant(options = {}) {
     if (isShortConfirm) {
       return [
         'OK.',
-        'Tu veux que je fasse quoi exactement ?',
+        'Choisis une action precise pour que je reponde utilement:',
         '- Top produits critiques',
         '- Pourquoi un produit est en alerte',
-        '- Plan de commande priorisé',
-        '- Mini-rapport exportable (bouton « Mini-rapport »)',
+        '- Plan de commande priorise',
+        '- Mini-rapport exportable',
       ].join('\n');
     }
 
@@ -1653,6 +1654,33 @@ async function askResponsableAssistant(options = {}) {
         if ((name && qn.includes(name)) || (code && qn.includes(code))) return item;
       }
       return null;
+    };
+
+    const findInListByQuestion = (rawQ, list) => {
+      const qn = normalize(rawQ);
+      if (!qn || !Array.isArray(list)) return null;
+      for (const item of list) {
+        const candidates = [
+          item?.product_name,
+          item?.name,
+          item?.product,
+          item?.title,
+          item?.code_product,
+        ].map(normalize).filter(Boolean);
+        if (candidates.some((c) => qn.includes(c))) return item;
+      }
+      return null;
+    };
+
+    const describeActionStep = (step, index) => {
+      const name = step?.product_name || step?.name || step?.code_product || 'Produit';
+      const action = step?.action || 'Verifier le besoin et commander si le seuil est confirme';
+      const urgency = step?.urgency || step?.level || 'normale';
+      const reason = step?.why || step?.reason || step?.explanation || null;
+      return [
+        `- P${index + 1} ${name}: ${action} (urgence ${urgency}).`,
+        reason ? `  Raison: ${String(reason).slice(0, 180)}.` : null,
+      ].filter(Boolean).join('\n');
     };
 
     // If user explicitly asks for a 5-line summary, keep it short even in fallback mode.
@@ -1938,6 +1966,25 @@ async function askResponsableAssistant(options = {}) {
         context,
       });
     } catch (agentErr) {
+      const agentMsg = String(agentErr?.message || agentErr || '');
+
+      /* Si l'agent échoue sur un 429 / quota → on court-circuite,
+         on ne retente PAS generateGeminiContent (même quota = même erreur). */
+      const agentIsQuota =
+        agentMsg.includes('429')                ||
+        agentMsg.includes('RESOURCE_EXHAUSTED') ||
+        agentMsg.includes('quota')              ||
+        agentMsg.includes('Too Many Requests')  ||
+        agentMsg.includes('rate limit')         ||
+        agentMsg.includes('503')                ||
+        agentMsg.includes('overloaded');
+
+      if (agentIsQuota) {
+        /* On relance l'erreur vers le catch externe qui gère le fallback */
+        throw agentErr;
+      }
+
+      /* Autre erreur d'agent → tentative directe sans function calling */
       const result = await generateGeminiContent({
         prompt,
         history,
@@ -1947,20 +1994,48 @@ async function askResponsableAssistant(options = {}) {
       });
 
       const text = String(result?.text || '').trim();
-      if (!text) throw new Error(`Empty Gemini response: ${agentErr?.message || 'agent_failed'}`);
+      if (!text) throw new Error(`Empty Gemini response: ${agentMsg || 'agent_failed'}`);
       return { answer: text, source: 'gemini', mode };
     }
   } catch (err) {
-    if (allowGemini && strictGemini) {
-      const e = new Error('Gemini call failed');
-      e.code = 'GEMINI_ERROR';
-      e.details = String(err?.message || err).slice(0, 1200);
+    const errMsg = String(err?.message || err || '');
+
+    /* ── Détection des erreurs de quota / limite API ──────────────────────
+       429 Too Many Requests  → quota RPM/RPD dépassé
+       503 Service Unavailable → Gemini surchargé
+       RESOURCE_EXHAUSTED      → libellé officiel de l'erreur quota Gemini
+       Ces erreurs NE doivent JAMAIS bloquer l'utilisateur :
+       on bascule toujours sur le fallback local, même si strictGemini=true.
+    ──────────────────────────────────────────────────────────────────────── */
+    const isQuotaError =
+      errMsg.includes('429')                 ||
+      errMsg.includes('RESOURCE_EXHAUSTED')  ||
+      errMsg.includes('quota')               ||
+      errMsg.includes('Too Many Requests')   ||
+      errMsg.includes('rate limit')          ||
+      errMsg.includes('503')                 ||
+      errMsg.includes('overloaded');
+
+    /* strictGemini bloque seulement les vraies erreurs (clé invalide, etc.)
+       Il ne bloque JAMAIS les erreurs de quota → toujours fallback. */
+    if (allowGemini && strictGemini && !isQuotaError) {
+      const e = new Error(`Gemini call failed: ${errMsg.slice(0, 400)}`);
+      e.code    = 'GEMINI_ERROR';
+      e.details = errMsg.slice(0, 1200);
       throw e;
     }
+
+    /* Fallback local — répond toujours, même sans Gemini */
     const answer = mode === 'report'
       ? fallbackReportAnswer(question, context)
       : await fallbackChatAnswer(question, context);
-    return { answer, source: 'fallback', mode };
+
+    return {
+      answer,
+      source:        'fallback',
+      mode,
+      gemini_skipped: isQuotaError ? 'quota_exceeded' : 'gemini_disabled_or_error',
+    };
   }
 }
 

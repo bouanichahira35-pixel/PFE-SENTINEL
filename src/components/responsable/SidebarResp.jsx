@@ -6,371 +6,255 @@ import {
   ChevronDown,
   ChevronLeft,
   ChevronRight,
-  Clipboard,
   ClipboardCheck,
   ClipboardList,
   FlaskConical,
   History,
-  Layers,
   LayoutDashboard,
-  LineChart,
   LogOut,
-  ShoppingCart,
+  PackageSearch,
   Settings,
+  ShoppingCart,
+  TrendingUp,
   Truck,
+  User,
 } from 'lucide-react';
 import logoETAP from '../../assets/logoETAP.png';
 import { useUiLanguage } from '../../utils/uiLanguage';
 import useProtectedFileUrl from '../../hooks/useProtectedFileUrl';
 import './SidebarResp.css';
 
-function normalizeSearch(search) {
-  const raw = String(search || '').trim();
-  if (!raw) return '';
-  return raw.startsWith('?') ? raw : `?${raw}`;
-}
+/* ─── Helpers ─────────────────────────────────── */
+const norm = (s = '') => (s.startsWith('?') ? s : s ? `?${s}` : '');
+const normH = (h = '') => (h.startsWith('#') ? h : h ? `#${h}` : '');
 
-function normalizeHash(hash) {
-  const raw = String(hash || '').trim();
-  if (!raw) return '';
-  return raw.startsWith('#') ? raw : `#${raw}`;
-}
-
-function isActiveLink(location, item) {
+function isActive(location, item) {
   if (location.pathname !== item.to) return false;
-  if (item.search && !String(location.search || '').includes(item.search)) return false;
-  if (item.hash && String(location.hash || '') !== normalizeHash(item.hash)) return false;
+  if (item.search && !String(location.search).includes(item.search)) return false;
+  if (item.hash   && String(location.hash) !== normH(item.hash))     return false;
   return true;
 }
 
-function formatBadgeValue(value) {
-  if (value == null) return '';
-  if (typeof value === 'string') return value;
-  const n = Math.max(0, Math.floor(Number(value || 0)));
-  if (!Number.isFinite(n)) return '';
-  return n > 99 ? '99+' : String(n);
+function badge(v) {
+  if (v == null) return '';
+  if (typeof v === 'string') return v;
+  const n = Math.max(0, Math.floor(Number(v)));
+  return !Number.isFinite(n) ? '' : n > 99 ? '99+' : String(n);
 }
 
-const SidebarResp = ({ collapsed, onToggle, onLogout, userName }) => {
-  const language = useUiLanguage();
+/* ─── Structure de navigation ─────────────────── */
+function useSections(labels, badges) {
+  return useMemo(() => [
+    {
+      key: 'dashboard',
+      title: labels.tableauDeBord,
+      defaultOpen: true,
+      items: [
+        { key: 'vue',     icon: LayoutDashboard, label: labels.vueGenerale,     to: '/responsable' },
+      ],
+    },
+    {
+      key: 'validation',
+      title: labels.validation,
+      defaultOpen: true,
+      items: [
+        { key: 'requests', icon: ClipboardList,  label: labels.demandes,    to: '/responsable/pilotage',              search: 'tab=validations', badge: badges.demandes    },
+        { key: 'inv',      icon: ClipboardCheck, label: labels.inventaires, to: '/responsable/inventaires/a-valider',                            badge: badges.inventaires },
+      ],
+    },
+    {
+      key: 'stock',
+      title: labels.stock,
+      defaultOpen: false,
+      items: [
+        { key: 'produits',  icon: PackageSearch, label: labels.produits,        to: '/responsable/categories' },
+        { key: 'critiques', icon: AlertTriangle,  label: labels.critiques,       to: '/responsable/produits',   search: 'filter=critiques', badge: badges.critiques },
+        { key: 'chimique',  icon: FlaskConical,   label: labels.chimique,        to: '/responsable/registre-chimique' },
+        { key: 'tx',        icon: History,        label: labels.transactions,    to: '/responsable/transactions' },
+      ],
+    },
+    {
+      key: 'supply',
+      title: labels.approvisionnement,
+      defaultOpen: false,
+      items: [
+        { key: 'fournisseurs', icon: Truck,        label: labels.fournisseurs, to: '/responsable/fournisseurs' },
+        { key: 'commandes',    icon: ShoppingCart, label: labels.commandes,    to: '/responsable/commandes/nouvelle' },
+      ],
+    },
+    {
+      key: 'analyse',
+      title: labels.analyse,
+      defaultOpen: false,
+      items: [
+        { key: 'conso',     icon: TrendingUp,    label: labels.consommation, to: '/responsable/consommation' },
+        { key: 'alertes',   icon: AlertTriangle, label: labels.alertes,      to: '/responsable/pilotage', search: 'tab=alertes', badge: badges.alertes },
+        { key: 'assistant', icon: Bot,           label: labels.assistant,    to: '/responsable/chatbot' },
+      ],
+    },
+    {
+      key: 'account',
+      title: labels.compte,
+      defaultOpen: false,
+      items: [
+        { key: 'settings', icon: Settings, label: labels.parametres, to: '/responsable/parametres' },
+        { key: 'logout',   icon: LogOut,   label: labels.deconnexion, action: 'logout' },
+      ],
+    },
+  ], [labels, badges]);
+}
+
+/* ─── Traductions ─────────────────────────────── */
+const LABELS = {
+  fr: {
+    tableauDeBord: 'TABLEAU DE BORD', vueGenerale: 'Vue générale',
+    validation: 'VALIDATION',         demandes: 'Demandes à valider', inventaires: 'Inventaires',
+    stock: 'STOCK',                   produits: 'Référentiel produit', critiques: 'Produits critiques',
+                                      chimique: 'Registre chimique',  transactions: 'Transactions',
+    approvisionnement: 'APPROVISIONNEMENT', fournisseurs: 'Fournisseurs', commandes: 'Commandes',
+    analyse: 'ANALYSE & IA',          consommation: 'Consommation',   alertes: 'Alertes',
+                                      assistant: 'Assistant IA',
+    compte: 'COMPTE',                 parametres: 'Paramètres',       deconnexion: 'Déconnexion',
+  },
+  en: {
+    tableauDeBord: 'DASHBOARD',       vueGenerale: 'Overview',
+    validation: 'VALIDATION',         demandes: 'Requests', inventaires: 'Inventories',
+    stock: 'STOCK',                   produits: 'Product catalog', critiques: 'Critical products',
+                                      chimique: 'Chemical register', transactions: 'Transactions',
+    approvisionnement: 'SUPPLY',      fournisseurs: 'Suppliers', commandes: 'Orders',
+    analyse: 'ANALYTICS & AI',        consommation: 'Consumption', alertes: 'Alerts',
+                                      assistant: 'AI Assistant',
+    compte: 'ACCOUNT',                parametres: 'Settings',       deconnexion: 'Logout',
+  },
+};
+
+/* ─── Composant ───────────────────────────────── */
+export default function SidebarResp({ collapsed, onToggle, onLogout, userName }) {
+  const lang     = useUiLanguage();
   const location = useLocation();
+  const labels   = LABELS[lang] ?? LABELS.fr;
 
-  const sessionUserName =
-    sessionStorage.getItem('userName') ||
-    localStorage.getItem('userName') ||
-    userName ||
-    'Utilisateur';
+  const sessionName  = sessionStorage.getItem('userName') || localStorage.getItem('userName') || userName || 'Utilisateur';
   const profileImage = sessionStorage.getItem('imageProfile') || localStorage.getItem('imageProfile') || '';
-  const avatarUrl = useProtectedFileUrl(profileImage);
+  const avatarUrl    = useProtectedFileUrl(profileImage);
 
-  const labels = useMemo(() => ({
-    fr: {
-      tableauBord: 'TABLEAU DE BORD',
-      vueGenerale: 'Vue générale',
-      validation: 'VALIDATION',
-      demandesATraiter: 'Demandes à traiter',
-      inventairesAValider: 'Inventaires à valider',
-      stockRisques: 'STOCK & RISQUES',
-      referentielProduit: 'Référentiel produit',
-      produitsCritiques: 'Produits critiques',
-      reglesStock: 'Règles métier du stock',
-      transactions: 'Transactions',
-      approvisionnement: 'APPROVISIONNEMENT',
-      fournisseurs: 'Fournisseurs',
-      commandesFournisseurs: 'Commandes fournisseurs',
-      retardsFournisseurs: 'Retards fournisseurs',
-      analyseAide: 'ANALYSE & AIDE',
-      analyse: 'Analyse',
-      consommation: 'Consommation',
-      alertes: 'Alertes',
-      aideDecision: 'Aide à la décision',
-      hseSecurite: 'HSE & Sécurité',
-      registreChimique: 'Registre chimique',
-      compte: 'COMPTE',
-      parametres: 'Paramètres',
-      logout: 'Déconnexion',
-    },
-    en: {
-      tableauBord: 'DASHBOARD',
-      vueGenerale: 'Overview',
-      validation: 'VALIDATION',
-      demandesATraiter: 'Requests to process',
-      inventairesAValider: 'Inventories to validate',
-      stockRisques: 'STOCK & RISKS',
-      referentielProduit: 'Products catalog',
-      produitsCritiques: 'Critical products',
-      reglesStock: 'Stock business rules',
-      transactions: 'Transactions',
-      approvisionnement: 'SUPPLY',
-      fournisseurs: 'Suppliers',
-      commandesFournisseurs: 'Supplier orders',
-      retardsFournisseurs: 'Supplier delays',
-      analyseAide: 'ANALYTICS & HELP',
-      analyse: 'Analytics',
-      consommation: 'Consumption',
-      alertes: 'Alerts',
-      aideDecision: 'Decision support',
-      hseSecurite: 'HSE & Safety',
-      registreChimique: 'Chemical register',
-      compte: 'ACCOUNT',
-      parametres: 'Settings',
-      logout: 'Logout',
-    },
-    ar: {
-      tableauBord: 'TABLEAU DE BORD',
-      vueGenerale: 'Vue générale',
-      validation: 'VALIDATION',
-      demandesATraiter: 'Demandes à traiter',
-      inventairesAValider: 'Inventaires à valider',
-      stockRisques: 'STOCK & RISQUES',
-      referentielProduit: 'Référentiel produit',
-      produitsCritiques: 'Produits critiques',
-      reglesStock: 'Règles métier du stock',
-      transactions: 'Transactions',
-      approvisionnement: 'APPROVISIONNEMENT',
-      fournisseurs: 'Fournisseurs',
-      commandesFournisseurs: 'Commandes fournisseurs',
-      retardsFournisseurs: 'Retards fournisseurs',
-      analyseAide: 'ANALYSE & AIDE',
-      analyse: 'Analyse',
-      consommation: 'Consommation',
-      alertes: 'Alertes',
-      aideDecision: 'Aide à la décision',
-      hseSecurite: 'HSE & Sécurité',
-      registreChimique: 'Registre chimique',
-      compte: 'COMPTE',
-      parametres: 'Paramètres',
-      logout: 'Déconnexion',
-    },
-  }[language] || {}), [language]);
-
+  /* Badges — à brancher sur vos vraies données */
   const badges = useMemo(() => ({
-    demandes: 3,
+    demandes:    3,
     inventaires: 0,
-    produitsCritiques: 65,
-    lots: 0,
-    alertes: '99+',
-    retardsFournisseurs: 0,
+    critiques:   65,
+    alertes:     '99+',
   }), []);
 
-  const sections = useMemo(
-    () => [
-      {
-        key: 'dashboard',
-        title: labels.tableauBord,
-        defaultOpen: true,
-        items: [
-          { key: 'vue', icon: LayoutDashboard, label: labels.vueGenerale, to: '/responsable' },
-        ],
-      },
-      {
-        key: 'validation',
-        title: labels.validation,
-        defaultOpen: true,
-        items: [
-          { key: 'requests', icon: ClipboardList, label: labels.demandesATraiter, to: '/responsable/pilotage', search: 'tab=validations', badge: badges.demandes },
-          { key: 'inv', icon: ClipboardCheck, label: labels.inventairesAValider, to: '/responsable/inventaires/a-valider', badge: badges.inventaires },
-        ],
-      },
-      {
-        key: 'stock',
-        title: labels.stockRisques,
-        defaultOpen: false,
-        items: [
-          { key: 'ref', icon: Layers, label: labels.referentielProduit, to: '/responsable/categories' },
-          { key: 'critiques', icon: AlertTriangle, label: labels.produitsCritiques, to: '/responsable/produits', search: 'filter=critiques', badge: badges.produitsCritiques },
-          { key: 'rules', icon: Settings, label: labels.reglesStock, to: '/responsable/regles-stock' },
-          { key: 'chemreg', icon: FlaskConical, label: labels.registreChimique, to: '/responsable/registre-chimique' },
-          { key: 'tx', icon: History, label: labels.transactions, to: '/responsable/transactions' },
-        ],
-      },
-      {
-        key: 'supply',
-        title: labels.approvisionnement,
-        defaultOpen: false,
-        items: [
-          { key: 'suppliers', icon: Truck, label: labels.fournisseurs, to: '/responsable/fournisseurs' },
-          { key: 'po', icon: ShoppingCart, label: labels.commandesFournisseurs, to: '/responsable/commandes/nouvelle' },
-          { key: 'late', icon: Clipboard, label: labels.retardsFournisseurs, to: '/responsable/fournisseurs', search: 'filter=retards', badge: badges.retardsFournisseurs },
-        ],
-      },
-      {
-        key: 'analysis',
-        title: labels.analyseAide,
-        defaultOpen: false,
-        items: [
-          { key: 'analyse', icon: LineChart, label: labels.analyse, to: '/responsable/pilotage', search: 'tab=analyse' },
-          { key: 'conso', icon: LineChart, label: labels.consommation, to: '/responsable/consommation' },
-          { key: 'alertes', icon: AlertTriangle, label: labels.alertes, to: '/responsable/pilotage', search: 'tab=alertes', badge: badges.alertes },
-          { key: 'assistant', icon: Bot, label: labels.aideDecision, to: '/responsable/chatbot' },
-        ],
-      },
-      {
-        key: 'account',
-        title: labels.compte,
-        defaultOpen: false,
-        items: [
-          { key: 'settings', icon: Settings, label: labels.parametres, to: '/responsable/parametres' },
-          { key: 'logout', icon: LogOut, label: labels.logout, action: 'logout' },
-        ],
-      },
-    ],
-    [badges, labels]
-  );
+  const sections = useSections(labels, badges);
 
-  const defaultOpenSections = useMemo(() => {
-    const base = {};
-    sections.forEach((section) => {
-      base[section.key] = Boolean(section.defaultOpen);
-    });
-    return base;
-  }, [sections]);
+  /* État ouverture sections — persisté localStorage */
+  const defaults = useMemo(() => Object.fromEntries(sections.map((s) => [s.key, s.defaultOpen])), [sections]);
 
-  const [openSections, setOpenSections] = useState(() => {
+  const [open, setOpen] = useState(() => {
     try {
-      const raw = localStorage.getItem('resp_sidebar_sections');
-      if (!raw) return defaultOpenSections;
-      const parsed = JSON.parse(raw);
-      if (!parsed || typeof parsed !== 'object') return defaultOpenSections;
-      const next = { ...defaultOpenSections };
-      Object.keys(next).forEach((key) => {
-        if (Object.prototype.hasOwnProperty.call(parsed, key)) next[key] = Boolean(parsed[key]);
-      });
-      return next;
-    } catch {
-      return defaultOpenSections;
-    }
+      const raw = localStorage.getItem('sidebar_resp_open');
+      const parsed = raw ? JSON.parse(raw) : {};
+      return { ...defaults, ...parsed };
+    } catch { return defaults; }
   });
 
-  const persistOpenSections = useCallback((next) => {
-    setOpenSections(next);
-    try {
-      localStorage.setItem('resp_sidebar_sections', JSON.stringify(next));
-    } catch {
-      // ignore
-    }
+  const toggle = useCallback((key) => {
+    setOpen((prev) => {
+      const next = { ...prev, [key]: !prev[key] };
+      try { localStorage.setItem('sidebar_resp_open', JSON.stringify(next)); } catch { /* */ }
+      return next;
+    });
   }, []);
 
-  const toggleSection = useCallback(
-    (key) => {
-      persistOpenSections({ ...openSections, [key]: !openSections[key] });
-    },
-    [openSections, persistOpenSections]
-  );
+  /* ─── Rendu item ─────────────────────────────── */
+  const renderItem = (item, isCollapsed = false) => {
+    const Icon      = item.icon;
+    const active    = item.action ? false : isActive(location, item);
+    const href      = item.search ? `${item.to}${norm(item.search)}` : item.to;
+    const to        = item.hash   ? `${href}${normH(item.hash)}`     : href;
+    const badgeVal  = badge(item.badge);
 
-  const handleLogout = useCallback(() => {
-    onLogout?.();
-  }, [onLogout]);
+    if (item.action === 'logout') {
+      return (
+        <button key={item.key} type="button" className="sb-item sb-logout" title={item.label} onClick={() => onLogout?.()}>
+          <Icon size={18} className="sb-icon" />
+          {!isCollapsed && <span className="sb-label">{item.label}</span>}
+        </button>
+      );
+    }
 
+    return (
+      <Link key={item.key} to={to} className={`sb-item${active ? ' active' : ''}`} title={item.label}>
+        <Icon size={18} className="sb-icon" />
+        {!isCollapsed && <span className="sb-label">{item.label}</span>}
+        {badgeVal && (
+          <span className={`sb-badge${isCollapsed ? ' sm' : ''}`} aria-label={`${badgeVal} éléments`}>
+            {badgeVal}
+          </span>
+        )}
+      </Link>
+    );
+  };
+
+  /* ─── JSX ────────────────────────────────────── */
   return (
-    <aside className={`sidebar-resp ${collapsed ? 'collapsed' : ''}`}>
-      <div className="sidebar-logo">
-        <img src={logoETAP} alt="ETAP" className="sidebar-logo-img" />
+    <aside className={`sidebar-resp${collapsed ? ' collapsed' : ''}`} aria-label="Menu responsable">
+
+      {/* ── En-tête / Logo ── */}
+      <div className="sb-head">
+        <img src={logoETAP} alt="ETAP" className="sb-logo" />
+
         {!collapsed && (
-          <div className="sidebar-logo-text">
-            <div className="sidebar-logo-ident">
-              <span className="sidebar-logo-title">RESPONSABLE</span>
-              <span className="sidebar-logo-subtitle">- VALIDATION</span>
-              <span className="sidebar-user-name">{sessionUserName}</span>
+          <div className="sb-head-body">
+            <div className="sb-user-info">
+              {avatarUrl
+                ? <img src={avatarUrl} alt="Avatar" className="sb-avatar" />
+                : <span className="sb-avatar-placeholder"><User size={14} /></span>
+              }
+              <span className="sb-username">{sessionName}</span>
             </div>
-            {avatarUrl && <img src={avatarUrl} alt="Profil" className="sidebar-user-avatar" />}
-            <button onClick={onToggle} className="sidebar-toggle-btn" type="button" aria-label="Réduire le menu">
-              <ChevronLeft size={20} />
+            <button type="button" className="sb-toggle" onClick={onToggle} aria-label="Réduire">
+              <ChevronLeft size={18} />
             </button>
           </div>
         )}
+
         {collapsed && (
-          <button onClick={onToggle} className="sidebar-expand-btn" type="button" aria-label="Ouvrir le menu">
-            <ChevronRight size={16} />
+          <button type="button" className="sb-expand" onClick={onToggle} aria-label="Ouvrir">
+            <ChevronRight size={15} />
           </button>
         )}
       </div>
 
-      <nav className="sidebar-nav" aria-label="Menu responsable">
+      {/* ── Navigation ── */}
+      <nav className="sb-nav">
         {!collapsed ? (
-          <div className="sidebar-sections">
-            {sections.map((section) => (
-              <div className="sidebar-section" key={section.key}>
-                <button
-                  type="button"
-                  className="sidebar-section-head"
-                  onClick={() => toggleSection(section.key)}
-                  aria-expanded={Boolean(openSections[section.key])}
-                >
-                  <span className="sidebar-section-title">{section.title}</span>
-                  <ChevronDown className={`sidebar-section-chevron ${openSections[section.key] ? 'open' : ''}`} size={16} />
-                </button>
+          /* Mode étendu — sections accordéon */
+          sections.map((section) => (
+            <div className="sb-section" key={section.key}>
+              <button
+                type="button"
+                className="sb-section-head"
+                onClick={() => toggle(section.key)}
+                aria-expanded={Boolean(open[section.key])}
+              >
+                <span>{section.title}</span>
+                <ChevronDown size={14} className={`sb-chevron${open[section.key] ? ' open' : ''}`} />
+              </button>
 
-                <div className={`sidebar-section-items ${openSections[section.key] ? 'open' : 'closed'}`} aria-hidden={!openSections[section.key]}>
-                  {section.items.map((item) => {
-                    const IconComponent = item.icon;
-                    const active = item.action ? false : isActiveLink(location, item);
-                    const toBase = item.search ? `${item.to}${normalizeSearch(item.search)}` : item.to;
-                    const to = item.hash ? `${toBase}${normalizeHash(item.hash)}` : toBase;
-                    const badgeLabel = formatBadgeValue(item.badge);
-
-                    if (item.action === 'logout') {
-                      return (
-                        <button
-                          key={item.key}
-                          type="button"
-                          className="sidebar-nav-item sidebar-nav-item-btn"
-                          title={item.label}
-                          onClick={handleLogout}
-                        >
-                          <IconComponent className="sidebar-nav-icon" size={20} />
-                          <span className="sidebar-nav-label">{item.label}</span>
-                        </button>
-                      );
-                    }
-
-                    return (
-                      <Link key={item.key} to={to} className={`sidebar-nav-item ${active ? 'active' : ''}`} title={item.label}>
-                        <IconComponent className="sidebar-nav-icon" size={20} />
-                        <span className="sidebar-nav-label">{item.label}</span>
-                        {badgeLabel !== '' ? <span className="sidebar-nav-badge" aria-label={`Badge ${badgeLabel}`}>{badgeLabel}</span> : null}
-                      </Link>
-                    );
-                  })}
-                </div>
+              <div className={`sb-section-body${open[section.key] ? '' : ' closed'}`}>
+                {section.items.map((item) => renderItem(item, false))}
               </div>
-            ))}
-          </div>
+            </div>
+          ))
         ) : (
-          <div className="sidebar-collapsed-items">
-            {sections.flatMap((s) => s.items).map((item) => {
-              const IconComponent = item.icon;
-              const active = item.action ? false : isActiveLink(location, item);
-              const toBase = item.search ? `${item.to}${normalizeSearch(item.search)}` : item.to;
-              const to = item.hash ? `${toBase}${normalizeHash(item.hash)}` : toBase;
-              const badgeLabel = formatBadgeValue(item.badge);
-
-              if (item.action === 'logout') {
-                return (
-                  <button
-                    key={item.key}
-                    type="button"
-                    className="sidebar-nav-item sidebar-nav-item-btn"
-                    title={item.label}
-                    onClick={handleLogout}
-                  >
-                    <IconComponent className="sidebar-nav-icon" size={20} />
-                  </button>
-                );
-              }
-
-              return (
-                <Link key={item.key} to={to} className={`sidebar-nav-item ${active ? 'active' : ''}`} title={item.label}>
-                  <IconComponent className="sidebar-nav-icon" size={20} />
-                  {badgeLabel !== '' ? <span className="sidebar-nav-badge collapsed" aria-label={`Badge ${badgeLabel}`}>{badgeLabel}</span> : null}
-                </Link>
-              );
-            })}
+          /* Mode réduit — icônes seules */
+          <div className="sb-icons">
+            {sections.flatMap((s) => s.items).map((item) => renderItem(item, true))}
           </div>
         )}
       </nav>
     </aside>
   );
-};
-
-export default SidebarResp;
+}

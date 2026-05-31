@@ -12,7 +12,6 @@ const InventoryLine = require('../models/InventoryLine');
 const Notification = require('../models/Notification');
 const Category = require('../models/Category');
 const Laboratory = require('../models/Laboratory');
-const Location = require('../models/Location');
 const User = require('../models/User');
 const Product = require('../models/Product');
 const SupplierProduct = require('../models/SupplierProduct');
@@ -135,24 +134,74 @@ function normalizeFamily(value) {
   return allowed.has(key) ? key : null;
 }
 
-async function listProductsForInventory({ typeInventaire, categorieId, familleId, zoneId }) {
+function productSearchRegex(value) {
+  const escaped = String(value || '').trim().replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  return escaped ? new RegExp(escaped, 'i') : null;
+}
+
+async function resolveInventoryProduct({ productId, productQuery }) {
+  const base = {
+    lifecycle_status: 'active',
+    validation_status: 'approved',
+  };
+
+  if (productId) {
+    if (!isValidObjectIdLike(productId)) {
+      return { error: 'product_id invalide' };
+    }
+    const product = await Product.findOne({ ...base, _id: productId })
+      .select('_id code_product name')
+      .lean();
+    if (!product) return { error: 'Produit introuvable ou inactif' };
+    return { product };
+  }
+
+  const q = String(productQuery || '').trim();
+  if (!q) return { product: null };
+
+  if (!isSafeText(q, { min: 2, max: 120 })) {
+    return { error: 'produit invalide' };
+  }
+
+  const exact = await Product.findOne({
+    ...base,
+    $or: [
+      { code_product: q.toUpperCase() },
+      { name: { $regex: `^${q.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, $options: 'i' } },
+    ],
+  })
+    .select('_id code_product name')
+    .lean();
+  if (exact) return { product: exact };
+
+  const rx = productSearchRegex(q);
+  const matches = await Product.find({
+    ...base,
+    $or: [
+      { code_product: rx },
+      { name: rx },
+    ],
+  })
+    .select('_id code_product name')
+    .sort({ name: 1 })
+    .limit(2)
+    .lean();
+
+  if (matches.length === 1) return { product: matches[0] };
+  if (matches.length > 1) return { error: 'Plusieurs produits correspondent. Choisir un produit dans la liste.' };
+  return { error: 'Aucun produit actif ne correspond a cette saisie' };
+}
+
+async function listProductsForInventory({ typeInventaire, categorieId, familleId, productId }) {
   const q = {
     lifecycle_status: 'active',
     validation_status: 'approved',
   };
 
   if (typeInventaire === 'TOURNANT') {
+    if (productId) q._id = productId;
     if (categorieId) q.category = categorieId;
     if (familleId) q.family = familleId;
-
-    // Best-effort zone filter: current Product model only has a free-text "emplacement".
-    if (zoneId) {
-      const zone = await Location.findById(zoneId).select('code name').lean();
-      const tokens = [zone?.code, zone?.name].filter(Boolean).map((t) => String(t).trim()).filter(Boolean);
-      if (tokens.length) {
-        q.$or = tokens.map((t) => ({ emplacement: { $regex: t.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), $options: 'i' } }));
-      }
-    }
   }
 
   const items = await Product.find(q).select('_id quantity_current emplacement').sort({ name: 1 }).lean();
@@ -177,6 +226,7 @@ function sanitizeInventoryForMagasinier(inv) {
     zone_id: inv.zone_id,
     famille_id: inv.famille_id,
     categorie_id: inv.categorie_id,
+    product_id: inv.product_id,
     responsable_id: inv.responsable_id,
     magasinier_id: inv.magasinier_id,
     magasinier_ids: Array.isArray(inv.magasinier_ids) ? inv.magasinier_ids : [],
@@ -271,10 +321,14 @@ router.get('/launch/options', async (req, res) => {
   try {
     if (!ensureRole(req, res, ['responsable'])) return;
 
-    let [magasins, zones, categories, magasiniers] = await Promise.all([
+    let [magasins, categories, products, magasiniers] = await Promise.all([
       Laboratory.find({ active: true }).select('_id code name active').sort({ name: 1 }).lean(),
-      Location.find({ active: true }).select('_id code name active').sort({ name: 1 }).lean(),
       Category.find({ lifecycle_status: 'active' }).select('_id name parent_family').sort({ name: 1 }).lean(),
+      Product.find({ lifecycle_status: 'active', validation_status: 'approved' })
+        .select('_id code_product name family category quantity_current emplacement')
+        .sort({ name: 1 })
+        .limit(500)
+        .lean(),
       User.find({ role: 'magasinier', status: 'active' }).select('_id username role status').sort({ username: 1 }).lean(),
     ]);
 
@@ -286,8 +340,8 @@ router.get('/launch/options', async (req, res) => {
     return res.json({
       ok: true,
       magasins,
-      zones,
       categories,
+      products,
       familles: INVENTORY_FAMILIES,
       magasiniers,
     });
@@ -307,6 +361,7 @@ router.get('/responsable/to-validate', async (req, res) => {
       .populate('magasin_id', 'code name')
       .populate('zone_id', 'code name')
       .populate('categorie_id', 'name is_sensitive')
+      .populate('product_id', '_id code_product name')
       .populate('magasinier_id', 'username role')
       .populate('magasinier_ids', 'username role')
       .lean();
@@ -387,6 +442,7 @@ router.get('/responsable/inventories/:id/analysis', async (req, res) => {
       .populate('magasin_id', 'code name')
       .populate('zone_id', 'code name')
       .populate('categorie_id', 'name is_sensitive')
+      .populate('product_id', '_id code_product name')
       .populate('magasinier_id', 'username role')
       .populate('magasinier_ids', 'username role')
       .populate('responsable_id', 'username role')
@@ -864,6 +920,7 @@ router.get('/magasinier/missions', async (req, res) => {
       .populate('magasin_id', 'code name')
       .populate('zone_id', 'code name')
       .populate('categorie_id', 'name')
+      .populate('product_id', '_id code_product name')
       .populate('responsable_id', 'username role')
       .lean();
 
@@ -905,6 +962,7 @@ router.get('/magasinier/inventories/:id', async (req, res) => {
       .populate('magasin_id', 'code name')
       .populate('zone_id', 'code name')
       .populate('categorie_id', 'name')
+      .populate('product_id', '_id code_product name')
       .populate('responsable_id', 'username role')
       .populate('magasinier_id', 'username role')
       .populate('magasinier_ids', 'username role')
@@ -1304,6 +1362,7 @@ router.get('/inventories', async (req, res) => {
       .populate('magasin_id', 'code name')
       .populate('zone_id', 'code name')
       .populate('categorie_id', 'name')
+      .populate('product_id', '_id code_product name')
       .lean();
 
     const inventories = role === 'magasinier'
@@ -1325,6 +1384,8 @@ router.post(
     'zone_id',
     'famille_id',
     'categorie_id',
+    'product_id',
+    'product_query',
     'magasinier_id',
     'magasinier_ids',
     'date_prevue',
@@ -1353,7 +1414,8 @@ router.post(
       }
 
       const zoneIdRaw = asOptionalString(req.body?.zone_id);
-      const zoneId = zoneIdRaw && isValidObjectIdLike(zoneIdRaw) ? zoneIdRaw : null;
+      const zoneId = null;
+      if (zoneIdRaw) errors.push('zone_id n est plus utilise pour lancer un inventaire');
 
       const categorieIdRaw = asOptionalString(req.body?.categorie_id);
       const categorieId = categorieIdRaw && isValidObjectIdLike(categorieIdRaw) ? categorieIdRaw : null;
@@ -1361,6 +1423,12 @@ router.post(
       const familleIdRaw = asOptionalString(req.body?.famille_id);
       const familleId = normalizeFamily(familleIdRaw);
       if (familleIdRaw && !familleId) errors.push('famille_id invalide');
+
+      const productIdRaw = asOptionalString(req.body?.product_id);
+      const productQuery = asOptionalString(req.body?.product_query);
+      const productResolution = await resolveInventoryProduct({ productId: productIdRaw, productQuery });
+      if (productResolution.error) errors.push(productResolution.error);
+      const productId = productResolution.product?._id ? String(productResolution.product._id) : null;
 
       const magasinierId = asOptionalString(req.body?.magasinier_id);
       const magasinierIdsRaw = Array.isArray(req.body?.magasinier_ids) ? req.body.magasinier_ids : [];
@@ -1392,12 +1460,12 @@ router.post(
       const notificationsActives = req.body?.notifications_activees !== false;
 
       if (typeInventaire === 'GLOBAL') {
-        if (familleId || categorieId) errors.push('Pour GLOBAL, ne pas selectionner famille/categorie comme perimetre');
+        if (familleId || categorieId || productId) errors.push('Pour GLOBAL, ne pas selectionner produit/famille/categorie comme perimetre');
       }
 
       if (typeInventaire === 'TOURNANT') {
-        if (!zoneId && !familleId && !categorieId) {
-          errors.push('Pour TOURNANT, choisir au moins zone ou famille ou categorie');
+        if (!productId && !familleId && !categorieId) {
+          errors.push('Pour TOURNANT, choisir au moins un produit, une famille ou une categorie');
         }
       }
 
@@ -1422,6 +1490,7 @@ router.post(
         zone_id: zoneId,
         famille_id: familleId,
         categorie_id: categorieId,
+        product_id: productId,
       })
         .select('_id reference status')
         .lean();
@@ -1440,7 +1509,7 @@ router.post(
         typeInventaire,
         categorieId,
         familleId,
-        zoneId,
+        productId,
       });
 
       if (!products.length) {
@@ -1458,6 +1527,7 @@ router.post(
               zone_id: zoneId,
               famille_id: familleId,
               categorie_id: categorieId,
+              product_id: productId,
               responsable_id: req.user.id,
               magasinier_id: primaryMagasinier._id,
               magasinier_ids: orderedMagasiniers.map((u) => u._id),
@@ -1511,6 +1581,7 @@ router.post(
                 zone_id: zoneId ? String(zoneId) : null,
                 famille_id: familleId,
                 categorie_id: categorieId ? String(categorieId) : null,
+                product_id: productId,
                 magasinier_id: String(primaryMagasinier._id),
                 magasinier_ids: orderedMagasiniers.map((u) => String(u._id)),
                 lines_count: lines.length,

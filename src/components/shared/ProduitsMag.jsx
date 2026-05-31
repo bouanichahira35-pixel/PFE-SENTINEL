@@ -53,7 +53,7 @@ const ProduitsMag = ({ searchQuery, onEntreeStock, onSortieStock, onVoirDetails 
       <div className="produits-header">
         <h1 className="produits-title">Produits</h1>
         <button 
-          onClick={() => navigate('/ajouter-produit')}
+          onClick={() => navigate('/magasinier/ajouter-produit')}
           className="btn-primary"
         >
           ➕ Ajouter un produit

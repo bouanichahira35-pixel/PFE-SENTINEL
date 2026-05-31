@@ -2,11 +2,11 @@ const axios = require('axios');
 
 const GEMINI_BASE_URL = 'https://generativelanguage.googleapis.com/v1beta';
 
+/* ─── Helpers ───────────────────────────────── */
 function isGeminiConfigured() {
   const key = String(process.env.GEMINI_API_KEY || '').trim();
   if (!key) return false;
   if (key === '...' || key.toLowerCase() === 'changeme') return false;
-  // Gemini API keys generally start with "AIza". Keep this strict to avoid false "configured" state.
   return /^AIza[0-9A-Za-z_-]{20,}$/.test(key);
 }
 
@@ -26,7 +26,7 @@ function normalizeContents(contents) {
   const normalized = [];
   for (const item of contents) {
     if (!item || typeof item !== 'object') continue;
-    const role = item.role === 'model' ? 'model' : 'user';
+    const role  = item.role === 'model' ? 'model' : 'user';
     const parts = Array.isArray(item.parts) ? item.parts : [];
     if (parts.length === 0) continue;
     normalized.push({ role, parts });
@@ -41,7 +41,7 @@ function extractFunctionCalls(candidateContent) {
     const call = part?.functionCall;
     if (!call || !call.name) continue;
     calls.push({
-      id: call.id || null,
+      id:   call.id || null,
       name: String(call.name),
       args: call.args && typeof call.args === 'object' ? call.args : {},
     });
@@ -49,18 +49,101 @@ function extractFunctionCalls(candidateContent) {
   return calls;
 }
 
+/* ─── Détection erreur quota / limite API ───────
+   Retourne true si l'erreur est un 429 / quota
+   dans ce cas il ne faut PAS relancer mais laisser
+   le service appelant basculer sur le fallback.
+─────────────────────────────────────────────── */
+function isQuotaError(err) {
+  const status  = err?.response?.status;
+  const message = String(err?.message || '').toLowerCase();
+  const data    = JSON.stringify(err?.response?.data || '').toLowerCase();
+
+  return (
+    status === 429                            ||
+    status === 503                            ||
+    message.includes('429')                   ||
+    message.includes('resource_exhausted')    ||
+    message.includes('quota')                 ||
+    message.includes('too many requests')     ||
+    message.includes('rate limit')            ||
+    message.includes('overloaded')            ||
+    data.includes('resource_exhausted')       ||
+    data.includes('quota_exceeded')           ||
+    data.includes('rateLimitExceeded')
+  );
+}
+
+/* ─── Sleep ─────────────────────────────────── */
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+/* ─── Wrapper axios avec retry sur 429 ──────────
+   - 1 retry après 2 secondes si quota dépassé
+   - Lance une erreur enrichie (code QUOTA_EXCEEDED)
+     que aiModelService.js sait intercepter proprement
+─────────────────────────────────────────────── */
+async function geminiPost(url, payload, timeoutMs) {
+  const maxAttempts = 2;
+  const retryDelayMs = 2000;
+
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    try {
+      const response = await axios.post(url, payload, {
+        timeout: timeoutMs,
+        headers: { 'Content-Type': 'application/json' },
+      });
+      return response;
+    } catch (err) {
+      const quota = isQuotaError(err);
+      const status = err?.response?.status;
+
+      /* Dernier essai ou erreur non-quota → on remonte */
+      if (attempt === maxAttempts || !quota) {
+        if (quota) {
+          /* Erreur enrichie — reconnue par aiModelService.js */
+          const e = new Error(
+            `Quota Gemini dépassé (429). Le chatbot utilise le mode local automatiquement.`
+          );
+          e.code      = 'QUOTA_EXCEEDED';
+          e.status    = status || 429;
+          e.gemini429 = true;
+          throw e;
+        }
+        /* Autre erreur (clé invalide, réseau, etc.) */
+        const msg = err?.response?.data?.error?.message
+          || err?.response?.data?.message
+          || err?.message
+          || 'Erreur appel Gemini';
+        const e = new Error(`Echec appel Gemini: ${msg}`);
+        e.code   = 'GEMINI_HTTP_ERROR';
+        e.status = status || 0;
+        throw e;
+      }
+
+      /* quota + pas dernier essai → on attend et on retente */
+      console.warn(`[geminiService] 429 détecté, retry dans ${retryDelayMs}ms (tentative ${attempt}/${maxAttempts})`);
+      await sleep(retryDelayMs);
+    }
+  }
+}
+
+/* ─── generateGeminiContent ─────────────────── */
 async function generateGeminiContent(options = {}) {
   const apiKey = process.env.GEMINI_API_KEY;
-  if (!apiKey) {
-    throw new Error('GEMINI_API_KEY manquant');
-  }
+  if (!apiKey) throw new Error('GEMINI_API_KEY manquant');
 
-  const model = String(options.model || process.env.GEMINI_MODEL || 'gemini-2.0-flash').trim();
+  const model = String(
+    options.model || process.env.GEMINI_MODEL || 'gemini-2.0-flash'
+  ).trim();
+
   const providedContents = normalizeContents(options.contents);
   const prompt = String(options.prompt || '').trim();
-  if (!providedContents && !prompt) throw new Error('prompt obligatoire');
+  if (!providedContents && !prompt) throw new Error('prompt ou contents obligatoire');
 
-  const temperature = Number.isFinite(Number(options.temperature)) ? Number(options.temperature) : 0.4;
+  const temperature = Number.isFinite(Number(options.temperature))
+    ? Number(options.temperature)
+    : 0.4;
+
   const maxOutputTokens = Number.isFinite(Number(options.max_output_tokens))
     ? Math.max(64, Math.min(4096, Math.floor(Number(options.max_output_tokens))))
     : 1024;
@@ -69,20 +152,18 @@ async function generateGeminiContent(options = {}) {
   const systemInstruction = String(options.system_instruction || '').trim();
 
   const url = `${GEMINI_BASE_URL}/models/${encodeURIComponent(model)}:generateContent?key=${encodeURIComponent(apiKey)}`;
+
   const payload = {
     contents: providedContents || [
       ...history,
       { role: 'user', parts: [{ text: prompt.slice(0, 8000) }] },
     ],
-    generationConfig: {
-      temperature,
-      maxOutputTokens,
-    },
+    generationConfig: { temperature, maxOutputTokens },
   };
+
   if (systemInstruction) {
     payload.systemInstruction = { parts: [{ text: systemInstruction.slice(0, 4000) }] };
   }
-
   if (Array.isArray(options.tools) && options.tools.length) {
     payload.tools = options.tools;
   }
@@ -90,12 +171,10 @@ async function generateGeminiContent(options = {}) {
     payload.toolConfig = options.tool_config;
   }
 
-  const response = await axios.post(url, payload, {
-    timeout: Number(process.env.GEMINI_TIMEOUT_MS || 30000),
-    headers: { 'Content-Type': 'application/json' },
-  });
+  const timeoutMs = Number(process.env.GEMINI_TIMEOUT_MS || 30000);
+  const response  = await geminiPost(url, payload, timeoutMs);
+  const data      = response.data || {};
 
-  const data = response.data || {};
   const candidateContent = data?.candidates?.[0]?.content || null;
   const text = candidateContent?.parts?.map((p) => p?.text || '').join('\n').trim() || '';
 
@@ -103,13 +182,14 @@ async function generateGeminiContent(options = {}) {
     model,
     text,
     candidate_content: candidateContent,
-    function_calls: extractFunctionCalls(candidateContent),
-    usage: data?.usageMetadata || null,
-    finish_reason: data?.candidates?.[0]?.finishReason || null,
-    raw: data,
+    function_calls:    extractFunctionCalls(candidateContent),
+    usage:             data?.usageMetadata || null,
+    finish_reason:     data?.candidates?.[0]?.finishReason || null,
+    raw:               data,
   };
 }
 
+/* ─── transcribeGeminiAudio ─────────────────── */
 function normalizeBase64Audio(raw) {
   const value = String(raw || '').trim();
   if (!value) return '';
@@ -120,58 +200,52 @@ function normalizeBase64Audio(raw) {
 
 async function transcribeGeminiAudio(options = {}) {
   const apiKey = process.env.GEMINI_API_KEY;
-  if (!apiKey) {
-    throw new Error('GEMINI_API_KEY manquant');
-  }
+  if (!apiKey) throw new Error('GEMINI_API_KEY manquant');
 
   const model = String(
-    options.model || process.env.GEMINI_AUDIO_MODEL || process.env.GEMINI_MODEL || 'gemini-2.0-flash'
+    options.model ||
+    process.env.GEMINI_AUDIO_MODEL ||
+    process.env.GEMINI_MODEL ||
+    'gemini-2.0-flash'
   ).trim();
-  const mimeType = String(options.mime_type || 'audio/webm').trim() || 'audio/webm';
-  const language = String(options.language || 'fr-FR').trim() || 'fr-FR';
+
+  const mimeType    = String(options.mime_type || 'audio/webm').trim() || 'audio/webm';
+  const language    = String(options.language  || 'fr-FR').trim()      || 'fr-FR';
   const audioBase64 = normalizeBase64Audio(options.audio_base64);
   if (!audioBase64) throw new Error('audio_base64 obligatoire');
 
   const url = `${GEMINI_BASE_URL}/models/${encodeURIComponent(model)}:generateContent?key=${encodeURIComponent(apiKey)}`;
+
   const payload = {
     contents: [
       {
         role: 'user',
         parts: [
           {
-            text: `Transcris cet audio en ${language}. Reponds uniquement avec le texte transcrit sans commentaire.`,
+            text: `Transcris cet audio en ${language}. Réponds uniquement avec le texte transcrit sans commentaire.`,
           },
           {
-            inlineData: {
-              mimeType,
-              data: audioBase64,
-            },
+            inlineData: { mimeType, data: audioBase64 },
           },
         ],
       },
     ],
-    generationConfig: {
-      temperature: 0,
-      maxOutputTokens: 800,
-    },
+    generationConfig: { temperature: 0, maxOutputTokens: 800 },
   };
 
-  const response = await axios.post(url, payload, {
-    timeout: Number(process.env.GEMINI_TIMEOUT_MS || 30000),
-    headers: { 'Content-Type': 'application/json' },
-  });
+  const timeoutMs = Number(process.env.GEMINI_TIMEOUT_MS || 30000);
+  const response  = await geminiPost(url, payload, timeoutMs);
+  const data      = response.data || {};
 
-  const data = response.data || {};
   const text =
-    data?.candidates?.[0]?.content?.parts?.map((p) => p?.text || '').join('\n').trim()
-    || '';
+    data?.candidates?.[0]?.content?.parts?.map((p) => p?.text || '').join('\n').trim() || '';
 
   return {
     model,
     text,
-    usage: data?.usageMetadata || null,
-    finish_reason: data?.candidates?.[0]?.finishReason || null,
-    raw: data,
+    usage:        data?.usageMetadata || null,
+    finish_reason:data?.candidates?.[0]?.finishReason || null,
+    raw:          data,
   };
 }
 

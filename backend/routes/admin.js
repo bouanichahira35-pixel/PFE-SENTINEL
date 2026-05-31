@@ -3,6 +3,7 @@ const requireAuth = require('../middlewares/requireAuth');
 const User = require('../models/User');
 const UserSession = require('../models/UserSession');
 const SecurityAudit = require('../models/SecurityAudit');
+const History = require('../models/History');
 const AppSetting = require('../models/AppSetting');
 const Notification = require('../models/Notification');
 const strictBody = require('../middlewares/strictBody');
@@ -21,6 +22,8 @@ const { logSecurityEvent } = require('../services/securityAuditService');
 const { isSafeText } = require('../utils/validation');
 const { enqueueMail } = require('../services/mailQueueService');
 const { getUserPreferences, canSendNotificationEmail } = require('../services/userPreferencesService');
+
+const SAFE_USER_FIELDS = 'username email role status telephone';
 
 function ensureAdmin(req, res) {
   const role = String(req.user?.role || '').toLowerCase();
@@ -44,6 +47,53 @@ async function setSettingValue(key, value, userId = null) {
   );
 }
 
+function clampAdminWindowDays(value) {
+  const raw = Number(value || 1);
+  if (!Number.isFinite(raw)) return 1;
+  if (raw <= 1) return 1;
+  if (raw <= 7) return 7;
+  return 30;
+}
+
+function dayKey(date) {
+  const d = new Date(date);
+  if (Number.isNaN(d.getTime())) return null;
+  return d.toISOString().slice(0, 10);
+}
+
+function buildDailySeries(rows, days) {
+  const byDay = new Map();
+  const start = new Date();
+  start.setHours(0, 0, 0, 0);
+  start.setDate(start.getDate() - Math.max(0, days - 1));
+
+  for (let i = 0; i < days; i += 1) {
+    const d = new Date(start.getTime() + i * 24 * 60 * 60 * 1000);
+    byDay.set(dayKey(d), {
+      date: dayKey(d),
+      connexions: 0,
+      erreurs: 0,
+      securite: 0,
+    });
+  }
+
+  for (const row of rows || []) {
+    const key = dayKey(row?.date_event || row?.createdAt);
+    if (!key || !byDay.has(key)) continue;
+    const item = byDay.get(key);
+    if (row.event_type === 'login_success') item.connexions += 1;
+    if (row.event_type === 'login_failed' || row.success === false) item.erreurs += 1;
+    item.securite += 1;
+  }
+
+  return Array.from(byDay.values());
+}
+
+function scorePart(label, score, detail) {
+  const n = Math.max(0, Math.min(100, Math.round(Number(score || 0))));
+  return { label, score: n, detail };
+}
+
 // Mini-console Support utilisateurs (tickets)
 router.use('/support', require('./admin-support'));
 
@@ -54,27 +104,33 @@ router.get('/overview', requireAuth, async (req, res) => {
     if (!ensureAdmin(req, res)) return;
 
     const now = new Date();
-    const since24h = new Date(now.getTime() - 24 * 60 * 60 * 1000);
+    const windowDays = clampAdminWindowDays(req.query?.days);
+    const since = new Date(now.getTime() - windowDays * 24 * 60 * 60 * 1000);
 
-    const [activeSessions, blockedUsers, usersTotal, lastFailures, lastEvents] = await Promise.all([
+    const [activeSessions, blockedUsers, activeUsers, usersTotal, lastFailures, lastEvents, chartEvents] = await Promise.all([
       UserSession.countDocuments({ is_active: true, expires_at: { $gt: now } }),
       User.countDocuments({ status: 'blocked' }),
+      User.countDocuments({ status: 'active' }),
       User.countDocuments({}),
-      SecurityAudit.find({ event_type: 'login_failed', date_event: { $gte: since24h } })
+      SecurityAudit.find({ event_type: 'login_failed', date_event: { $gte: since } })
         .sort({ date_event: -1, createdAt: -1 })
         .limit(12)
         .select('date_event email role ip_address user_agent success details')
         .lean(),
-      SecurityAudit.find({ date_event: { $gte: since24h } })
+      SecurityAudit.find({ date_event: { $gte: since } })
         .sort({ date_event: -1, createdAt: -1 })
         .limit(20)
         .select('date_event event_type email role ip_address success details')
         .lean(),
+      SecurityAudit.find({ date_event: { $gte: since } })
+        .sort({ date_event: 1, createdAt: 1 })
+        .select('date_event event_type success')
+        .lean(),
     ]);
 
-    // Aggregate counts by event_type within last 24h
+    // Aggregate counts by event_type within the selected admin window.
     const agg = await SecurityAudit.aggregate([
-      { $match: { date_event: { $gte: since24h } } },
+      { $match: { date_event: { $gte: since } } },
       {
         $group: {
           _id: { type: '$event_type', success: '$success' },
@@ -94,20 +150,30 @@ router.get('/overview', requireAuth, async (req, res) => {
 
     // Simple health score (0-100) for the Admin console.
     // Explainable scoring based on DB + security signals.
-    let healthScore = 100;
     const mongoOk = mongoose?.connection?.readyState === 1;
-    if (!mongoOk) healthScore -= 65;
     const failedLogins24h = lastFailures.length;
-    healthScore -= Math.min(25, failedLogins24h * 2);
-    healthScore -= Math.min(20, Number(blockedUsers || 0) * 1);
-    if (Number(activeSessions || 0) > 40) healthScore -= 5;
+    const availabilityScore = mongoOk ? 100 : 20;
+    const securityScore = Math.max(0, 100 - Math.min(45, failedLogins24h * 4) - Math.min(25, Number(blockedUsers || 0) * 2));
+    const accessScore = Math.max(0, 100 - Math.min(25, Number(blockedUsers || 0) * 3));
+    const activityScore = Number(activeSessions || 0) > 40 ? 80 : 100;
+    let healthScore = Math.round((availabilityScore * 0.35) + (securityScore * 0.35) + (accessScore * 0.2) + (activityScore * 0.1));
     healthScore = Math.max(0, Math.min(100, healthScore));
 
     return res.json({
       ok: true,
       generated_at: now.toISOString(),
+      window: {
+        days: windowDays,
+        since: since.toISOString(),
+      },
       system_health: {
         score: healthScore,
+        breakdown: [
+          scorePart('Disponibilite', availabilityScore, mongoOk ? 'Base de donnees joignable' : 'Base de donnees indisponible'),
+          scorePart('Securite', securityScore, `${failedLogins24h} connexion(s) echouee(s)`),
+          scorePart('Acces', accessScore, `${Number(blockedUsers || 0)} compte(s) bloque(s)`),
+          scorePart('Activite', activityScore, `${Number(activeSessions || 0)} session(s) active(s)`),
+        ],
         signals: {
           mongodb_ok: mongoOk,
           failed_logins_24h: failedLogins24h,
@@ -117,20 +183,67 @@ router.get('/overview', requireAuth, async (req, res) => {
       },
       users: {
         total: usersTotal,
+        active: activeUsers,
         blocked: blockedUsers,
       },
       sessions: {
         active: activeSessions,
       },
       security_audit: {
-        since: since24h.toISOString(),
+        since: since.toISOString(),
         stats: auditStats,
+        daily_series: buildDailySeries(chartEvents, windowDays),
         recent_events: Array.isArray(lastEvents) ? lastEvents : [],
         recent_login_failures: Array.isArray(lastFailures) ? lastFailures : [],
       },
     });
   } catch (err) {
     return res.status(500).json({ error: 'Failed to fetch admin overview', details: err.message });
+  }
+});
+
+// GET /api/admin/audit-history
+// Admin console audit feed. It deliberately uses admin role access instead of
+// the broader HISTORY_READ permission because this page is part of the admin shell.
+router.get('/audit-history', requireAuth, async (req, res) => {
+  try {
+    if (!ensureAdmin(req, res)) return;
+
+    const page = Math.max(1, Number(req.query.page || 1));
+    const limit = Math.min(500, Math.max(1, Number(req.query.limit || 200)));
+    const skip = (page - 1) * limit;
+
+    const filter = {};
+    if (req.query.action_type) filter.action_type = req.query.action_type;
+    if (req.query.user) filter.user = req.query.user;
+    if (req.query.product) filter.product = req.query.product;
+    if (req.query.request) filter.request = req.query.request;
+    if (req.query.source) filter.source = req.query.source;
+    if (req.query.status_after) filter.status_after = req.query.status_after;
+    if (req.query.correlation_id) filter.correlation_id = req.query.correlation_id;
+
+    const [items, total] = await Promise.all([
+      History.find(filter)
+        .sort({ date_action: -1 })
+        .skip(skip)
+        .limit(limit)
+        .populate('user', SAFE_USER_FIELDS)
+        .populate('product')
+        .populate('request')
+        .lean(),
+      History.countDocuments(filter),
+    ]);
+
+    return res.json({
+      ok: true,
+      page,
+      limit,
+      total,
+      total_pages: Math.max(1, Math.ceil(total / limit)),
+      items,
+    });
+  } catch (err) {
+    return res.status(500).json({ error: 'Failed to fetch admin audit history' });
   }
 });
 

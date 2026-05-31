@@ -22,6 +22,7 @@ const inventorySchema = new mongoose.Schema(
     // In the current app model, "famille" is a product enum string (not a dedicated collection).
     famille_id: { type: String, default: null, trim: true, index: true },
     categorie_id: { type: mongoose.Schema.Types.ObjectId, ref: 'Category', default: null, index: true },
+    product_id: { type: mongoose.Schema.Types.ObjectId, ref: 'Product', default: null, index: true },
 
     responsable_id: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true, index: true },
     magasinier_id: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true, index: true },
@@ -65,6 +66,7 @@ inventorySchema.index(
     zone_id: 1,
     famille_id: 1,
     categorie_id: 1,
+    product_id: 1,
     createdAt: -1,
   },
   { name: 'inventory_perimeter_status' }

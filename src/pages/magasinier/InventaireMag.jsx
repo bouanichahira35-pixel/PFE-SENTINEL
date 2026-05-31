@@ -20,10 +20,12 @@ function formatDate(value) {
 function perimeterLabel(inv) {
   if (!inv) return '-';
   if (String(inv.type_inventaire) === 'GLOBAL') return 'Tous les articles';
-  const zone = inv.zone_id?.name ? `Zone: ${inv.zone_id.name}` : '';
+  const product = inv.product_id?.name
+    ? `Produit: ${inv.product_id.code_product || ''} ${inv.product_id.name}`.trim()
+    : '';
   const fam = inv.famille_id ? `Famille: ${inv.famille_id}` : '';
   const cat = inv.categorie_id?.name ? `Catégorie: ${inv.categorie_id.name}` : '';
-  return [zone, fam, cat].filter(Boolean).join(' | ') || 'Périmètre ciblé';
+  return [product, fam, cat].filter(Boolean).join(' | ') || 'Périmètre ciblé';
 }
 
 function statusActionLabel(status) {
@@ -205,7 +207,7 @@ const InventaireMag = ({ userName, onLogout }) => {
                   <div className="inv-hero-meta">
                     <span>Type: <strong>{missionTypeLabel(missionDuJour.inventory)}</strong></span>
                     <span>Magasin: <strong>{missionDuJour.inventory?.magasin_id?.name || '-'}</strong></span>
-                    <span>Zone / famille / catégorie: <strong>{perimeterLabel(missionDuJour.inventory)}</strong></span>
+                    <span>Produit / famille / catégorie: <strong>{perimeterLabel(missionDuJour.inventory)}</strong></span>
                     <span>Prévu: <strong>{formatDate(missionDuJour.inventory?.date_prevue)}</strong></span>
                   </div>
                   <div className="inv-hero-progress">
@@ -242,7 +244,7 @@ const InventaireMag = ({ userName, onLogout }) => {
                       </div>
                       <div className="inv-mission-meta">
                         <div><span className="k">Magasin</span><span className="v">{inv.magasin_id?.name || '-'}</span></div>
-                        <div><span className="k">Zone / famille / catégorie</span><span className="v">{perimeterLabel(inv)}</span></div>
+                        <div><span className="k">Produit / famille / catégorie</span><span className="v">{perimeterLabel(inv)}</span></div>
                         <div><span className="k">Date prévue</span><span className="v">{formatDate(inv.date_prevue)}</span></div>
                       </div>
                       <div className="inv-mission-progress">

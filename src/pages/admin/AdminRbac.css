@@ -29,23 +29,24 @@
 
 .rp-panel-header {
   padding: 12px 12px 10px;
-  font-weight: 1100;
+  font-weight: 600;
+  font-size: 13px;
   color: #0f172a;
   border-bottom: 1px solid #eef2f8;
-  background: linear-gradient(180deg, #ffffff 0%, #fbfdff 100%);
+  background: #fff;
 }
 
 .rp-list {
   padding: 10px;
   display: grid;
-  gap: 8px;
+  gap: 6px;
   overflow: auto;
 }
 
 .rp-empty {
   padding: 14px;
-  color: #64748b;
-  font-weight: 900;
+  color: #94a3b8;
+  font-size: 13px;
 }
 
 .rp-item {
@@ -53,52 +54,54 @@
   text-align: left;
   border: 1px solid #eef2f8;
   background: #fff;
-  border-radius: 12px;
-  padding: 10px 10px;
+  border-radius: 10px;
+  padding: 9px 12px;
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 10px;
   cursor: pointer;
+  transition: border-color 0.15s, background 0.15s;
 }
 
 .rp-item:hover {
-  border-color: #cfe0ff;
-  background: rgba(59, 130, 246, 0.06);
+  border-color: #bfdbfe;
+  background: rgba(59, 130, 246, 0.05);
 }
 
 .rp-item.active {
-  border-color: rgba(59, 130, 246, 0.35);
-  background: rgba(59, 130, 246, 0.10);
+  border-color: rgba(59, 130, 246, 0.4);
+  background: rgba(59, 130, 246, 0.08);
 }
 
 .rp-item-main {
-  font-weight: 1000;
+  font-size: 13px;
+  font-weight: 500;
   color: #0f172a;
 }
 
 .rp-badge {
-  min-width: 30px;
-  height: 22px;
+  min-width: 28px;
+  height: 20px;
   border-radius: 999px;
-  padding: 0 10px;
+  padding: 0 8px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  font-weight: 1000;
-  font-size: 12px;
+  font-weight: 500;
+  font-size: 11px;
   background: rgba(15, 23, 42, 0.06);
-  color: #0f172a;
+  color: #475569;
 }
 
 .rp-search {
-  margin: 10px;
+  margin: 8px 10px 4px;
   border: 1px solid #eef2f8;
-  border-radius: 12px;
-  padding: 10px 10px;
+  border-radius: 10px;
+  padding: 8px 10px;
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 8px;
   background: #fff;
 }
 
@@ -106,8 +109,13 @@
   flex: 1;
   border: none;
   outline: none;
-  font-weight: 900;
+  font-size: 13px;
   color: #0f172a;
+  background: transparent;
+}
+
+.rp-search input::placeholder {
+  color: #94a3b8;
 }
 
 .rp-user {
@@ -115,44 +123,48 @@
   text-align: left;
   border: 1px solid #eef2f8;
   background: #fff;
-  border-radius: 12px;
-  padding: 10px 10px;
+  border-radius: 10px;
+  padding: 9px 10px;
   display: grid;
-  grid-template-columns: 40px 1fr;
+  grid-template-columns: 38px 1fr;
   gap: 10px;
   cursor: pointer;
+  transition: border-color 0.15s, background 0.15s;
 }
 
 .rp-user:hover {
-  border-color: #cfe0ff;
-  background: rgba(59, 130, 246, 0.06);
+  border-color: #bfdbfe;
+  background: rgba(59, 130, 246, 0.05);
 }
 
 .rp-user.active {
-  border-color: rgba(59, 130, 246, 0.35);
-  background: rgba(59, 130, 246, 0.10);
+  border-color: rgba(59, 130, 246, 0.4);
+  background: rgba(59, 130, 246, 0.08);
 }
 
 .rp-avatar {
-  width: 40px;
-  height: 40px;
-  border-radius: 14px;
+  width: 38px;
+  height: 38px;
+  border-radius: 10px;
   display: grid;
   place-items: center;
-  font-weight: 1200;
+  font-size: 12px;
+  font-weight: 600;
   color: #1d4ed8;
   background: rgba(59, 130, 246, 0.10);
-  border: 1px solid rgba(59, 130, 246, 0.20);
+  border: 1px solid rgba(59, 130, 246, 0.18);
 }
 
 .rp-user-body {
   min-width: 0;
   display: grid;
   gap: 2px;
+  align-content: center;
 }
 
 .rp-user-name {
-  font-weight: 1100;
+  font-size: 13px;
+  font-weight: 500;
   color: #0f172a;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -160,16 +172,15 @@
 }
 
 .rp-user-email {
-  font-weight: 900;
+  font-size: 11.5px;
   color: #64748b;
-  font-size: 12.5px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
 .rp-panel-wide {
-  background: linear-gradient(150deg, #ffffff 0%, #eff6ff 55%, #f8fafc 100%);
+  background: #fafcff;
 }
 
 .rp-perm-header {
@@ -178,27 +189,27 @@
   align-items: center;
   justify-content: space-between;
   gap: 10px;
-  border-bottom: 1px solid rgba(148, 163, 184, 0.35);
-  background: rgba(255, 255, 255, 0.65);
+  border-bottom: 1px solid #eef2f8;
+  background: #fff;
 }
 
 .rp-note {
+  font-size: 13px;
   color: #475569;
-  font-weight: 900;
 }
 
 .rp-sections {
   padding: 10px;
   overflow: auto;
+  flex: 1;
 }
 
 .rp-section {
-  border: 1px solid rgba(148, 163, 184, 0.35);
-  background: rgba(255, 255, 255, 0.75);
-  border-radius: 16px;
-  padding: 12px;
-  box-shadow: 0 10px 22px rgba(15, 23, 42, 0.06);
-  margin-bottom: 12px;
+  border: 1px solid #e7ebf3;
+  background: #fff;
+  border-radius: 12px;
+  overflow: hidden;
+  margin-bottom: 10px;
 }
 
 .rp-section-title {
@@ -206,25 +217,29 @@
   align-items: center;
   justify-content: space-between;
   gap: 10px;
-  font-weight: 1100;
+  font-size: 13px;
+  font-weight: 500;
   color: #0f172a;
-  margin-bottom: 10px;
+  padding: 9px 12px;
+  background: #f8fafc;
+  border-bottom: 1px solid #eef2f8;
 }
 
 .rp-chip {
   border-radius: 999px;
-  border: 1px solid rgba(148, 163, 184, 0.4);
-  background: rgba(15, 23, 42, 0.05);
-  padding: 2px 10px;
-  font-size: 12px;
-  font-weight: 1100;
-  color: #0f172a;
+  border: 1px solid #e2e8f0;
+  background: #fff;
+  padding: 1px 9px;
+  font-size: 11px;
+  font-weight: 500;
+  color: #475569;
 }
 
 .rp-perms {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 10px;
+  gap: 1px;
+  background: #eef2f8;
 }
 
 @media (max-width: 1100px) {
@@ -233,56 +248,61 @@
   }
 }
 
+/* Carte de permission — sans code technique */
 .rp-perm {
-  border: 1px solid rgba(148, 163, 184, 0.30);
-  border-radius: 14px;
-  padding: 10px;
+  border: none;
+  border-radius: 0;
+  padding: 10px 12px;
   display: grid;
-  grid-template-columns: 18px 1fr;
+  grid-template-columns: 16px 1fr;
   gap: 10px;
-  align-items: start;
-  background: rgba(255, 255, 255, 0.8);
+  align-items: center;
+  background: #fff;
+  cursor: pointer;
+  transition: background 0.12s;
+}
+
+.rp-perm:hover {
+  background: #f0f6ff;
 }
 
 .rp-perm input {
-  margin-top: 3px;
+  accent-color: #2563eb;
+  width: 15px;
+  height: 15px;
+  cursor: pointer;
 }
 
 .rp-perm-text {
   min-width: 0;
-  display: grid;
-  gap: 2px;
 }
 
 .rp-perm-label {
-  font-weight: 1000;
+  font-size: 13px;
+  font-weight: 500;
   color: #0f172a;
+  line-height: 1.4;
 }
 
-.rp-perm-code {
-  font-weight: 900;
-  font-size: 12px;
-  color: #64748b;
-  overflow-wrap: anywhere;
-}
+/* .rp-perm-code supprimé intentionnellement — les requêtes techniques ne s'affichent plus */
 
-/* Confirmation modale (copie légère, pour éviter une dépendance à AdminIA.css) */
+/* Modal de confirmation */
 .admin-modal-backdrop {
   position: fixed;
   inset: 0;
-  background: rgba(15, 23, 42, 0.55);
+  background: rgba(15, 23, 42, 0.5);
   display: grid;
   place-items: center;
   z-index: 70;
 }
 
 .admin-modal {
-  width: min(520px, calc(100vw - 24px));
-  border-radius: 16px;
+  width: min(480px, calc(100vw - 24px));
+  border-radius: 14px;
   background: #fff;
   border: 1px solid #e7ebf3;
-  box-shadow: 0 18px 40px rgba(15, 23, 42, 0.18);
-  padding: 14px;
+  box-shadow: 0 16px 40px rgba(15, 23, 42, 0.15);
+  padding: 20px;
 }
 
 .admin-modal-head {
@@ -290,11 +310,12 @@
   align-items: center;
   justify-content: space-between;
   gap: 10px;
+  margin-bottom: 10px;
 }
 
 .admin-modal-actions {
   display: flex;
   justify-content: flex-end;
   gap: 10px;
-  margin-top: 14px;
+  margin-top: 16px;
 }

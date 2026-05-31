@@ -37,21 +37,19 @@
 .sidebar-admin .sidebar-logo-ident {
   display: flex;
   flex-direction: column;
-  line-height: 1.05;
-}
-
-.sidebar-admin .sidebar-logo-title {
-  font-weight: 900;
-  font-size: 12px;
-  letter-spacing: 0.06em;
-  color: var(--color-text-primary);
+  min-width: 0;
 }
 
 .sidebar-admin .sidebar-user-name {
-  font-weight: 800;
-  font-size: 12px;
-  color: var(--color-text-secondary);
-  margin-top: 2px;
+  display: block;
+  max-width: 118px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 900;
+  font-size: 14px;
+  line-height: 1.15;
+  color: var(--color-text-primary);
 }
 
 .sidebar-admin .sidebar-user-avatar {

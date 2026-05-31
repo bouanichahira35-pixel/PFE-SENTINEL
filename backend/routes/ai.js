@@ -380,6 +380,29 @@ router.get('/alerts', requireAuth, async (req, res) => {
   }
 });
 
+router.patch('/alerts/:id/review', requireAuth, strictBody(['action_taken']), async (req, res) => {
+  try {
+    if (!ensureResponsable(req, res)) return;
+    const actionTaken = String(req.body?.action_taken || '').trim().slice(0, 500);
+    const updated = await AIAlert.findByIdAndUpdate(
+      req.params.id,
+      {
+        $set: {
+          status: 'reviewed',
+          action_taken: actionTaken || 'Revue responsable',
+          reviewed_by: req.user.id,
+        },
+      },
+      { returnDocument: 'after' }
+    ).populate('product');
+
+    if (!updated) return res.status(404).json({ error: 'Alerte IA introuvable' });
+    return res.json(updated);
+  } catch (err) {
+    return res.status(400).json({ error: 'Failed to review AI alert', details: err.message });
+  }
+});
+
 router.post('/alerts/refresh', requireAuth, strictBody(['window_days', 'max_products', 'max_anomalies']), async (req, res) => {
   try {
     if (!ensureResponsable(req, res)) return;

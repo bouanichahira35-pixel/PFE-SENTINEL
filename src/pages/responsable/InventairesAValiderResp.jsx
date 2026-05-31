@@ -27,10 +27,12 @@ function formatMoney(value) {
 function perimeterLabel(inv) {
   if (!inv) return '-';
   if (String(inv.type_inventaire) === 'GLOBAL') return 'Tous les articles';
-  const zone = inv.zone_id?.name ? `Zone: ${inv.zone_id.name}` : '';
+  const product = inv.product_id?.name
+    ? `Produit: ${inv.product_id.code_product || ''} ${inv.product_id.name}`.trim()
+    : '';
   const fam = inv.famille_id ? `Famille: ${inv.famille_id}` : '';
   const cat = inv.categorie_id?.name ? `Catégorie: ${inv.categorie_id.name}` : '';
-  return [zone, fam, cat].filter(Boolean).join(' | ') || '-';
+  return [product, fam, cat].filter(Boolean).join(' | ') || '-';
 }
 
 function assignedMagasiniersLabel(inv) {
@@ -85,8 +87,9 @@ const InventairesAValiderResp = ({ userName, onLogout }) => {
       const inv = x.inventory || {};
       const ref = String(inv.reference || '').toLowerCase();
       const mag = String(inv.magasin_id?.name || '').toLowerCase();
+      const product = `${inv.product_id?.code_product || ''} ${inv.product_id?.name || ''}`.toLowerCase();
       const magUser = assignedMagasiniersLabel(inv).toLowerCase();
-      return ref.includes(q) || mag.includes(q) || magUser.includes(q);
+      return ref.includes(q) || mag.includes(q) || product.includes(q) || magUser.includes(q);
     });
   }, [items, query]);
 
@@ -163,7 +166,7 @@ const InventairesAValiderResp = ({ userName, onLogout }) => {
                 <div className="inv-validate-actions">
                   <div className="inv-validate-search">
                     <Search size={16} />
-                    <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Rechercher (réf, magasin, magasiniers)..." />
+                    <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Rechercher (réf, produit, magasin, magasiniers)..." />
                   </div>
                   <button className="inv-btn primary" type="button" onClick={() => navigate('/responsable/inventaires/lancer')} disabled={isLoading}>
                     <Rocket size={16} /> Lancer un inventaire

@@ -25,7 +25,7 @@ const SidebarAdmin = ({ collapsed, onToggle, onLogout, userName }) => {
     sessionStorage.getItem('userName') ||
     localStorage.getItem('userName') ||
     userName ||
-    'Administrateur';
+    'Utilisateur';
   const profileImage = sessionStorage.getItem('imageProfile') || localStorage.getItem('imageProfile') || '';
   const avatarUrl = useProtectedFileUrl(profileImage);
 
@@ -115,7 +115,6 @@ const SidebarAdmin = ({ collapsed, onToggle, onLogout, userName }) => {
         {!collapsed && (
           <div className="sidebar-logo-text">
             <div className="sidebar-logo-ident">
-              <span className="sidebar-logo-title">ADMIN</span>
               <span className="sidebar-user-name">{sessionUserName}</span>
             </div>
             {avatarUrl && <img src={avatarUrl} alt="Profil" className="sidebar-user-avatar" />}
@@ -170,4 +169,3 @@ const SidebarAdmin = ({ collapsed, onToggle, onLogout, userName }) => {
 };
 
 export default SidebarAdmin;
-

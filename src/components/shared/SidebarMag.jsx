@@ -1,17 +1,16 @@
-import { Link, useLocation, useNavigate } from 'react-router-dom';
+import { Link, useLocation } from 'react-router-dom';
 import { Package, History, MessageCircle, Settings, ChevronLeft, ChevronRight, LogOut, FileText } from 'lucide-react';
 import './SidebarMag.css';
 
 const SidebarMag = ({ collapsed, onToggle, onLogout }) => {
   const location = useLocation();
-  const navigate = useNavigate();
 
   const menuItems = [
-    { icon: Package, label: 'Produits', path: '/' },
-    { icon: History, label: 'Historique', path: '/historique' },
-    { icon: FileText, label: 'Demandes', path: '/demandes' },
-    { icon: MessageCircle, label: 'Chat', path: '/chat' },
-    { icon: Settings, label: 'Paramètres', path: '/parametres' },
+    { icon: Package, label: 'Produits', path: '/magasinier' },
+    { icon: History, label: 'Historique', path: '/magasinier/historique' },
+    { icon: FileText, label: 'Demandes', path: '/magasinier/demandes' },
+    { icon: MessageCircle, label: 'Chat', path: '/magasinier/chat' },
+    { icon: Settings, label: 'Paramètres', path: '/magasinier/parametres' },
   ];
 
   const handleLogout = () => {

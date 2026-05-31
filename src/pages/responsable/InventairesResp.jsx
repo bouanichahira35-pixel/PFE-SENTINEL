@@ -35,6 +35,17 @@ function assignedMagasiniersLabel(inv) {
   return names.length ? names.join(', ') : '-';
 }
 
+function perimeterLabel(inv) {
+  if (!inv) return '-';
+  if (String(inv.type_inventaire) === 'GLOBAL') return 'Tous les articles';
+  const product = inv.product_id?.name
+    ? `Produit: ${inv.product_id.code_product || ''} ${inv.product_id.name}`.trim()
+    : '';
+  const fam = inv.famille_id ? `Famille: ${inv.famille_id}` : '';
+  const cat = inv.categorie_id?.name ? `Catégorie: ${inv.categorie_id.name}` : '';
+  return [product, fam, cat].filter(Boolean).join(' | ') || '-';
+}
+
 const InventairesResp = ({ userName, onLogout }) => {
   const toast = useToast();
   const navigate = useNavigate();
@@ -173,9 +184,7 @@ const InventairesResp = ({ userName, onLogout }) => {
                       <div className="inv-line">
                         <div className="inv-line-main"><strong>Périmètre</strong></div>
                         <div className="inv-line-kv">
-                          <span>Zone: <strong>{activeInventory.zone_id?.name || '-'}</strong></span>
-                          <span>Famille: <strong>{activeInventory.famille_id || '-'}</strong></span>
-                          <span>Catégorie: <strong>{activeInventory.categorie_id?.name || '-'}</strong></span>
+                          <span>{perimeterLabel(activeInventory)}</span>
                         </div>
                       </div>
                       <div className="inv-line">

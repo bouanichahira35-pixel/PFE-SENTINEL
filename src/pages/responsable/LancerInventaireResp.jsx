@@ -31,15 +31,15 @@ const LancerInventaireResp = ({ userName, onLogout }) => {
 
   const [options, setOptions] = useState({
     magasins: [],
-    zones: [],
     categories: [],
+    products: [],
     familles: [],
     magasiniers: [],
   });
 
   const [typeInventaire, setTypeInventaire] = useState('GLOBAL');
   const [magasinId, setMagasinId] = useState('');
-  const [zoneId, setZoneId] = useState('');
+  const [productQuery, setProductQuery] = useState('');
   const [familleId, setFamilleId] = useState('');
   const [categorieId, setCategorieId] = useState('');
   const [magasinierIds, setMagasinierIds] = useState([]);
@@ -57,8 +57,8 @@ const LancerInventaireResp = ({ userName, onLogout }) => {
       const magasins = Array.isArray(payload?.magasins) ? payload.magasins : [];
       setOptions({
         magasins,
-        zones: Array.isArray(payload?.zones) ? payload.zones : [],
         categories: Array.isArray(payload?.categories) ? payload.categories : [],
+        products: Array.isArray(payload?.products) ? payload.products : [],
         familles: Array.isArray(payload?.familles) ? payload.familles : [],
         magasiniers: Array.isArray(payload?.magasiniers) ? payload.magasiniers : [],
       });
@@ -84,16 +84,36 @@ const LancerInventaireResp = ({ userName, onLogout }) => {
 
   useEffect(() => {
     if (typeInventaire === 'GLOBAL') {
-      setZoneId('');
+      setProductQuery('');
       setFamilleId('');
       setCategorieId('');
       setBloquerMouvements(true);
     }
   }, [typeInventaire]);
 
-  const zoneDisabled = typeInventaire === 'GLOBAL';
+  const productDisabled = typeInventaire === 'GLOBAL';
   const familleDisabled = typeInventaire === 'GLOBAL';
   const categorieDisabled = typeInventaire === 'GLOBAL';
+
+  const productOptions = useMemo(() => {
+    const items = Array.isArray(options.products) ? options.products : [];
+    return items.map((p) => ({
+      ...p,
+      searchLabel: `${p?.code_product || ''} - ${p?.name || ''}`.trim(),
+    }));
+  }, [options.products]);
+
+  const selectedProduct = useMemo(() => {
+    const q = String(productQuery || '').trim().toLowerCase();
+    if (!q) return null;
+    return productOptions.find((p) => {
+      const id = String(p?._id || '').toLowerCase();
+      const code = String(p?.code_product || '').toLowerCase();
+      const name = String(p?.name || '').toLowerCase();
+      const label = String(p?.searchLabel || '').toLowerCase();
+      return q === id || q === code || q === name || q === label;
+    }) || null;
+  }, [productOptions, productQuery]);
 
   const magasinierChoices = useMemo(() => {
     const items = Array.isArray(options.magasiniers) ? options.magasiniers : [];
@@ -123,6 +143,19 @@ const LancerInventaireResp = ({ userName, onLogout }) => {
     return names.length ? names.join(', ') : '-';
   }, [magasinierIds, options.magasiniers]);
 
+  const selectedPerimeterLabel = useMemo(() => {
+    if (typeInventaire === 'GLOBAL') return 'Tout le magasin';
+    const parts = [];
+    const typedProduct = String(productQuery || '').trim();
+    if (selectedProduct) parts.push(`Produit: ${selectedProduct.code_product}`);
+    else if (typedProduct) parts.push(`Produit: ${typedProduct}`);
+    const family = (options.familles || []).find((f) => String(f?.value || '') === String(familleId));
+    if (family) parts.push(`Famille: ${family.label}`);
+    const category = (options.categories || []).find((c) => String(c?._id || '') === String(categorieId));
+    if (category) parts.push(`Catégorie: ${category.name}`);
+    return parts.length ? parts.join(' | ') : '-';
+  }, [categorieId, familleId, options.categories, options.familles, productQuery, selectedProduct, typeInventaire]);
+
   const toggleMagasinier = (id, checked) => {
     const key = String(id || '');
     if (!key) return;
@@ -140,12 +173,12 @@ const LancerInventaireResp = ({ userName, onLogout }) => {
     if (!magasinierIds.length) errs.push('magasinier(s) obligatoire(s)');
     if (!datePrevue) errs.push('date_prevue obligatoire');
 
-    if (typeInventaire === 'TOURNANT' && !zoneId && !familleId && !categorieId) {
-      errs.push('Pour TOURNANT, choisir au moins zone ou famille ou catégorie');
+    if (typeInventaire === 'TOURNANT' && !String(productQuery || '').trim() && !familleId && !categorieId) {
+      errs.push('Pour TOURNANT, choisir au moins un produit, une famille ou une catégorie');
     }
 
-    if (typeInventaire === 'GLOBAL' && (zoneId || familleId || categorieId)) {
-      errs.push('Pour GLOBAL, le périmètre est tout le magasin (ne pas sélectionner zone/famille/catégorie).');
+    if (typeInventaire === 'GLOBAL' && (String(productQuery || '').trim() || familleId || categorieId)) {
+      errs.push('Pour GLOBAL, le périmètre est tout le magasin (ne pas sélectionner produit/famille/catégorie).');
     }
 
     setFormErrors(errs);
@@ -164,7 +197,8 @@ const LancerInventaireResp = ({ userName, onLogout }) => {
       const payload = await post('/inventory/inventories', {
         type_inventaire: typeInventaire,
         magasin_id: magasinId,
-        zone_id: zoneDisabled ? null : (zoneId || null),
+        product_id: typeInventaire === 'TOURNANT' && selectedProduct?._id ? selectedProduct._id : null,
+        product_query: typeInventaire === 'TOURNANT' ? (productQuery.trim() || null) : null,
         famille_id: familleDisabled ? null : (familleId || null),
         categorie_id: categorieDisabled ? null : (categorieId || null),
         magasinier_ids: selectedMagasiniers,
@@ -235,7 +269,7 @@ const LancerInventaireResp = ({ userName, onLogout }) => {
                   >
                     <div className="inv-type-kicker">TOURNANT</div>
                     <div className="inv-type-title">Inventaire tournant</div>
-                    <div className="inv-type-desc">Contrôle ciblé par zone, famille ou catégorie.</div>
+                    <div className="inv-type-desc">Contrôle ciblé par produit, famille ou catégorie.</div>
                   </button>
                 </div>
 
@@ -252,7 +286,7 @@ const LancerInventaireResp = ({ userName, onLogout }) => {
                     <Info size={16} />
                     <div>
                       <strong>Inventaire tournant</strong>
-                      <div>Sélectionnez une zone, une famille ou une catégorie à contrôler.</div>
+                      <div>Sélectionnez un produit, une famille ou une catégorie à contrôler.</div>
                     </div>
                   </div>
                 )}
@@ -260,15 +294,29 @@ const LancerInventaireResp = ({ userName, onLogout }) => {
                 <div className="inv-launch-form">
                   <div className="inv-launch-row two">
                     <div>
-                      <label>Zone (optionnel)</label>
-                      <select value={zoneId} onChange={(e) => setZoneId(e.target.value)} disabled={zoneDisabled}>
-                        <option value="">{zoneDisabled ? 'Désactivé (GLOBAL)' : 'Choisir une zone'}</option>
-                        {options.zones.map((z) => (
-                          <option key={z._id} value={z._id}>
-                            {z.name} ({z.code})
+                      <label>Produit (optionnel)</label>
+                      <input
+                        type="text"
+                        list="inventory-product-options"
+                        value={productQuery}
+                        onChange={(e) => setProductQuery(e.target.value)}
+                        disabled={productDisabled}
+                        placeholder={productDisabled ? 'Désactivé (GLOBAL)' : 'Écrire un code/nom produit ou choisir...'}
+                      />
+                      <datalist id="inventory-product-options">
+                        {productOptions.map((p) => (
+                          <option key={p._id} value={p.searchLabel}>
+                            {p.code_product} - {p.name}
                           </option>
                         ))}
-                      </select>
+                      </datalist>
+                      {!productDisabled ? (
+                        <div className="inv-launch-field-hint">
+                          {selectedProduct
+                            ? `${selectedProduct.code_product} sélectionné`
+                            : 'La saisie libre doit identifier un seul produit actif.'}
+                        </div>
+                      ) : null}
                     </div>
                     <div>
                       <label>Famille (optionnel)</label>
@@ -414,8 +462,12 @@ const LancerInventaireResp = ({ userName, onLogout }) => {
                   <div className="v"><span className={`inv-status-badge type ${typeInventaire === 'GLOBAL' ? 'global' : 'tournant'}`}>{typeInventaire}</span></div>
                 </div>
                 <div className="inv-launch-kv">
+                  <div className="k"><span>Périmètre</span></div>
+                  <div className="v">{selectedPerimeterLabel}</div>
+                </div>
+                <div className="inv-launch-kv">
                   <div className="k"><span>Mouvements</span></div>
-                  <div className="v">{bloquerMouvements ? 'Bloqués (si GLOBAL)' : 'Non bloqués'}</div>
+                  <div className="v">{typeInventaire === 'GLOBAL' ? (bloquerMouvements ? 'Bloqués' : 'Non bloqués') : 'Non applicable'}</div>
                 </div>
                 <div className="inv-launch-kv">
                   <div className="k"><span>Notification</span></div>

@@ -1,4 +1,4 @@
-import { useRef, useState, createContext, useContext } from 'react';
+import { useCallback, useMemo, useRef, useState, createContext, useContext } from 'react';
 import { CheckCircle, XCircle, AlertTriangle, Info, X } from 'lucide-react';
 import { sanitizeUiText } from '../../services/uiError';
 import './Toast.css';
@@ -17,7 +17,11 @@ export const ToastProvider = ({ children }) => {
   const [toasts, setToasts] = useState([]);
   const idCounterRef = useRef(0);
 
-  const addToast = (message, type = 'info', duration = 4000) => {
+  const removeToast = useCallback((id) => {
+    setToasts(prev => prev.filter(toast => toast.id !== id));
+  }, []);
+
+  const addToast = useCallback((message, type = 'info', duration = 4000) => {
     const raw = String(message ?? '');
     const safeMessage = type === 'error' || type === 'warning'
       ? sanitizeUiText(raw, raw ? 'Action impossible. Veuillez réessayer.' : 'Une erreur est survenue.')
@@ -34,19 +38,20 @@ export const ToastProvider = ({ children }) => {
     }
     
     return id;
-  };
+  }, [removeToast]);
 
-  const removeToast = (id) => {
-    setToasts(prev => prev.filter(toast => toast.id !== id));
-  };
+  const success = useCallback((message, duration) => addToast(message, 'success', duration), [addToast]);
+  const error = useCallback((message, duration) => addToast(message, 'error', duration), [addToast]);
+  const warning = useCallback((message, duration) => addToast(message, 'warning', duration), [addToast]);
+  const info = useCallback((message, duration) => addToast(message, 'info', duration), [addToast]);
 
-  const success = (message, duration) => addToast(message, 'success', duration);
-  const error = (message, duration) => addToast(message, 'error', duration);
-  const warning = (message, duration) => addToast(message, 'warning', duration);
-  const info = (message, duration) => addToast(message, 'info', duration);
+  const value = useMemo(
+    () => ({ addToast, removeToast, success, error, warning, info }),
+    [addToast, removeToast, success, error, warning, info]
+  );
 
   return (
-    <ToastContext.Provider value={{ addToast, removeToast, success, error, warning, info }}>
+    <ToastContext.Provider value={value}>
       {children}
       <ToastContainer toasts={toasts} onRemove={removeToast} />
     </ToastContext.Provider>

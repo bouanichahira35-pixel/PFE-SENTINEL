@@ -1,5 +1,5 @@
 import { get, patch, post } from './api';
-import { mockFournisseurs } from '../data/mockFournisseurs';
+import { fallbackSuppliers } from '../data/catalogueFallback';
 
 const LOCAL_SUPPLIERS_KEY = 'suppliers_local_v1';
 
@@ -12,11 +12,11 @@ function safeJsonParse(raw, fallback) {
 }
 
 function readLocalSuppliers() {
-  if (typeof window === 'undefined') return [...mockFournisseurs];
+  if (typeof window === 'undefined') return [...fallbackSuppliers];
   const raw = localStorage.getItem(LOCAL_SUPPLIERS_KEY);
   const parsed = raw ? safeJsonParse(raw, null) : null;
   if (Array.isArray(parsed) && parsed.length) return parsed;
-  return [...mockFournisseurs];
+  return [...fallbackSuppliers];
 }
 
 function writeLocalSuppliers(items) {
@@ -289,4 +289,3 @@ export async function getFournisseurProducts(id) {
     return { ok: true, links: [], source: 'local' };
   }
 }
-

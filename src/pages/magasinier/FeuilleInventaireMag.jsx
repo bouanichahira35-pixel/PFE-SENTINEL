@@ -1,239 +1,317 @@
+/**
+ * SENTINEL – Feuille de comptage inventaire (Magasinier)
+ *
+ * Fidèle au rapport Sprint 3 :
+ *   Lancer inventaire → Réaliser inventaire → Prendre décision
+ *
+ * Règles métier :
+ *   - Comptage aveugle (quantité théorique masquée)
+ *   - Calcul écart automatique après saisie
+ *   - Observation obligatoire si qty = 0 ou recomptage
+ *   - Soumission bloquée si lignes non comptées
+ *   - Recomptage : motif affiché, obs obligatoire
+ */
+
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { ArrowLeft, Camera, CheckCircle2, RefreshCw, Save, ShieldCheck, XCircle } from 'lucide-react';
-import SidebarMag from '../../components/magasinier/SidebarMag';
-import HeaderPage from '../../components/shared/HeaderPage';
-import LoadingSpinner from '../../components/shared/LoadingSpinner';
+import {
+  ArrowLeft, Camera, CheckCircle2, RefreshCw,
+  Save, ShieldCheck, XCircle, Search,
+  ClipboardList, CheckCheck, AlertTriangle,
+  RotateCcw, SendHorizonal, MapPin, Package,
+  TrendingDown
+} from 'lucide-react';
+import SidebarMag      from '../../components/magasinier/SidebarMag';
+import HeaderPage      from '../../components/shared/HeaderPage';
+import LoadingSpinner  from '../../components/shared/LoadingSpinner';
 import InlineQrScanner from '../../components/shared/InlineQrScanner';
-import { useToast } from '../../components/shared/Toast';
+import { useToast }    from '../../components/shared/Toast';
 import { get, patch, post } from '../../services/api';
 import './FeuilleInventaireMag.css';
 
-function formatDateTime(value) {
-  if (!value) return '-';
+/* ═══════════════════════════════════════
+   Helpers
+═══════════════════════════════════════ */
+function fmtDate(v) {
+  if (!v) return '—';
   try {
-    return new Date(value).toLocaleString('fr-FR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
-  } catch {
-    return '-';
-  }
+    return new Date(v).toLocaleString('fr-FR', {
+      day: '2-digit', month: '2-digit', year: 'numeric',
+      hour: '2-digit', minute: '2-digit',
+    });
+  } catch { return '—'; }
 }
 
 function perimeterLabel(inv) {
-  if (!inv) return '-';
+  if (!inv) return '—';
   if (String(inv.type_inventaire) === 'GLOBAL') return 'Tous les articles';
-  const product = inv.product_id?.name
-    ? `Produit: ${inv.product_id.code_product || ''} ${inv.product_id.name}`.trim()
-    : '';
-  const fam = inv.famille_id ? `Famille: ${inv.famille_id}` : '';
-  const cat = inv.categorie_id?.name ? `Catégorie: ${inv.categorie_id.name}` : '';
-  return [product, fam, cat].filter(Boolean).join(' | ') || 'Périmètre ciblé';
+  const parts = [
+    inv.product_id?.name ? `Produit : ${inv.product_id.code_product || ''} ${inv.product_id.name}`.trim() : '',
+    inv.famille_id       ? `Famille : ${inv.famille_id}` : '',
+    inv.categorie_id?.name ? `Catégorie : ${inv.categorie_id.name}` : '',
+  ].filter(Boolean);
+  return parts.join(' · ') || 'Périmètre ciblé';
 }
 
-function canEditInventory(status) {
+function canEdit(status) {
   return ['EN_COURS', 'A_RECOMPTER', 'A_FAIRE'].includes(String(status || ''));
 }
 
-function displayInventoryStatus(status) {
+function displayStatus(status) {
   const s = String(status || '');
-  if (s === 'A_FAIRE') return 'PLANIFIE';
-  if (s === 'A_RECOMPTER') return 'RECOMPTAGE_DEMANDE';
-  if (s === 'VALIDE') return 'CLOTURE';
-  if (s === 'REJETE') return 'CLOTURE';
-  return s || '-';
+  if (s === 'A_FAIRE')     return 'Planifié';
+  if (s === 'EN_COURS')    return 'En cours';
+  if (s === 'A_VALIDER')   return 'À valider';
+  if (s === 'A_RECOMPTER') return 'Recomptage';
+  if (s === 'VALIDE')      return 'Clôturé ✓';
+  if (s === 'REJETE')      return 'Rejeté';
+  return s || '—';
 }
 
-function lineStatusLabel(line) {
-  if (!line) return '-';
-  if (line.requires_recount) return 'Recomptage';
-  if (!line.is_counted) return 'À compter';
-  if (line.is_verified_by_magasinier) return 'Vérifiée';
-  return 'Comptée';
+function pillClass(status) {
+  const s = String(status || '').toLowerCase();
+  if (s === 'a_faire')     return 'a_faire';
+  if (s === 'en_cours')    return 'en_cours';
+  if (s === 'a_valider')   return 'a_valider';
+  if (s === 'a_recompter') return 'a_recompter';
+  if (s === 'valide')      return 'valide';
+  if (s === 'rejete')      return 'rejete';
+  return '';
+}
+
+function lineChipInfo(line) {
+  if (line.requires_recount)              return { label: 'Recomptage',  cls: 'recount'  };
+  if (!line.is_counted)                   return { label: 'À compter',   cls: 'todo'     };
+  if (line.is_verified_by_magasinier)     return { label: 'Vérifiée',    cls: 'verified' };
+  return                                         { label: 'Comptée',     cls: 'counted'  };
+}
+
+function ecartInfo(line, draftQty) {
+  const counted = draftQty !== undefined && draftQty !== ''
+    ? Number(draftQty)
+    : line.quantite_comptee;
+  if (counted === null || counted === undefined || isNaN(counted)) return null;
+  const theo = Number(line.quantite_theorique ?? 0);
+  const diff = counted - theo;
+  if (diff === 0) return { label: '±0', cls: 'zero' };
+  return { label: diff > 0 ? `+${diff}` : `${diff}`, cls: diff > 0 ? 'pos' : 'neg' };
 }
 
 const FILTERS = [
-  { key: 'all', label: 'Tous' },
-  { key: 'to_count', label: 'À compter' },
-  { key: 'counted', label: 'Comptés' },
-  { key: 'recount', label: 'Recomptage' },
+  { key: 'all',      label: 'Tous'       },
+  { key: 'to_count', label: 'À compter'  },
+  { key: 'counted',  label: 'Comptés'    },
+  { key: 'recount',  label: 'Recomptage' },
+  { key: 'verified', label: 'Vérifiés'   },
 ];
 
+/* ═══════════════════════════════════════
+   Component
+═══════════════════════════════════════ */
 const FeuilleInventaireMag = ({ userName, onLogout }) => {
-  const toast = useToast();
-  const navigate = useNavigate();
-  const params = useParams();
-  const inventoryId = String(params.id || '');
+  const toast     = useToast();
+  const navigate  = useNavigate();
+  const { id: inventoryId } = useParams();
 
-  const [sidebarCollapsed, setSidebarCollapsed] = useState(() => (typeof window !== 'undefined' ? window.innerWidth <= 768 : false));
-  const [isLoading, setIsLoading] = useState(false);
-  const [inventory, setInventory] = useState(null);
-  const [progress, setProgress] = useState({ total: 0, counted: 0, pct: 0 });
-  const [lines, setLines] = useState([]);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(
+    () => typeof window !== 'undefined' && window.innerWidth <= 768
+  );
 
-  const [query, setQuery] = useState('');
-  const [filter, setFilter] = useState('to_count');
-  const [scanInput, setScanInput] = useState('');
-  const [showScanner, setShowScanner] = useState(false);
+  /* data */
+  const [isLoading,  setIsLoading]  = useState(false);
+  const [inventory,  setInventory]  = useState(null);
+  const [progress,   setProgress]   = useState({ total: 0, counted: 0, verified: 0, recount: 0, pct: 0 });
+  const [lines,      setLines]      = useState([]);
 
-  const [editing, setEditing] = useState(() => new Map());
+  /* filters / search */
+  const [query,      setQuery]      = useState('');
+  const [filter,     setFilter]     = useState('to_count');
+  const [scanInput,  setScanInput]  = useState('');
+  const [showScan,   setShowScan]   = useState(false);
 
+  /* per-line draft edits  { lineId -> { quantite_comptee, observation } } */
+  const [drafts, setDrafts] = useState(() => new Map());
+
+  /* submit confirm modal */
+  const [showSubmitModal, setShowSubmitModal] = useState(false);
+
+  /* ── Load ────────────────────────────────────────────────── */
   const loadSheet = useCallback(async () => {
     if (!inventoryId) return;
     setIsLoading(true);
     try {
-      const payload = await get(`/inventory/magasinier/inventories/${inventoryId}`);
-      setInventory(payload?.inventory || null);
-      setProgress(payload?.progress || { total: 0, counted: 0, pct: 0 });
-      setLines(Array.isArray(payload?.lines) ? payload.lines : []);
-      setEditing(new Map());
-    } catch (err) {
-      toast.error(err.message || 'Erreur chargement inventaire');
+      const data = await get(`/inventory/magasinier/inventories/${inventoryId}`);
+      setInventory(data?.inventory || null);
+      const raw = data?.progress || {};
+      setProgress({
+        total:    raw.total    ?? 0,
+        counted:  raw.counted  ?? 0,
+        verified: raw.verified ?? 0,
+        recount:  raw.recount  ?? 0,
+        pct:      raw.pct      ?? 0,
+      });
+      setLines(Array.isArray(data?.lines) ? data.lines : []);
+      setDrafts(new Map());
+    } catch (e) {
+      toast.error(e.message || 'Erreur chargement inventaire');
     } finally {
       setIsLoading(false);
     }
   }, [inventoryId, toast]);
 
-  useEffect(() => {
-    loadSheet();
-  }, [loadSheet]);
+  useEffect(() => { loadSheet(); }, [loadSheet]);
 
-  const readonly = useMemo(() => !canEditInventory(inventory?.status), [inventory?.status]);
+  const readonly = useMemo(() => !canEdit(inventory?.status), [inventory?.status]);
 
+  /* ── Derived lists ───────────────────────────────────────── */
   const filteredLines = useMemo(() => {
     const q = String(query || '').trim().toLowerCase();
-    let base = Array.isArray(lines) ? lines : [];
+    let base = lines;
 
-    if (filter === 'to_count') base = base.filter((l) => !l.is_counted);
-    if (filter === 'counted') base = base.filter((l) => Boolean(l.is_counted));
-    if (filter === 'recount') base = base.filter((l) => Boolean(l.requires_recount));
+    if (filter === 'to_count')  base = base.filter(l => !l.is_counted && !l.requires_recount);
+    if (filter === 'counted')   base = base.filter(l => l.is_counted);
+    if (filter === 'recount')   base = base.filter(l => l.requires_recount);
+    if (filter === 'verified')  base = base.filter(l => l.is_verified_by_magasinier);
 
     if (!q) return base;
-    return base.filter((l) => {
-      const code = String(l.product?.code_product || '').toLowerCase();
-      const name = String(l.product?.name || '').toLowerCase();
-      const emp = String(l.product?.emplacement || '').toLowerCase();
-      const lot = String(l.lot || '').toLowerCase();
-      return code.includes(q) || name.includes(q) || emp.includes(q) || lot.includes(q);
-    });
+    return base.filter(l => [
+      l.product?.code_product, l.product?.name,
+      l.product?.emplacement, l.lot,
+    ].filter(Boolean).some(x => String(x).toLowerCase().includes(q)));
   }, [filter, lines, query]);
 
+  /* tab counts */
+  const tabCounts = useMemo(() => ({
+    all:      lines.length,
+    to_count: lines.filter(l => !l.is_counted && !l.requires_recount).length,
+    counted:  lines.filter(l => l.is_counted).length,
+    recount:  lines.filter(l => l.requires_recount).length,
+    verified: lines.filter(l => l.is_verified_by_magasinier).length,
+  }), [lines]);
+
+  /* uncounted count for submit warning */
+  const uncountedCount = useMemo(() =>
+    lines.filter(l => !l.is_counted).length, [lines]);
+
+  /* ── Draft helpers ───────────────────────────────────────── */
+  const setDraft = (lineId, patch) => {
+    setDrafts(prev => {
+      const next = new Map(prev);
+      next.set(lineId, { ...(next.get(lineId) || {}), ...patch });
+      return next;
+    });
+  };
+
+  /* ── Actions ─────────────────────────────────────────────── */
   const startInventory = async () => {
-    if (!inventoryId) return;
     setIsLoading(true);
     try {
       await post(`/inventory/magasinier/inventories/${inventoryId}/start`, {});
-      toast.success('Inventaire démarré');
+      toast.success('Inventaire démarré ✓');
       await loadSheet();
-    } catch (err) {
-      toast.error(err.message || 'Impossible de démarrer');
-    } finally {
-      setIsLoading(false);
-    }
+    } catch (e) {
+      toast.error(e.message || 'Impossible de démarrer');
+    } finally { setIsLoading(false); }
   };
 
   const saveDraft = async () => {
     setIsLoading(true);
     try {
       await post(`/inventory/magasinier/inventories/${inventoryId}/save-progress`, {});
-      toast.success('Brouillon sauvegardé');
-    } catch (err) {
-      toast.error(err.message || 'Erreur sauvegarde');
-    } finally {
-      setIsLoading(false);
-    }
+      toast.success('Progression sauvegardée ✓');
+    } catch (e) {
+      toast.error(e.message || 'Erreur sauvegarde');
+    } finally { setIsLoading(false); }
   };
 
   const submitInventory = async () => {
-    const confirmed = window.confirm("Soumettre l'inventaire au responsable ? Après soumission vous ne pourrez plus modifier.");
-    if (!confirmed) return;
+    setShowSubmitModal(false);
     setIsLoading(true);
     try {
       await post(`/inventory/magasinier/inventories/${inventoryId}/submit`, {});
-      toast.success('Inventaire soumis au responsable');
+      toast.success('Inventaire soumis au responsable ✓');
       await loadSheet();
-    } catch (err) {
-      const msg = err.message || 'Erreur soumission';
-      if (String(msg).toLowerCase().includes('non modifiable')) toast.error('Inventaire déjà clôturé');
-      else toast.error(msg);
-    } finally {
-      setIsLoading(false);
-    }
+    } catch (e) {
+      const msg = String(e.message || '');
+      toast.error(msg.toLowerCase().includes('non modifiable')
+        ? 'Inventaire déjà clôturé'
+        : msg || 'Erreur soumission');
+    } finally { setIsLoading(false); }
   };
 
-  const setLineDraft = (lineId, patchDraft) => {
-    setEditing((prev) => {
-      const next = new Map(prev);
-      const current = next.get(lineId) || {};
-      next.set(lineId, { ...current, ...patchDraft });
-      return next;
-    });
-  };
-
+  /* Save one line (Sprint 3 : saisir quantités comptées) */
   const saveLine = async (line) => {
     if (readonly) return;
     const lineId = String(line?._id || '');
     if (!lineId) return;
+    const draft = drafts.get(lineId) || {};
 
-    const draft = editing.get(lineId) || {};
-    const qtyRaw = draft.quantite_comptee ?? line.quantite_comptee ?? '';
-    const obsRaw = draft.observation_magasinier ?? line.observation_magasinier ?? '';
+    const qtyRaw = draft.quantite_comptee !== undefined
+      ? draft.quantite_comptee
+      : (line.quantite_comptee ?? '');
+    const obsRaw = draft.observation_magasinier !== undefined
+      ? draft.observation_magasinier
+      : (line.observation_magasinier ?? '');
 
     const qty = Number(qtyRaw);
-    if (!Number.isFinite(qty) || qty < 0) {
-      toast.error('Quantité invalide');
-      return;
-    }
+    if (!Number.isFinite(qty) || qty < 0) { toast.error('Quantité invalide'); return; }
     const counted = Math.floor(qty);
     const obs = String(obsRaw || '').trim();
 
     if (counted === 0 && !obs) {
-      toast.error('Observation obligatoire si quantité = 0');
-      return;
+      toast.error('Observation obligatoire si quantité = 0'); return;
     }
-    if (String(inventory?.status) === 'A_RECOMPTER' && Boolean(line.requires_recount) && !obs) {
-      toast.error('Observation obligatoire pendant un recomptage');
-      return;
+    if (String(inventory?.status) === 'A_RECOMPTER' && line.requires_recount && !obs) {
+      toast.error('Observation obligatoire pour le recomptage'); return;
     }
 
     setIsLoading(true);
     try {
-      await patch(`/inventory/magasinier/inventories/${inventoryId}/lines/${lineId}`, {
-        quantite_comptee: counted,
-        observation_magasinier: obs,
-      });
-      toast.success('Ligne enregistrée');
+      await patch(
+        `/inventory/magasinier/inventories/${inventoryId}/lines/${lineId}`,
+        { quantite_comptee: counted, observation_magasinier: obs }
+      );
+      toast.success('Ligne enregistrée ✓');
       await loadSheet();
-    } catch (err) {
-      toast.error(err.message || 'Erreur enregistrement ligne');
-    } finally {
-      setIsLoading(false);
-    }
+    } catch (e) {
+      toast.error(e.message || 'Erreur enregistrement');
+    } finally { setIsLoading(false); }
   };
 
-  const markVerified = async (line) => {
+  /* Verify line (magasinier confirms physical check) */
+  const verifyLine = async (line) => {
     if (readonly) return;
     const lineId = String(line?._id || '');
     if (!lineId) return;
     if (line.quantite_comptee === null || line.quantite_comptee === undefined) {
-      toast.error('Enregistrez une quantité avant de vérifier');
-      return;
+      toast.error('Enregistrez une quantité avant de vérifier'); return;
     }
     setIsLoading(true);
     try {
-      await post(`/inventory/magasinier/inventories/${inventoryId}/lines/${lineId}/verify`, { verified: true });
-      toast.success('Ligne marquée comme vérifiée');
-      setLines((prev) => prev.map((l) => (String(l._id) === lineId ? { ...l, is_verified_by_magasinier: true } : l)));
-    } catch (err) {
-      toast.error(err.message || 'Erreur vérification');
-    } finally {
-      setIsLoading(false);
-    }
+      await post(
+        `/inventory/magasinier/inventories/${inventoryId}/lines/${lineId}/verify`,
+        { verified: true }
+      );
+      toast.success('Ligne vérifiée ✓');
+      setLines(prev =>
+        prev.map(l => String(l._id) === lineId
+          ? { ...l, is_verified_by_magasinier: true }
+          : l
+        )
+      );
+    } catch (e) {
+      toast.error(e.message || 'Erreur vérification');
+    } finally { setIsLoading(false); }
   };
 
-  const onDetected = async (value) => {
-    const scanned = String(value || '').trim();
-    if (!scanned) return;
-    setQuery(scanned);
-    toast.success('Code détecté');
+  /* QR scan */
+  const onDetected = (value) => {
+    const v = String(value || '').trim();
+    if (!v) return;
+    setQuery(v);
+    setFilter('all');
+    setShowScan(false);
+    toast.success(`Code détecté : ${v}`);
   };
 
   const onManualScan = () => {
@@ -243,191 +321,491 @@ const FeuilleInventaireMag = ({ userName, onLogout }) => {
     setScanInput('');
   };
 
-  const canSubmit = ['EN_COURS', 'A_RECOMPTER'].includes(String(inventory?.status || ''));
-  const canSaveDraft = ['EN_COURS', 'A_RECOMPTER'].includes(String(inventory?.status || ''));
+  /* ── Computed ────────────────────────────────────────────── */
+  const canSubmit   = ['EN_COURS', 'A_RECOMPTER'].includes(String(inventory?.status || ''));
+  const canSaveDraft = canSubmit;
+  const pct = Math.min(100, Math.max(0, progress.pct));
+  const progFillCls = pct === 100 ? 'done' : pct >= 50 ? '' : 'warn';
 
+  /* ═══ RENDER ══════════════════════════════════════════════ */
   return (
-    <div className="app-layout">
-      <div className={`sidebar-backdrop ${sidebarCollapsed ? 'hidden' : ''}`} onClick={() => setSidebarCollapsed(true)} />
-      <SidebarMag collapsed={sidebarCollapsed} onToggle={() => setSidebarCollapsed(!sidebarCollapsed)} onLogout={onLogout} userName={userName} />
+    <div className="fi-root">
+      <div
+        className={`sidebar-backdrop ${sidebarCollapsed ? 'hidden' : ''}`}
+        onClick={() => setSidebarCollapsed(true)}
+      />
+      <SidebarMag
+        collapsed={sidebarCollapsed}
+        onToggle={() => setSidebarCollapsed(p => !p)}
+        onLogout={onLogout}
+        userName={userName}
+      />
 
-      <div className="main-container">
-        <HeaderPage userName={userName} title="Comptage inventaire" showSearch={false} onMenuClick={() => setSidebarCollapsed((p) => !p)} />
-        <main className="main-content">
-          {isLoading && <LoadingSpinner overlay text="Traitement..." />}
+      <div className="fi-main">
+        <HeaderPage
+          userName={userName}
+          title="Comptage inventaire"
+          subtitle="Saisie des quantités physiques constatées"
+          showSearch={false}
+          onMenuClick={() => setSidebarCollapsed(p => !p)}
+          onLogout={onLogout}
+        />
 
-          <div className="inv-sheet-head">
-            <div className="inv-sheet-title">
-              <h2>{inventory?.reference || 'Inventaire'}</h2>
-              <div className="inv-sheet-sub">
-                <span className={`inv-pill ${String(inventory?.status || '').toLowerCase()}`}>{displayInventoryStatus(inventory?.status)}</span>
-                <span className="inv-sheet-meta">Magasin: <strong>{inventory?.magasin_id?.name || '-'}</strong></span>
-                <span className="inv-sheet-meta">Périmètre: <strong>{perimeterLabel(inventory)}</strong></span>
-                <span className="inv-sheet-meta">Prévu: <strong>{formatDateTime(inventory?.date_prevue)}</strong></span>
+        <main className="fi-page">
+          {isLoading && <LoadingSpinner overlay text="Traitement…" />}
+
+          {/* ══ Workflow banner (Sprint 3 : 3 étapes) ══ */}
+          <div className="fi-wf">
+            <div className={`fi-wf-step ${['EN_COURS','A_RECOMPTER','A_VALIDER','VALIDE','REJETE'].includes(inventory?.status) ? 'done' : ''}`}>
+              <div className="fi-wf-icon"><ClipboardList size={20} /></div>
+              <div className="fi-wf-body">
+                <span className="fi-wf-count">1</span>
+                <span className="fi-wf-label">Lancer inventaire</span>
+                <span className="fi-wf-sub">Responsable</span>
               </div>
             </div>
 
-            <div className="inv-sheet-actions">
-              <button className="inv-btn" type="button" onClick={() => navigate('/magasinier/inventaire')}>
-                <ArrowLeft size={16} /> Retour
-              </button>
-              <button className="inv-btn" type="button" onClick={loadSheet} disabled={isLoading}>
-                <RefreshCw size={16} /> Actualiser
-              </button>
-              {String(inventory?.status) === 'A_FAIRE' ? (
-                <button className="inv-btn primary" type="button" onClick={startInventory} disabled={isLoading}>
-                  <CheckCircle2 size={16} /> Démarrer
-                </button>
-              ) : null}
-            </div>
-          </div>
-
-          <div className="inv-sheet-progress">
-            <div className="inv-progress-top">
-              <span>Progression</span>
-              <span><strong>{progress.counted}</strong>/{progress.total} ({progress.pct}%)</span>
-            </div>
-            <div className="inv-progress-bar">
-              <div className="inv-progress-fill" style={{ width: `${Math.min(100, Math.max(0, progress.pct))}%` }} />
-            </div>
-          </div>
-
-          <section className="inv-sheet-card">
-            <div className="inv-sheet-toolbar">
-              <div className="inv-search">
-                <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Rechercher produit (code, nom, emplacement, lot)..." />
+            <div className={`fi-wf-step ${['EN_COURS','A_RECOMPTER'].includes(inventory?.status) ? 'active' : ['A_VALIDER','VALIDE','REJETE'].includes(inventory?.status) ? 'done' : ''}`}>
+              <div className="fi-wf-icon"><Package size={20} /></div>
+              <div className="fi-wf-body">
+                <span className="fi-wf-count">{progress.counted}</span>
+                <span className="fi-wf-label">Réaliser inventaire</span>
+                <span className="fi-wf-sub">Magasinier · {progress.counted}/{progress.total} lignes</span>
               </div>
-              <button className="inv-btn" type="button" onClick={() => setShowScanner(true)} disabled={isLoading}>
-                <Camera size={16} /> Scanner QR / Code
-              </button>
             </div>
 
-            <div className="inv-scan-manual">
-              <input
-                value={scanInput}
-                onChange={(e) => setScanInput(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter') onManualScan();
-                }}
-                placeholder="Coller un code produit puis Entrée…"
+            <div className={`fi-wf-step ${['A_VALIDER','VALIDE','REJETE'].includes(inventory?.status) ? 'active' : ''}`}>
+              <div className="fi-wf-icon"><CheckCheck size={20} /></div>
+              <div className="fi-wf-body">
+                <span className="fi-wf-count">{progress.verified ?? 0}</span>
+                <span className="fi-wf-label">Prendre décision</span>
+                <span className="fi-wf-sub">Responsable · validation écarts</span>
+              </div>
+            </div>
+
+            {progress.recount > 0 && (
+              <div className="fi-wf-step urgent">
+                <div className="fi-wf-icon"><RotateCcw size={20} /></div>
+                <div className="fi-wf-body">
+                  <span className="fi-wf-count">{progress.recount}</span>
+                  <span className="fi-wf-label">Recomptage demandé</span>
+                  <span className="fi-wf-sub">Lignes à revérifier</span>
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* ══ Page header ══ */}
+          <div className="fi-head">
+            <div className="fi-head-left">
+              <div className="fi-head-title">
+                <span className={`fi-pill ${pillClass(inventory?.status)}`}>
+                  {displayStatus(inventory?.status)}
+                </span>
+                {inventory?.reference || 'Inventaire'}
+              </div>
+              <div className="fi-head-meta">
+                <span className="fi-head-chip">
+                  Magasin : <strong>{inventory?.magasin_id?.name || '—'}</strong>
+                </span>
+                <span className="fi-head-chip">·</span>
+                <span className="fi-head-chip">
+                  Périmètre : <strong>{perimeterLabel(inventory)}</strong>
+                </span>
+                <span className="fi-head-chip">·</span>
+                <span className="fi-head-chip">
+                  Prévu : <strong>{fmtDate(inventory?.date_prevue)}</strong>
+                </span>
+              </div>
+            </div>
+
+            <div className="fi-head-actions">
+              <button
+                className="fi-btn fi-btn-ghost"
+                onClick={() => navigate('/magasinier/inventaire')}
+              >
+                <ArrowLeft size={15} /> Retour
+              </button>
+              <button
+                className="fi-btn fi-btn-ghost"
+                onClick={loadSheet}
                 disabled={isLoading}
-              />
-              <button className="inv-btn" type="button" onClick={onManualScan} disabled={isLoading || !String(scanInput || '').trim()}>
-                Appliquer
+              >
+                <span className={isLoading ? 'fi-spin' : ''}><RefreshCw size={15} /></span>
+                Actualiser
               </button>
-            </div>
-
-            {showScanner ? (
-              <div className="inv-scanner-wrap">
-                <InlineQrScanner onDetected={onDetected} onClose={() => setShowScanner(false)} />
-              </div>
-            ) : null}
-
-            <div className="inv-filters">
-              {FILTERS.map((f) => (
+              {String(inventory?.status) === 'A_FAIRE' && (
                 <button
-                  key={f.key}
-                  type="button"
-                  className={`inv-filter ${filter === f.key ? 'active' : ''}`}
-                  onClick={() => setFilter(f.key)}
+                  className="fi-btn fi-btn-primary"
+                  onClick={startInventory}
+                  disabled={isLoading}
                 >
-                  {f.label}
+                  <CheckCircle2 size={15} /> Démarrer le comptage
                 </button>
-              ))}
-              <div className="inv-filter-spacer" />
-              {readonly ? (
-                <div className="inv-readonly-hint">Lecture seule : inventaire soumis / clôturé.</div>
-              ) : (
-                <div className="inv-readonly-hint">Astuce : enregistrez les lignes au fur et à mesure.</div>
               )}
             </div>
+          </div>
 
-            <div className="inv-table-wrap">
-              <table className="inv-table inv-table-sheet">
-                <thead>
+          {/* ══ Progress ══ */}
+          <div className="fi-progress">
+            <div className="fi-prog-top">
+              <span className="fi-prog-label">
+                <TrendingDown size={15} /> Progression du comptage
+              </span>
+              <div className="fi-prog-stats">
+                <div className="fi-prog-stat">
+                  <span className={`fi-prog-val ${pct === 100 ? 'green' : ''}`}>{pct}%</span>
+                  <span className="fi-prog-sub">Avancement</span>
+                </div>
+                <div className="fi-prog-stat">
+                  <span className="fi-prog-val green">{progress.counted}</span>
+                  <span className="fi-prog-sub">Comptés</span>
+                </div>
+                <div className="fi-prog-stat">
+                  <span className="fi-prog-val">{progress.total}</span>
+                  <span className="fi-prog-sub">Total</span>
+                </div>
+                {progress.recount > 0 && (
+                  <div className="fi-prog-stat">
+                    <span className="fi-prog-val amber">{progress.recount}</span>
+                    <span className="fi-prog-sub">Recomptage</span>
+                  </div>
+                )}
+                {progress.verified > 0 && (
+                  <div className="fi-prog-stat">
+                    <span className="fi-prog-val green">{progress.verified}</span>
+                    <span className="fi-prog-sub">Vérifiés</span>
+                  </div>
+                )}
+              </div>
+            </div>
+            <div className="fi-prog-track">
+              <div
+                className={`fi-prog-fill ${progFillCls}`}
+                style={{ width: `${pct}%` }}
+              />
+            </div>
+          </div>
+
+          {/* ══ Toolbar ══ */}
+          <div className="fi-toolbar">
+            {/* Row 1 : search + scan */}
+            <div className="fi-toolbar-row">
+              <div className="fi-search">
+                <Search size={15} />
+                <input
+                  value={query}
+                  onChange={e => setQuery(e.target.value)}
+                  placeholder="Rechercher produit (code, nom, emplacement, lot)…"
+                />
+              </div>
+
+              <div className="fi-scan-row">
+                <input
+                  className="fi-scan-input"
+                  value={scanInput}
+                  onChange={e => setScanInput(e.target.value)}
+                  onKeyDown={e => { if (e.key === 'Enter') onManualScan(); }}
+                  placeholder="Coller un code produit puis Entrée…"
+                  disabled={isLoading}
+                />
+                <button
+                  className="fi-btn fi-btn-ghost"
+                  onClick={onManualScan}
+                  disabled={isLoading || !String(scanInput).trim()}
+                >
+                  Appliquer
+                </button>
+                <button
+                  className="fi-btn fi-btn-ghost"
+                  onClick={() => setShowScan(v => !v)}
+                  disabled={isLoading}
+                >
+                  <Camera size={15} /> Scanner QR
+                </button>
+              </div>
+            </div>
+
+            {/* Row 2 : filters */}
+            <div className="fi-toolbar-row">
+              <div className="fi-filters">
+                {FILTERS.map(f => (
+                  <button
+                    key={f.key}
+                    className={`fi-filter ${filter === f.key ? 'active' : ''}`}
+                    onClick={() => setFilter(f.key)}
+                  >
+                    {f.label}
+                    <span className="fi-filter-badge">{tabCounts[f.key] ?? 0}</span>
+                  </button>
+                ))}
+              </div>
+              {readonly && (
+                <div className="fi-readonly-banner">
+                  <AlertTriangle size={13} /> Lecture seule — inventaire soumis ou clôturé
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* ══ Inline scanner ══ */}
+          {showScan && (
+            <div className="fi-scanner-box">
+              <InlineQrScanner
+                onDetected={onDetected}
+                onClose={() => setShowScan(false)}
+              />
+            </div>
+          )}
+
+          {/* ══ Table ══ */}
+          <div className="fi-table-wrap">
+            <table className="fi-table">
+              <thead>
+                <tr>
+                  <th>Produit</th>
+                  <th>Code</th>
+                  <th>Lot</th>
+                  <th>Emplacement</th>
+                  <th>Qté comptée</th>
+                  <th>Écart</th>
+                  <th>Statut</th>
+                  <th>Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {filteredLines.length === 0 ? (
                   <tr>
-                    <th>Produit</th>
-                    <th>Code</th>
-                    <th>Lot</th>
-                    <th>Qté comptée</th>
-                    <th>Statut</th>
-                    <th>Action</th>
+                    <td colSpan={8}>
+                      <div className="fi-empty">
+                        <div className="fi-empty-icon"><Package size={26} /></div>
+                        <span className="fi-empty-title">Aucune ligne</span>
+                        <span className="fi-empty-sub">
+                          Modifiez le filtre ou la recherche pour afficher d'autres articles.
+                        </span>
+                      </div>
+                    </td>
                   </tr>
-                </thead>
-                <tbody>
-                  {filteredLines.map((l) => {
-                    const lineId = String(l._id);
-                    const draft = editing.get(lineId) || {};
-                    const qtyValue = draft.quantite_comptee !== undefined ? draft.quantite_comptee : (l.quantite_comptee ?? '');
-                    const obsValue = draft.observation_magasinier !== undefined ? draft.observation_magasinier : (l.observation_magasinier ?? '');
-                    // Important: keep the counting sheet blind to system audit values.
-                    return (
-                      <tr key={l._id}>
-                        <td className="cell-product">
-                          <div className="p-name">{l.product?.name || 'Produit'}</div>
-                          <div className="p-sub">{l.product?.emplacement || '-'}</div>
-                          {String(inventory?.status) === 'A_RECOMPTER' && l.requires_recount && l.motif_recompte ? (
-                            <div className="p-recount">Motif: {l.motif_recompte}</div>
-                          ) : null}
-                          <div className="p-obs">
-                            <input
-                              value={obsValue}
-                              onChange={(e) => setLineDraft(lineId, { observation_magasinier: e.target.value })}
-                              placeholder="Observation courte…"
-                              disabled={readonly}
-                            />
+                ) : filteredLines.map(line => {
+                  const lineId   = String(line._id);
+                  const draft    = drafts.get(lineId) || {};
+                  const chip     = lineChipInfo(line);
+                  const isDone   = line.is_verified_by_magasinier;
+                  const isRec    = line.requires_recount;
+                  const rowCls   = isRec ? 'fi-row-recount' : isDone ? 'fi-row-done' : '';
+
+                  const qtyVal = draft.quantite_comptee !== undefined
+                    ? draft.quantite_comptee
+                    : (line.quantite_comptee ?? '');
+                  const obsVal = draft.observation_magasinier !== undefined
+                    ? draft.observation_magasinier
+                    : (line.observation_magasinier ?? '');
+
+                  const ecart    = ecartInfo(line, draft.quantite_comptee);
+                  const hasValue = qtyVal !== '' && qtyVal !== null && qtyVal !== undefined;
+
+                  return (
+                    <tr key={lineId} className={rowCls}>
+
+                      {/* Produit */}
+                      <td className="fi-cell-product">
+                        <div className="fi-prod-name">{line.product?.name || 'Produit'}</div>
+                        <div className="fi-prod-code">{line.product?.code_product || '—'}</div>
+
+                        {isRec && line.motif_recompte && (
+                          <div className="fi-prod-recount-badge">
+                            <RotateCcw size={11} /> Motif : {line.motif_recompte}
                           </div>
-                        </td>
-                        <td><strong>{l.product?.code_product || '-'}</strong></td>
-                        <td>{l.lot || '-'}</td>
-                        <td className="cell-qty">
+                        )}
+
+                        {/* Observation */}
+                        <div className="fi-prod-obs">
                           <input
+                            className="fi-obs-input"
+                            value={obsVal}
+                            onChange={e => setDraft(lineId, { observation_magasinier: e.target.value })}
+                            placeholder={isRec ? 'Observation obligatoire (recomptage)…' : 'Observation courte…'}
+                            disabled={readonly}
+                            maxLength={400}
+                          />
+                        </div>
+                      </td>
+
+                      {/* Code */}
+                      <td>
+                        <strong>{line.product?.code_product || '—'}</strong>
+                      </td>
+
+                      {/* Lot */}
+                      <td>
+                        <span style={{ fontSize: '.82rem', color: '#475569' }}>
+                          {line.lot || '—'}
+                        </span>
+                      </td>
+
+                      {/* Emplacement */}
+                      <td>
+                        <span className="fi-prod-loc">
+                          <MapPin size={12} />
+                          {line.product?.emplacement || '—'}
+                        </span>
+                      </td>
+
+                      {/* Quantité comptée */}
+                      <td className="fi-cell-qty">
+                        <div className="fi-qty-wrap">
+                          <input
+                            className={`fi-qty-input ${hasValue ? 'has-value' : ''}`}
                             type="number"
                             min="0"
-                            value={qtyValue}
-                            onChange={(e) => setLineDraft(lineId, { quantite_comptee: e.target.value })}
+                            value={qtyVal}
+                            onChange={e => setDraft(lineId, { quantite_comptee: e.target.value })}
                             disabled={readonly}
+                            placeholder="0"
                           />
-                        </td>
-                        <td>
-                          <span className={`line-pill ${l.requires_recount ? 'recount' : !l.is_counted ? 'todo' : l.is_verified_by_magasinier ? 'verified' : 'counted'}`}>
-                            {lineStatusLabel(l)}
-                          </span>
-                        </td>
-                        <td className="cell-actions">
-                          <button className="inv-btn primary" type="button" onClick={() => saveLine(l)} disabled={readonly || isLoading}>
-                            <Save size={16} /> Enregistrer
+                        </div>
+                      </td>
+
+                      {/* Écart (calculé automatiquement) */}
+                      <td>
+                        {ecart ? (
+                          <span className={`fi-ecart ${ecart.cls}`}>{ecart.label}</span>
+                        ) : (
+                          <span style={{ color: '#cbd5e1', fontSize: '.78rem' }}>—</span>
+                        )}
+                      </td>
+
+                      {/* Statut */}
+                      <td>
+                        <span className={`fi-line-chip ${chip.cls}`}>
+                          <span className="fi-line-chip-dot" />
+                          {chip.label}
+                        </span>
+                      </td>
+
+                      {/* Actions */}
+                      <td className="fi-cell-actions">
+                        <div className="fi-action-row">
+                          <button
+                            className="fi-act-btn fi-act-save"
+                            onClick={() => saveLine(line)}
+                            disabled={readonly || isLoading}
+                          >
+                            <Save size={13} /> Enregistrer
                           </button>
-                          <button className="inv-btn" type="button" onClick={() => markVerified(l)} disabled={readonly || isLoading}>
-                            <ShieldCheck size={16} /> Vérifier
+                          <button
+                            className={`fi-act-btn fi-act-verify ${isDone ? 'done' : ''}`}
+                            onClick={() => verifyLine(line)}
+                            disabled={readonly || isLoading || isDone}
+                            title={isDone ? 'Déjà vérifiée' : 'Marquer comme vérifiée'}
+                          >
+                            <ShieldCheck size={13} />
+                            {isDone ? 'Vérifiée' : 'Vérifier'}
                           </button>
-                        </td>
-                      </tr>
-                    );
-                  })}
-                  {!filteredLines.length && (
-                    <tr>
-                      <td colSpan={6}>
-                        <div className="inv-empty">Aucune ligne.</div>
+                        </div>
                       </td>
                     </tr>
-                  )}
-                </tbody>
-              </table>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+
+          {/* ══ Footer ══ */}
+          <div className="fi-footer">
+            <div className="fi-footer-left">
+              <button
+                className="fi-btn fi-btn-ghost"
+                onClick={() => navigate('/magasinier/inventaire')}
+                disabled={isLoading}
+              >
+                <XCircle size={15} /> Fermer
+              </button>
+              <button
+                className="fi-btn fi-btn-ghost"
+                onClick={saveDraft}
+                disabled={readonly || isLoading || !canSaveDraft}
+              >
+                <Save size={15} /> Enregistrer progression
+              </button>
             </div>
 
-            <div className="inv-sheet-footer">
-              <button className="inv-btn" type="button" onClick={saveDraft} disabled={readonly || isLoading || !canSaveDraft}>
-                <Save size={16} /> Enregistrer brouillon
-              </button>
-              <button className="inv-btn primary" type="button" onClick={submitInventory} disabled={readonly || isLoading || !canSubmit}>
-                <CheckCircle2 size={16} /> Soumettre au responsable
-              </button>
-              <button className="inv-btn" type="button" onClick={() => navigate('/magasinier/inventaire')} disabled={isLoading}>
-                <XCircle size={16} /> Fermer
+            <div className="fi-footer-right">
+              {uncountedCount > 0 && canSubmit && (
+                <span style={{ fontSize: '.8rem', color: '#d97706', fontWeight: 600, display:'flex', alignItems:'center', gap:'.4rem' }}>
+                  <AlertTriangle size={14} /> {uncountedCount} ligne{uncountedCount > 1 ? 's' : ''} non comptée{uncountedCount > 1 ? 's' : ''}
+                </span>
+              )}
+              <button
+                className="fi-btn fi-btn-success"
+                onClick={() => setShowSubmitModal(true)}
+                disabled={readonly || isLoading || !canSubmit}
+              >
+                <SendHorizonal size={15} /> Soumettre au responsable
               </button>
             </div>
-          </section>
+          </div>
+
+          {/* ══ Submit confirm modal ══ */}
+          {showSubmitModal && (
+            <div className="fi-backdrop" role="dialog" aria-modal="true">
+              <div className="fi-modal">
+                <div className="fi-modal-bar" />
+                <div className="fi-modal-body">
+                  <div className="fi-modal-icon"><SendHorizonal size={24} /></div>
+                  <div className="fi-modal-title">Soumettre l'inventaire ?</div>
+                  <div className="fi-modal-sub">
+                    L'inventaire sera transmis au responsable pour validation des écarts.
+                    Après soumission, vous ne pourrez plus modifier les lignes.
+                  </div>
+
+                  <div className="fi-modal-stats">
+                    <div className="fi-modal-stat">
+                      <span className="fi-modal-stat-val">{progress.counted}</span>
+                      <span className="fi-modal-stat-lbl">Lignes comptées</span>
+                    </div>
+                    <div className="fi-modal-stat">
+                      <span className="fi-modal-stat-val">{progress.total - progress.counted}</span>
+                      <span className="fi-modal-stat-lbl">Non comptées</span>
+                    </div>
+                    <div className="fi-modal-stat">
+                      <span className="fi-modal-stat-val">{progress.verified ?? 0}</span>
+                      <span className="fi-modal-stat-lbl">Vérifiées</span>
+                    </div>
+                    <div className="fi-modal-stat">
+                      <span className="fi-modal-stat-val">{pct}%</span>
+                      <span className="fi-modal-stat-lbl">Avancement</span>
+                    </div>
+                  </div>
+
+                  {uncountedCount > 0 && (
+                    <div className="fi-modal-warn">
+                      <AlertTriangle size={15} />
+                      {uncountedCount} ligne{uncountedCount > 1 ? 's' : ''} non comptée{uncountedCount > 1 ? 's' : ''} — le responsable pourra demander un recomptage.
+                    </div>
+                  )}
+                </div>
+
+                <div className="fi-modal-foot">
+                  <button
+                    className="fi-btn fi-btn-ghost"
+                    onClick={() => setShowSubmitModal(false)}
+                    disabled={isLoading}
+                  >
+                    Annuler
+                  </button>
+                  <button
+                    className="fi-btn fi-btn-success"
+                    onClick={submitInventory}
+                    disabled={isLoading}
+                  >
+                    <SendHorizonal size={15} /> Confirmer la soumission
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+
         </main>
       </div>
     </div>

@@ -1,948 +1,549 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import {
-  AlertTriangle,
-  BarChart3,
-  Building2,
-  Calendar,
-  CheckCircle2,
-  Eye,
-  Package,
-  RefreshCw,
-  Tag,
-  TrendingUp,
-  Users,
-  ArrowUpRight,
-  X,
-} from 'lucide-react';
-import { useNavigate, useSearchParams } from 'react-router-dom';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useSearchParams, useNavigate } from 'react-router-dom';
+import { BarChart3, Bell, Package, RefreshCw, Search, TrendingUp, Users, Download, FileText, Zap } from 'lucide-react';
 import SidebarResp from '../../components/responsable/SidebarResp';
 import HeaderPage from '../../components/shared/HeaderPage';
-import ProtectedPage from '../../components/shared/ProtectedPage';
 import LoadingSpinner from '../../components/shared/LoadingSpinner';
-import { useToast } from '../../components/shared/Toast';
+import BeneficiairePanel from './BeneficiairePanel';
 import { get } from '../../services/api';
+import { useToast } from '../../components/shared/Toast';
+import { getUiErrorMessage } from '../../services/uiError';
 import './ConsommationResp.css';
+import './BeneficiairePanel.css';
 
-function formatIsoDate(date) {
-  return new Date(date).toISOString().slice(0, 10);
+/* ─── helpers ────────────────────────────────────────────────── */
+function isoToday() {
+  return new Date().toISOString().slice(0, 10);
 }
-
-function sumQty(rows) {
-  return rows.reduce((acc, r) => acc + Number(r?.quantity || 0), 0);
+function isoDaysAgo(n) {
+  const d = new Date();
+  d.setDate(d.getDate() - n);
+  return d.toISOString().slice(0, 10);
 }
-
-function clamp(value, min, max) {
-  return Math.min(max, Math.max(min, value));
+function isoMonthStart() {
+  const d = new Date();
+  return new Date(d.getFullYear(), d.getMonth(), 1).toISOString().slice(0, 10);
 }
-
-function formatDateTime(value) {
-  if (!value) return '-';
-  const d = new Date(value);
-  if (Number.isNaN(d.getTime())) return '-';
-  return d.toLocaleString('fr-FR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+function validIsoDate(v) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(String(v || ''))) return '';
+  const d = new Date(`${v}T00:00:00`);
+  return Number.isNaN(d.getTime()) ? '' : String(v);
 }
-
-function formatDayLabel(dayValue) {
-  if (!dayValue) return '-';
-  const date = new Date(dayValue);
-  if (Number.isNaN(date.getTime())) return String(dayValue).slice(5);
-  return date.toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit' });
+function fmt(v) {
+  if (!v) return '-';
+  return new Date(v).toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit', year: 'numeric' });
 }
+function safeNum(v) { return Number(v) || 0; }
 
-function toLineCoords(values, minValue, maxValue, width, height, padX, padY) {
-  if (!Array.isArray(values) || !values.length) return [];
-  const usableMin = Number.isFinite(minValue) ? minValue : 0;
-  const usableMax = Number.isFinite(maxValue) ? maxValue : 1;
-  const span = Math.max(1, usableMax - usableMin);
-  const stepX = values.length > 1 ? (width - padX * 2) / (values.length - 1) : 0;
-
-  return values.map((v, index) => {
-    const normalized = (Number(v || 0) - usableMin) / span;
-    const x = padX + index * stepX;
-    const y = height - padY - normalized * (height - padY * 2);
-    return { x, y };
+function computeStatus(row, avgProd, avgBenef) {
+  const qty = safeNum(row.quantity);
+  const pk = row.product_code || row.product_name;
+  const bk = row.beneficiary;
+  const pAvg = avgProd.get(pk) || 0;
+  const bAvg = avgBenef.get(bk) || 0;
+  const isChem = String(row.product_family || '').toLowerCase().includes('chim');
+  if (qty >= Math.max(pAvg * 3, bAvg * 3.2, isChem ? 8 : 12)) return 'danger';
+  if (qty >= Math.max(pAvg * 1.8, bAvg * 2, 5)) return 'warn';
+  return 'ok';
+}
+function computeAvgMap(rows, keyFn) {
+  const m = new Map();
+  rows.forEach((r) => {
+    const k = keyFn(r);
+    if (!k) return;
+    const p = m.get(k) || { s: 0, c: 0 };
+    p.s += safeNum(r.quantity); p.c++;
+    m.set(k, p);
   });
+  const a = new Map();
+  m.forEach((v, k) => a.set(k, v.c ? v.s / v.c : 0));
+  return a;
 }
 
-function toPolylinePoints(coords) {
-  return coords.map((point) => `${point.x},${point.y}`).join(' ');
-}
+const STATUS_LABEL = { ok: 'Normal', warn: 'Élevé', danger: 'À vérifier' };
+const PAGE_SIZE = 15;
 
-function toAreaPath(coords, height, padY) {
-  if (!coords.length) return '';
-  const baselineY = height - padY;
-  const start = coords[0];
-  const end = coords[coords.length - 1];
-  return [
-    `M ${start.x} ${baselineY}`,
-    ...coords.map((point) => `L ${point.x} ${point.y}`),
-    `L ${end.x} ${baselineY}`,
-    'Z',
-  ].join(' ');
-}
-
-function usePrefersReducedMotion() {
-  const [reduced, setReduced] = useState(false);
-
-  useEffect(() => {
-    if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') return undefined;
-    const query = window.matchMedia('(prefers-reduced-motion: reduce)');
-    const update = () => setReduced(Boolean(query.matches));
-    update();
-    if (typeof query.addEventListener === 'function') query.addEventListener('change', update);
-    else query.addListener?.(update);
-    return () => {
-      if (typeof query.removeEventListener === 'function') query.removeEventListener('change', update);
-      else query.removeListener?.(update);
-    };
-  }, []);
-
-  return reduced;
-}
-
-function AnimatedNumber({ value, decimals = 0, durationMs = 650 }) {
-  const prefersReducedMotion = usePrefersReducedMotion();
-  const [shown, setShown] = useState(() => Number(value || 0));
-  const shownRef = useRef(shown);
-
-  useEffect(() => {
-    shownRef.current = shown;
-  }, [shown]);
-
-  useEffect(() => {
-    const target = Number(value || 0);
-    if (prefersReducedMotion) {
-      setShown(target);
-      return undefined;
-    }
-
-    const from = Number(shownRef.current || 0);
-    const start = performance.now();
-    const duration = clamp(Number(durationMs || 650), 250, 1600);
-
-    let raf = 0;
-    const tick = (now) => {
-      const t = clamp((now - start) / duration, 0, 1);
-      const ease = 1 - Math.pow(1 - t, 3);
-      const next = from + (target - from) * ease;
-      setShown(next);
-      if (t < 1) raf = requestAnimationFrame(tick);
-    };
-    raf = requestAnimationFrame(tick);
-    return () => cancelAnimationFrame(raf);
-  }, [durationMs, prefersReducedMotion, value]);
-
-  const fixed = shown.toFixed(Math.max(0, Number(decimals || 0)));
-  return <>{fixed}</>;
-}
-
-function normalizeRow(r) {
-  const legacyBenef = r?.beneficiaire ?? r?.beneficiary;
-  const legacyProductName = r?.designation ?? r?.product_name;
-  const legacyDate = r?.date_prelevement ?? r?.date_exit;
-
-  return {
-    exit_id: r?.exit_id || r?._id || null,
-    exit_number: r?.exit_number || null,
-    date_exit: legacyDate || null,
-
-    beneficiary: legacyBenef || 'N/A',
-    direction: r?.direction || r?.direction_laboratory || null,
-
-    product_id: r?.product_id || r?.product?._id || null,
-    product_code: r?.product_code || r?.product?.code_product || null,
-    product_name: legacyProductName || r?.product?.name || '-',
-    product_family: r?.product_family || r?.product?.family || null,
-    product_category: r?.product_category || r?.product?.category?.name || null,
-    unit: r?.unit || r?.product?.unite || 'Unite',
-
-    quantity: Number(r?.quantity || 0),
-    motif: r?.motif || r?.note || null,
-    request_status: r?.request_status || null,
-  };
-}
-
-function buildQuickRange(key) {
-  const now = new Date();
-  const to = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999);
-
-  if (key === 'today') {
-    const from = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0, 0);
-    return { from, to };
-  }
-  if (key === '7d') {
-    const from = new Date(to.getTime() - 6 * 24 * 60 * 60 * 1000);
-    return { from, to };
-  }
-  if (key === '30d') {
-    const from = new Date(to.getTime() - 29 * 24 * 60 * 60 * 1000);
-    return { from, to };
-  }
-  if (key === 'month') {
-    const from = new Date(to.getFullYear(), to.getMonth(), 1);
-    return { from, to };
-  }
-  return null;
-}
-
-function safeText(value, fallback = '-') {
-  const s = String(value ?? '').trim();
-  return s ? s : fallback;
-}
-
-function computeAverages(rows, keyFn) {
-  const map = new Map();
-  (rows || []).forEach((row) => {
-    const key = String(keyFn(row) || '').trim();
-    if (!key) return;
-    const prev = map.get(key) || { sum: 0, count: 0 };
-    prev.sum += Number(row?.quantity || 0);
-    prev.count += 1;
-    map.set(key, prev);
-  });
-  const avg = new Map();
-  map.forEach((v, k) => {
-    avg.set(k, v.count ? v.sum / v.count : 0);
-  });
-  return avg;
-}
-
-function computeStatus(row, avgByProduct, avgByBeneficiary) {
-  const qty = Number(row?.quantity || 0);
-  if (qty <= 0) return { label: 'Normal', tone: 'ok', icon: CheckCircle2 };
-
-  const productKey = String(row?.product_id || row?.product_code || row?.product_name || '').trim();
-  const beneficiaryKey = String(row?.beneficiary || '').trim();
-  const productAvg = Number(avgByProduct.get(productKey) || 0);
-  const beneficiaryAvg = Number(avgByBeneficiary.get(beneficiaryKey) || 0);
-
-  const isSensitive = String(row?.product_family || '').toLowerCase() === 'produit_chimique';
-
-  const highThreshold = Math.max(productAvg * 1.8, beneficiaryAvg * 2.0, 5);
-  const verifyThreshold = Math.max(productAvg * 3.0, beneficiaryAvg * 3.2, isSensitive ? 8 : 12);
-
-  if (qty >= verifyThreshold || (isSensitive && qty >= Math.max(productAvg * 2.0, 6))) {
-    return { label: 'À vérifier', tone: 'danger', icon: AlertTriangle };
-  }
-  if (qty >= highThreshold) {
-    return { label: 'Consommation élevée', tone: 'warn', icon: TrendingUp };
-  }
-  return { label: 'Normal', tone: 'ok', icon: CheckCircle2 };
-}
-
+/* ─── Component ──────────────────────────────────────────────── */
 export default function ConsommationResp({ userName, onLogout }) {
   const toast = useToast();
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const initialFrom = validIsoDate(searchParams.get('from'));
+  const initialTo = validIsoDate(searchParams.get('to'));
+  const hasInitialRange = Boolean(initialFrom || initialTo);
 
-  const [sidebarCollapsed, setSidebarCollapsed] = useState(() => (typeof window !== 'undefined' ? window.innerWidth <= 768 : false));
-  const [isLoading, setIsLoading] = useState(false);
+  // filtres
+  const [fromDate, setFromDate] = useState(() => initialFrom || isoDaysAgo(6));
+  const [toDate, setToDate] = useState(() => initialTo || isoToday());
+  const [quickMode, setQuickMode] = useState(() => (hasInitialRange ? '' : '7d'));
+  const [searchQ, setSearchQ] = useState(() => String(searchParams.get('q') || ''));
+  const [selDir, setSelDir] = useState('');
+  const [selCat, setSelCat] = useState('');
+  const [selStat, setSelStat] = useState('');
 
-  const [from, setFrom] = useState(() => {
-    const qp = String(searchParams.get('from') || '').trim();
-    if (qp) {
-      const dt = new Date(qp);
-      if (!Number.isNaN(dt.getTime())) return formatIsoDate(dt);
-    }
-    const preset = String(searchParams.get('days') || searchParams.get('preset') || '').trim().toLowerCase();
-    const quickKey = preset === '1' || preset === 'today' ? 'today' : preset === '7' || preset === '7d' ? '7d' : preset === '30' || preset === '30d' ? '30d' : preset === 'month' ? 'month' : '';
-    const range = quickKey ? buildQuickRange(quickKey) : null;
-    if (range) return formatIsoDate(range.from);
+  // données
+  const [allRows, setAllRows] = useState([]);
+  const [loading, setLoading] = useState(false);
 
-    const d = new Date();
-    d.setDate(d.getDate() - 6);
-    return formatIsoDate(d);
-  });
+  // panneau bénéficiaire
+  const [activeBeneficiary, setActiveBeneficiary] = useState(null);
 
-  const [to, setTo] = useState(() => {
-    const qp = String(searchParams.get('to') || '').trim();
-    if (qp) {
-      const dt = new Date(qp);
-      if (!Number.isNaN(dt.getTime())) return formatIsoDate(dt);
-    }
-    const preset = String(searchParams.get('days') || searchParams.get('preset') || '').trim().toLowerCase();
-    const quickKey = preset === '1' || preset === 'today' ? 'today' : preset === '7' || preset === '7d' ? '7d' : preset === '30' || preset === '30d' ? '30d' : preset === 'month' ? 'month' : '';
-    const range = quickKey ? buildQuickRange(quickKey) : null;
-    if (range) return formatIsoDate(range.to);
-    return formatIsoDate(new Date());
-  });
+  // export dropdown
+  const [showExportMenu, setShowExportMenu] = useState(false);
 
-  const [search, setSearch] = useState(() => String(searchParams.get('q') || '').trim());
-  const [directionFilter, setDirectionFilter] = useState(() => String(searchParams.get('direction') || '').trim());
-  const [categoryFilter, setCategoryFilter] = useState(() => String(searchParams.get('category') || '').trim());
-  const [typeFilter, setTypeFilter] = useState(() => String(searchParams.get('type') || '').trim());
-
-  const [rows, setRows] = useState([]);
+  // pagination
   const [page, setPage] = useState(1);
-  const [selectedRow, setSelectedRow] = useState(null);
 
-  useEffect(() => {
-    const qp = String(searchParams.get('q') || '').trim();
-    if (qp) setSearch(qp);
-    const dir = String(searchParams.get('direction') || '').trim();
-    if (dir) setDirectionFilter(dir);
-    const cat = String(searchParams.get('category') || '').trim();
-    if (cat) setCategoryFilter(cat);
-    const type = String(searchParams.get('type') || '').trim();
-    if (type) setTypeFilter(type);
-
-    const qpFrom = String(searchParams.get('from') || '').trim();
-    const qpTo = String(searchParams.get('to') || '').trim();
-    if (qpFrom) {
-      const dt = new Date(qpFrom);
-      if (!Number.isNaN(dt.getTime())) setFrom(formatIsoDate(dt));
-    }
-    if (qpTo) {
-      const dt = new Date(qpTo);
-      if (!Number.isNaN(dt.getTime())) setTo(formatIsoDate(dt));
-    }
-  }, [searchParams]);
-
-  const load = useCallback(async () => {
-    setIsLoading(true);
+  /* ── chargement ── */
+  const loadData = useCallback(async (from, to) => {
+    setLoading(true);
     try {
-      const data = await get(`/reports/consumption/person?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`);
-      const raw = Array.isArray(data?.rows) ? data.rows : [];
-      setRows(raw.map(normalizeRow));
-      setPage(1);
+      const res = await get(`/responsable/consommation?from=${from}&to=${to}`);
+      setAllRows(Array.isArray(res?.rows) ? res.rows : res?.data || []);
     } catch (err) {
-      setRows([]);
-      toast.error(err?.message || 'Erreur chargement consommation');
+      toast.error(getUiErrorMessage(err, 'Chargement des données échoué'));
     } finally {
-      setIsLoading(false);
+      setLoading(false);
     }
-  }, [from, to, toast]);
+  }, [toast]);
 
-  useEffect(() => {
-    load();
-  }, [load]);
+  useEffect(() => { loadData(fromDate, toDate); }, [fromDate, loadData, toDate]);
 
-  const filtered = useMemo(() => {
-    const q = String(search || '').trim().toLowerCase();
-    return (rows || []).filter((r) => {
-      if (directionFilter) {
-        const dir = String(r?.direction || '').trim();
-        if (dir !== directionFilter) return false;
-      }
-      if (categoryFilter) {
-        const cat = String(r?.product_category || '').trim();
-        if (cat !== categoryFilter) return false;
-      }
-      if (typeFilter) {
-        const type = String(r?.product_family || '').trim();
-        if (type !== typeFilter) return false;
-      }
+  /* ── quick range ── */
+  function applyQuick(k) {
+    setQuickMode(k);
+    const now = isoToday();
+    let from = now;
+    if (k === 'today') from = now;
+    else if (k === '7d') from = isoDaysAgo(6);
+    else if (k === '30d') from = isoDaysAgo(29);
+    else if (k === 'month') from = isoMonthStart();
+    setFromDate(from);
+    setToDate(now);
+  }
 
+  /* ── filtres ── */
+  const filteredRows = useMemo(() => {
+    const q = searchQ.trim().toLowerCase();
+    const avgProd = computeAvgMap(allRows, (r) => r.product_code || r.product_name);
+    const avgBenef = computeAvgMap(allRows, (r) => r.beneficiary);
+    return allRows.filter((r) => {
+      if (selDir && r.direction !== selDir) return false;
+      if (selCat && r.product_category !== selCat) return false;
+      if (selStat) { if (computeStatus(r, avgProd, avgBenef) !== selStat) return false; }
       if (!q) return true;
-      const beneficiary = String(r?.beneficiary || '').toLowerCase();
-      const direction = String(r?.direction || '').toLowerCase();
-      const product = String(r?.product_name || '').toLowerCase();
-      const code = String(r?.product_code || '').toLowerCase();
-      const category = String(r?.product_category || '').toLowerCase();
-      const family = String(r?.product_family || '').toLowerCase();
-      return beneficiary.includes(q) || product.includes(q) || code.includes(q) || direction.includes(q) || category.includes(q) || family.includes(q);
+      return [r.beneficiary, r.direction, r.product_name, r.product_code].some(
+        (v) => v && v.toLowerCase().includes(q),
+      );
     });
-  }, [rows, search, directionFilter, categoryFilter, typeFilter]);
+  }, [allRows, searchQ, selDir, selCat, selStat]);
 
+  /* ── KPIs ── */
   const kpis = useMemo(() => {
-    const beneficiaries = new Set(filtered.map((r) => String(r?.beneficiary || 'N/A')));
-    const total = sumQty(filtered);
-
-    const byProduct = new Map();
-    const byDirection = new Map();
-    filtered.forEach((r) => {
-      const pKey = String(r?.product_id || r?.product_code || r?.product_name || '-');
-      byProduct.set(pKey, (byProduct.get(pKey) || 0) + Number(r?.quantity || 0));
-      const dKey = String(r?.direction || '').trim();
-      if (dKey) byDirection.set(dKey, (byDirection.get(dKey) || 0) + Number(r?.quantity || 0));
+    const benefs = new Set(filteredRows.map((r) => r.beneficiary));
+    const total = filteredRows.reduce((a, r) => a + safeNum(r.quantity), 0);
+    const byProd = new Map();
+    const byDir = new Map();
+    filteredRows.forEach((r) => {
+      const pk = r.product_name; byProd.set(pk, (byProd.get(pk) || 0) + safeNum(r.quantity));
+      const dk = r.direction; if (dk) byDir.set(dk, (byDir.get(dk) || 0) + safeNum(r.quantity));
     });
+    let topP = null, topPQ = 0;
+    byProd.forEach((q, k) => { if (q > topPQ) { topPQ = q; topP = k; } });
+    let topD = null, topDQ = 0;
+    byDir.forEach((q, k) => { if (q > topDQ) { topDQ = q; topD = k; } });
+    const avgProd = computeAvgMap(filteredRows, (r) => r.product_code || r.product_name);
+    const avgBenef = computeAvgMap(filteredRows, (r) => r.beneficiary);
+    const alerts = filteredRows.filter((r) => computeStatus(r, avgProd, avgBenef) !== 'ok').length;
+    return { lines: filteredRows.length, benefs: benefs.size, total, topP, topPQ, topD, alerts };
+  }, [filteredRows]);
 
-    let topProductKey = null;
-    let topProductQty = 0;
-    byProduct.forEach((qty, key) => {
-      if (qty > topProductQty) {
-        topProductQty = qty;
-        topProductKey = key;
-      }
+  /* ── top bénéficiaires ── */
+  const topBenefs = useMemo(() => {
+    const m = new Map();
+    filteredRows.forEach((r) => m.set(r.beneficiary, (m.get(r.beneficiary) || 0) + safeNum(r.quantity)));
+    return [...m.entries()].sort((a, b) => b[1] - a[1]).slice(0, 8);
+  }, [filteredRows]);
+
+  /* ── top produits ── */
+  const topProds = useMemo(() => {
+    const m = new Map();
+    filteredRows.forEach((r) => {
+      const k = r.product_name; m.set(k, (m.get(k) || 0) + safeNum(r.quantity));
     });
+    return [...m.entries()].sort((a, b) => b[1] - a[1]).slice(0, 8);
+  }, [filteredRows]);
 
-    const topProductRow = topProductKey
-      ? filtered.find((r) => String(r?.product_id || r?.product_code || r?.product_name || '-') === String(topProductKey))
-      : null;
+  /* ── options filtres ── */
+  const dirOptions = useMemo(() => [...new Set(allRows.map((r) => r.direction).filter(Boolean))].sort(), [allRows]);
+  const catOptions = useMemo(() => [...new Set(allRows.map((r) => r.product_category).filter(Boolean))].sort(), [allRows]);
 
-    let topDirection = null;
-    let topDirectionQty = 0;
-    byDirection.forEach((qty, key) => {
-      if (qty > topDirectionQty) {
-        topDirectionQty = qty;
-        topDirection = key;
-      }
-    });
+  /* ── pagination ── */
+  const totalPages = Math.max(1, Math.ceil(filteredRows.length / PAGE_SIZE));
+  const pageRows = filteredRows.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
+  const avgProd = useMemo(() => computeAvgMap(filteredRows, (r) => r.product_code || r.product_name), [filteredRows]);
+  const avgBenef = useMemo(() => computeAvgMap(filteredRows, (r) => r.beneficiary), [filteredRows]);
 
-    return {
-      count: filtered.length,
-      beneficiaries: beneficiaries.size,
-      total,
-      topProduct: topProductRow ? { name: topProductRow.product_name || '-', qty: topProductQty } : null,
-      topDirection: topDirection ? { name: topDirection, qty: topDirectionQty } : null,
-    };
-  }, [filtered]);
+  const allBeneficiaries = useMemo(() => [...new Set(allRows.map((r) => r.beneficiary).filter(Boolean))].sort(), [allRows]);
 
-  const directionOptions = useMemo(() => {
-    const set = new Set();
-    (rows || []).forEach((r) => {
-      const v = String(r?.direction || '').trim();
-      if (v) set.add(v);
-    });
-    return Array.from(set).sort((a, b) => a.localeCompare(b, 'fr'));
-  }, [rows]);
+  /* ── export CSV ── */
+  function exportCsv() {
+    const hdr = 'Date,Bénéficiaire,Direction,Produit,Code,Catégorie,Quantité,Unité,Motif';
+    const lines = filteredRows.map((r) =>
+      [fmt(r.date_exit), r.beneficiary, r.direction, r.product_name, r.product_code, r.product_category, r.quantity, r.unit, r.motif || '']
+        .map((v) => `"${String(v ?? '').replace(/"/g, '""')}"`).join(','),
+    );
+    const blob = new Blob([[hdr, ...lines].join('\n')], { type: 'text/csv' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = `consommation_${fromDate}_${toDate}.csv`;
+    a.click();
+    setShowExportMenu(false);
+  }
 
-  const categoryOptions = useMemo(() => {
-    const set = new Set();
-    (rows || []).forEach((r) => {
-      const v = String(r?.product_category || '').trim();
-      if (v) set.add(v);
-    });
-    return Array.from(set).sort((a, b) => a.localeCompare(b, 'fr'));
-  }, [rows]);
+  /* ── export PDF (placeholder pour future intégration) ── */
+  function exportPdf() {
+    toast.info('Rapport PDF — Génération en cours...');
+    // À implémenter avec jsPDF ou similaire
+    setShowExportMenu(false);
+  }
 
-  const typeOptions = useMemo(() => {
-    const set = new Set();
-    (rows || []).forEach((r) => {
-      const v = String(r?.product_family || '').trim();
-      if (v) set.add(v);
-    });
-    return Array.from(set).sort((a, b) => a.localeCompare(b, 'fr'));
-  }, [rows]);
-
-  const topBeneficiaries = useMemo(() => {
-    const map = new Map();
-    filtered.forEach((r) => {
-      const key = String(r?.beneficiary || 'N/A');
-      map.set(key, (map.get(key) || 0) + Number(r?.quantity || 0));
-    });
-    const rowsAgg = Array.from(map.entries())
-      .map(([name, qty]) => ({ name, qty: Number(qty || 0) }))
-      .sort((a, b) => b.qty - a.qty);
-    const max = rowsAgg.length ? rowsAgg[0].qty : 0;
-    return rowsAgg.slice(0, 10).map((r) => ({ ...r, ratio: max ? r.qty / max : 0 }));
-  }, [filtered]);
-
-  const topProducts = useMemo(() => {
-    const map = new Map();
-    filtered.forEach((r) => {
-      const key = String(r?.product_id || r?.product_code || r?.product_name || '-');
-      const prev = map.get(key) || {
-        key,
-        code: r?.product_code || '-',
-        name: r?.product_name || '-',
-        qty: 0,
-      };
-      prev.qty += Number(r?.quantity || 0);
-      map.set(key, prev);
-    });
-    const rowsAgg = Array.from(map.values()).sort((a, b) => b.qty - a.qty);
-    const max = rowsAgg.length ? rowsAgg[0].qty : 0;
-    return rowsAgg.slice(0, 10).map((r) => ({ ...r, ratio: max ? r.qty / max : 0 }));
-  }, [filtered]);
-
-  const dailyTrend = useMemo(() => {
-    const map = new Map();
-    (filtered || []).forEach((r) => {
-      const day = r?.date_exit ? formatIsoDate(r.date_exit) : '';
-      if (!day) return;
-      map.set(day, (map.get(day) || 0) + Number(r?.quantity || 0));
-    });
-    return Array.from(map.entries())
-      .map(([day, qty]) => ({ day, qty: Number(qty || 0) }))
-      .sort((a, b) => new Date(a.day) - new Date(b.day));
-  }, [filtered]);
-
-  const quickKeyActive = useMemo(() => {
-    const rangeToday = buildQuickRange('today');
-    const range7 = buildQuickRange('7d');
-    const range30 = buildQuickRange('30d');
-    const rangeMonth = buildQuickRange('month');
-    if (!rangeToday || !range7 || !range30 || !rangeMonth) return '';
-
-    const same = (range) => formatIsoDate(range.from) === from && formatIsoDate(range.to) === to;
-    if (same(rangeToday)) return 'today';
-    if (same(range7)) return '7d';
-    if (same(range30)) return '30d';
-    if (same(rangeMonth)) return 'month';
-    return '';
-  }, [from, to]);
-
-  const applyQuick = useCallback((key) => {
-    const range = buildQuickRange(key);
-    if (!range) return;
-    setFrom(formatIsoDate(range.from));
-    setTo(formatIsoDate(range.to));
-  }, []);
-
-  const avgByProduct = useMemo(() => computeAverages(filtered, (r) => r?.product_id || r?.product_code || r?.product_name), [filtered]);
-  const avgByBeneficiary = useMemo(() => computeAverages(filtered, (r) => r?.beneficiary), [filtered]);
-
-  const totalPages = useMemo(() => Math.max(1, Math.ceil(filtered.length / 20)), [filtered.length]);
-  const currentPage = clamp(page, 1, totalPages);
-  const pageRows = useMemo(() => {
-    const start = (currentPage - 1) * 20;
-    return filtered.slice(start, start + 20);
-  }, [currentPage, filtered]);
-
-  useEffect(() => {
-    if (page > totalPages) setPage(totalPages);
-  }, [page, totalPages]);
-
-  const periodSummary = useMemo(() => {
-    if (!filtered.length) return 'Aucune consommation enregistrée sur cette période.';
-
-    const parts = [];
-    const beneficiaries = kpis.beneficiaries || 0;
-    const totalQty = Math.round(Number(kpis.total || 0));
-    parts.push(`${beneficiaries} bénéficiaire${beneficiaries > 1 ? 's' : ''} ont consommé ${totalQty} article${totalQty > 1 ? 's' : ''}.`);
-    if (kpis.topProduct?.name) parts.push(`Le produit le plus demandé est “${kpis.topProduct.name}”.`);
-    if (kpis.topDirection?.name) parts.push(`La direction la plus consommatrice est “${kpis.topDirection.name}”.`);
-    return parts.join(' ');
-  }, [filtered.length, kpis.beneficiaries, kpis.total, kpis.topDirection?.name, kpis.topProduct?.name]);
+  const maxBar = topBenefs[0]?.[1] || 1;
+  const maxProd = topProds[0]?.[1] || 1;
 
   return (
-    <ProtectedPage userName={userName}>
-      <div className="app-layout">
-        <div className={`sidebar-backdrop ${sidebarCollapsed ? 'hidden' : ''}`} onClick={() => setSidebarCollapsed(true)} />
-        <SidebarResp collapsed={sidebarCollapsed} onToggle={() => setSidebarCollapsed((p) => !p)} onLogout={onLogout} userName={userName} />
+    <div className="admin-layout">
+      <SidebarResp
+        collapsed={sidebarCollapsed}
+        onToggle={() => setSidebarCollapsed((p) => !p)}
+        onLogout={onLogout}
+        userName={userName}
+      />
 
-        <div className="main-container">
-          <HeaderPage
-            userName={userName}
-            title="Consommation par bénéficiaire"
-            subtitle="Suivi des sorties de stock par bénéficiaire, produit et direction."
-            showSearch={false}
-            onRefresh={load}
-            onMenuClick={() => setSidebarCollapsed((p) => !p)}
-          />
+      {/* Overlay quand le panneau est ouvert */}
+      {activeBeneficiary && (
+        <div
+          className="cons-panel-overlay"
+          onClick={() => setActiveBeneficiary(null)}
+          aria-hidden="true"
+        />
+      )}
 
-          <main className="main-content">
-            {isLoading && <LoadingSpinner overlay text="Chargement..." />}
+      <div className={`admin-main ${sidebarCollapsed ? 'collapsed' : ''} ${activeBeneficiary ? 'panel-open' : ''}`}>
+        <HeaderPage
+          title="Consommation par bénéficiaire"
+          subtitle="Suivi des sorties de stock par bénéficiaire, produit et direction."
+          icon={<TrendingUp size={22} />}
+          hideGlobalSearch={true}
+        />
 
-            <div className="resp-consumption">
-              <section className="cons-controls" aria-label="Filtres">
-                <div className="cons-top-row">
-                  <div className="cons-date">
-                    <Calendar size={18} />
-                    <label>
-                      Date début
-                      <input type="date" value={from} onChange={(e) => setFrom(e.target.value)} />
-                    </label>
-                    <label>
-                      Date fin
-                      <input type="date" value={to} onChange={(e) => setTo(e.target.value)} />
-                    </label>
-                    <button type="button" className="btn btn-secondary btn-sm" onClick={load}>
-                      <RefreshCw size={14} /> Actualiser
-                    </button>
-                  </div>
+        {loading && <LoadingSpinner overlay text="Chargement..." />}
 
-                  <div className="cons-quick" aria-label="Filtres rapides">
-                    <button type="button" className={`cons-pill ${quickKeyActive === 'today' ? 'active' : ''}`} onClick={() => applyQuick('today')} disabled={isLoading}>
-                      Aujourd’hui
-                    </button>
-                    <button type="button" className={`cons-pill ${quickKeyActive === '7d' ? 'active' : ''}`} onClick={() => applyQuick('7d')} disabled={isLoading}>
-                      7 jours
-                    </button>
-                    <button type="button" className={`cons-pill ${quickKeyActive === '30d' ? 'active' : ''}`} onClick={() => applyQuick('30d')} disabled={isLoading}>
-                      30 jours
-                    </button>
-                    <button type="button" className={`cons-pill ${quickKeyActive === 'month' ? 'active' : ''}`} onClick={() => applyQuick('month')} disabled={isLoading}>
-                      Mois en cours
-                    </button>
-                  </div>
-                </div>
+        <div className="resp-consumption">
 
-                <div className="cons-filter-row">
-                  <input
-                    className="cons-search"
-                    placeholder="Rechercher un bénéficiaire ou un produit..."
-                    value={search}
-                    onChange={(e) => { setSearch(e.target.value); setPage(1); }}
-                  />
-
-                  <div className="cons-selects" aria-label="Filtres avancés">
-                    <label className="cons-select">
-                      <span>Direction</span>
-                      <select value={directionFilter} onChange={(e) => { setDirectionFilter(e.target.value); setPage(1); }}>
-                        <option value="">Toutes</option>
-                        {directionOptions.map((d) => (
-                          <option key={d} value={d}>{d}</option>
-                        ))}
-                      </select>
-                    </label>
-
-                    <label className="cons-select">
-                      <span>Catégorie</span>
-                      <select value={categoryFilter} onChange={(e) => { setCategoryFilter(e.target.value); setPage(1); }}>
-                        <option value="">Toutes</option>
-                        {categoryOptions.map((c) => (
-                          <option key={c} value={c}>{c}</option>
-                        ))}
-                      </select>
-                    </label>
-
-                    <label className="cons-select">
-                      <span>Type</span>
-                      <select value={typeFilter} onChange={(e) => { setTypeFilter(e.target.value); setPage(1); }}>
-                        <option value="">Tous</option>
-                        {typeOptions.map((t) => (
-                          <option key={t} value={t}>{t}</option>
-                        ))}
-                      </select>
-                    </label>
-                  </div>
-                </div>
-              </section>
-
-              <section className="cons-kpis" aria-label="Indicateurs">
-                <article className="cons-kpi" style={{ '--i': 1 }}>
-                  <div className="cons-kpi-head">
-                    <div className="cons-kpi-icon info"><BarChart3 size={16} /></div>
-                    <span>Lignes</span>
-                  </div>
-                  <strong className="cons-kpi-value"><AnimatedNumber value={kpis.count} /></strong>
-                  <div className="cons-kpi-note">Nombre de lignes de consommation</div>
-                </article>
-
-                <article className="cons-kpi" style={{ '--i': 2 }}>
-                  <div className="cons-kpi-head">
-                    <div className="cons-kpi-icon info"><Users size={16} /></div>
-                    <span>Bénéficiaires</span>
-                  </div>
-                  <strong className="cons-kpi-value"><AnimatedNumber value={kpis.beneficiaries} /></strong>
-                  <div className="cons-kpi-note">Personnes ou services concernés</div>
-                </article>
-
-                <article className="cons-kpi" style={{ '--i': 3 }}>
-                  <div className="cons-kpi-head">
-                    <div className="cons-kpi-icon info"><Package size={16} /></div>
-                    <span>Quantité totale</span>
-                  </div>
-                  <strong className="cons-kpi-value"><AnimatedNumber value={Math.round(kpis.total)} /></strong>
-                  <div className="cons-kpi-note">Somme des quantités sorties</div>
-                </article>
-
-                <article className="cons-kpi" style={{ '--i': 4 }}>
-                  <div className="cons-kpi-head">
-                    <div className="cons-kpi-icon info"><TrendingUp size={16} /></div>
-                    <span>Top produit</span>
-                  </div>
-                  <strong className="cons-kpi-value">{kpis.topProduct?.name ? safeText(kpis.topProduct.name, '-') : '-'}</strong>
-                  <div className="cons-kpi-note">{kpis.topProduct ? `${Math.round(kpis.topProduct.qty)} unité(s)` : 'Aucun top produit'}</div>
-                </article>
-
-                <article className="cons-kpi" style={{ '--i': 5 }}>
-                  <div className="cons-kpi-head">
-                    <div className="cons-kpi-icon info"><Building2 size={16} /></div>
-                    <span>Direction</span>
-                  </div>
-                  <strong className="cons-kpi-value">{kpis.topDirection?.name ? safeText(kpis.topDirection.name, '-') : '-'}</strong>
-                  <div className="cons-kpi-note">{kpis.topDirection ? 'Direction la plus consommatrice' : 'Non disponible'}</div>
-                </article>
-              </section>
-
-              <section className="cons-summary" aria-label="Résumé de la période">
-                <div className="cons-summary-head">
-                  <div className="cons-summary-title">
-                    <Tag size={15} />
-                    <strong>Résumé de la période</strong>
-                  </div>
-                  <div className="cons-summary-meta">{from} → {to}</div>
-                </div>
-                <div className={`cons-summary-body ${filtered.length ? '' : 'empty'}`}>
-                  {periodSummary}
-                </div>
-              </section>
-
-              <section className="cons-charts" aria-label="Graphiques">
-                <article className="cons-chart-card" aria-label="Top bénéficiaires">
-                  <div className="cons-chart-head">
-                    <h3><Users size={16} /> Top bénéficiaires</h3>
-                    <span>Qui consomme le plus</span>
-                  </div>
-                  {topBeneficiaries.length ? (
-                    <div className="cons-bars">
-                      {topBeneficiaries.slice(0, 8).map((row) => (
-                        <button
-                          type="button"
-                          className="cons-bar-row"
-                          key={row.name}
-                          onClick={() => setSearch(row.name)}
-                          title="Cliquer pour filtrer"
-                        >
-                          <span className="cons-bar-label">{safeText(row.name, 'N/A')}</span>
-                          <span className="cons-bar-track" aria-hidden="true">
-                            <span className="cons-bar-fill" style={{ width: `${Math.round(row.ratio * 100)}%` }} />
-                          </span>
-                          <span className="cons-bar-value">{Math.round(row.qty)}</span>
-                        </button>
-                      ))}
-                    </div>
-                  ) : (
-                    <div className="cons-empty-mini">Aucune donnée sur cette période.</div>
-                  )}
-                  <p className="cons-chart-note">Astuce : cliquez sur un nom pour filtrer la liste.</p>
-                </article>
-
-                <article className="cons-chart-card" aria-label="Top produits consommés">
-                  <div className="cons-chart-head">
-                    <h3><Package size={16} /> Top produits consommés</h3>
-                    <span>Produits les plus sortis</span>
-                  </div>
-                  {topProducts.length ? (
-                    <div className="cons-bars">
-                      {topProducts.slice(0, 8).map((row) => (
-                        <button
-                          type="button"
-                          className="cons-bar-row"
-                          key={row.key}
-                          onClick={() => setSearch(row.code && row.code !== '-' ? row.code : row.name)}
-                          title="Cliquer pour filtrer"
-                        >
-                          <span className="cons-bar-label" title={row.name}>{row.code || '-'}</span>
-                          <span className="cons-bar-track" aria-hidden="true">
-                            <span className="cons-bar-fill" style={{ width: `${Math.round(row.ratio * 100)}%` }} />
-                          </span>
-                          <span className="cons-bar-value">{Math.round(row.qty)}</span>
-                        </button>
-                      ))}
-                    </div>
-                  ) : (
-                    <div className="cons-empty-mini">Aucune donnée sur cette période.</div>
-                  )}
-                  <p className="cons-chart-note">Astuce : cliquez sur un code pour filtrer la liste.</p>
-                </article>
-
-                <article className="cons-chart-card" aria-label="Évolution des consommations">
-                  <div className="cons-chart-head">
-                    <h3><TrendingUp size={16} /> Évolution des consommations</h3>
-                    <span>Sorties par jour</span>
-                  </div>
-                  {dailyTrend.length > 1 ? (
-                    <div className="cons-line-wrap">
-                      {(() => {
-                        const WIDTH = 520;
-                        const HEIGHT = 190;
-                        const PAD_X = 18;
-                        const PAD_Y = 16;
-                        const values = dailyTrend.map((d) => d.qty);
-                        const min = 0;
-                        const max = Math.max(...values, 1);
-                        const coords = toLineCoords(values, min, max, WIDTH, HEIGHT, PAD_X, PAD_Y);
-                        const labels = dailyTrend.map((d) => formatDayLabel(d.day));
-
-                        return (
-                          <>
-                            <svg viewBox={`0 0 ${WIDTH} ${HEIGHT}`} className="cons-line-svg" preserveAspectRatio="none">
-                              <line x1={PAD_X} y1={HEIGHT - PAD_Y} x2={WIDTH - PAD_X} y2={HEIGHT - PAD_Y} className="cons-axis" />
-                              <path d={toAreaPath(coords, HEIGHT, PAD_Y)} className="cons-area" />
-                              <polyline points={toPolylinePoints(coords)} className="cons-line" />
-                              {coords.length > 0 && (
-                                <circle cx={coords[coords.length - 1].x} cy={coords[coords.length - 1].y} r="3.8" className="cons-point" />
-                              )}
-                            </svg>
-                            <div className="cons-xlabels" style={{ gridTemplateColumns: `repeat(${Math.max(2, labels.length)}, minmax(0, 1fr))` }}>
-                              {labels.map((label) => (
-                                <span key={label}>{label}</span>
-                              ))}
-                            </div>
-                          </>
-                        );
-                      })()}
-                    </div>
-                  ) : (
-                    <div className="cons-empty-mini">Pas assez de jours pour afficher une courbe.</div>
-                  )}
-                  <p className="cons-chart-note">Lecture : une hausse signifie plus de sorties de stock.</p>
-                </article>
-              </section>
-
-              <section className="cons-table-wrap" aria-label="Tableau détaillé">
-                <div className="cons-table-head">
-                  <div className="cons-table-title">
-                    <strong>Tableau détaillé</strong>
-                    <span>{filtered.length} ligne(s)</span>
-                  </div>
-                  <div className="cons-table-actions">
-                    <button type="button" className="cons-link" onClick={() => navigate('/responsable/transactions')} disabled={isLoading}>
-                      Voir transactions <ArrowUpRight size={14} />
-                    </button>
-                  </div>
-                </div>
-
-                {filtered.length === 0 ? (
-                  <div className="empty-state">
-                    <h4>Aucune consommation trouvée</h4>
-                    <p>Aucune sortie de stock n’a été enregistrée pour cette période. Essayez une période plus large ou consultez les transactions récentes.</p>
-                    <div className="empty-actions">
-                      <button type="button" className="btn btn-primary" onClick={() => applyQuick('30d')} disabled={isLoading}>
-                        Afficher 30 derniers jours
-                      </button>
-                      <button type="button" className="btn btn-secondary" onClick={() => navigate('/responsable/transactions')} disabled={isLoading}>
-                        Voir transactions
-                      </button>
-                    </div>
-                  </div>
-                ) : (
-                  <>
-                    <table className="cons-table">
-                      <thead>
-                        <tr>
-                          <th>Date</th>
-                          <th>Bénéficiaire</th>
-                          <th>Direction</th>
-                          <th>Produit</th>
-                          <th>Catégorie</th>
-                          <th className="num">Quantité</th>
-                          <th>Unité</th>
-                          <th>Motif</th>
-                          <th>Statut</th>
-                          <th className="actions">Actions</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {pageRows.map((r, idx) => {
-                          const status = computeStatus(r, avgByProduct, avgByBeneficiary);
-                          const StatusIcon = status.icon;
-                          return (
-                            <tr key={`${r.exit_id || 'x'}-${idx}`}>
-                              <td className="nowrap">{formatDateTime(r.date_exit)}</td>
-                              <td>{safeText(r.beneficiary, 'N/A')}</td>
-                              <td>{safeText(r.direction, '-')}</td>
-                              <td>
-                                <div className="cons-product-cell">
-                                  <span className="cons-product-code">{safeText(r.product_code, '-')}</span>
-                                  <span className="cons-product-name">{safeText(r.product_name, '-')}</span>
-                                </div>
-                              </td>
-                              <td>{safeText(r.product_category, '-')}</td>
-                              <td className="num"><strong>{Number(r.quantity || 0)}</strong></td>
-                              <td>{safeText(r.unit, 'Unite')}</td>
-                              <td className="motif" title={safeText(r.motif, '-')}>{safeText(r.motif, '-')}</td>
-                              <td>
-                                <span className={`cons-status ${status.tone}`}>
-                                  <StatusIcon size={14} />
-                                  {status.label}
-                                </span>
-                              </td>
-                              <td className="actions">
-                                <button type="button" className="cons-action" onClick={() => setSelectedRow(r)} title="Voir détail">
-                                  <Eye size={14} /> Détail
-                                </button>
-                                <button
-                                  type="button"
-                                  className="cons-action"
-                                  onClick={() => navigate(`/responsable/produits?q=${encodeURIComponent(String(r.product_code || r.product_name || '').trim())}`)}
-                                  title="Voir produit"
-                                >
-                                  <Package size={14} /> Produit
-                                </button>
-                                <button
-                                  type="button"
-                                  className="cons-action"
-                                  onClick={() => navigate(`/responsable/transactions?type=sortie&q=${encodeURIComponent(String(r.product_code || r.product_name || '').trim())}`)}
-                                  title="Voir transaction"
-                                >
-                                  <ArrowUpRight size={14} /> Transaction
-                                </button>
-                              </td>
-                            </tr>
-                          );
-                        })}
-                      </tbody>
-                    </table>
-
-                    <div className="cons-pagination" aria-label="Pagination">
-                      <button type="button" className="cons-pager" onClick={() => setPage((p) => Math.max(1, p - 1))} disabled={currentPage <= 1}>
-                        Précédent
-                      </button>
-                      <div className="cons-page-indicator">Page <strong>{currentPage}</strong> / {totalPages}</div>
-                      <button type="button" className="cons-pager" onClick={() => setPage((p) => Math.min(totalPages, p + 1))} disabled={currentPage >= totalPages}>
-                        Suivant
-                      </button>
-                    </div>
-                  </>
-                )}
-              </section>
-
-              {selectedRow && (
-                <div className="cons-modal-backdrop" role="presentation" onClick={() => setSelectedRow(null)}>
-                  <div className="cons-modal" role="dialog" aria-label="Détail consommation" onClick={(e) => e.stopPropagation()}>
-                    <div className="cons-modal-head">
-                      <div className="cons-modal-title">
-                        <strong>Détail</strong>
-                        <span className="cons-modal-sub">Sortie de stock</span>
-                      </div>
-                      <button type="button" className="cons-modal-close" onClick={() => setSelectedRow(null)} aria-label="Fermer">
-                        <X size={18} />
-                      </button>
-                    </div>
-
-                    <div className="cons-modal-grid">
-                      <div className="cons-kv">
-                        <span>Date</span>
-                        <strong>{formatDateTime(selectedRow.date_exit)}</strong>
-                      </div>
-                      <div className="cons-kv">
-                        <span>Bénéficiaire</span>
-                        <strong>{safeText(selectedRow.beneficiary, 'N/A')}</strong>
-                      </div>
-                      <div className="cons-kv">
-                        <span>Direction</span>
-                        <strong>{safeText(selectedRow.direction, '-')}</strong>
-                      </div>
-                      <div className="cons-kv">
-                        <span>Produit</span>
-                        <strong>{safeText(selectedRow.product_name, '-')}</strong>
-                      </div>
-                      <div className="cons-kv">
-                        <span>Catégorie</span>
-                        <strong>{safeText(selectedRow.product_category, '-')}</strong>
-                      </div>
-                      <div className="cons-kv">
-                        <span>Type</span>
-                        <strong>{safeText(selectedRow.product_family, '-')}</strong>
-                      </div>
-                      <div className="cons-kv">
-                        <span>Quantité</span>
-                        <strong>{Number(selectedRow.quantity || 0)} {safeText(selectedRow.unit, 'Unite')}</strong>
-                      </div>
-                      <div className="cons-kv">
-                        <span>Motif</span>
-                        <strong>{safeText(selectedRow.motif, '-')}</strong>
-                      </div>
-                    </div>
-
-                    <div className="cons-modal-actions">
-                      <button
-                        type="button"
-                        className="btn btn-secondary"
-                        onClick={() => navigate(`/responsable/produits?q=${encodeURIComponent(String(selectedRow.product_code || selectedRow.product_name || '').trim())}`)}
-                      >
-                        Voir produit
-                      </button>
-                      <button
-                        type="button"
-                        className="btn btn-secondary"
-                        onClick={() => navigate(`/responsable/transactions?type=sortie&q=${encodeURIComponent(String(selectedRow.product_code || selectedRow.product_name || '').trim())}`)}
-                      >
-                        Voir transaction
-                      </button>
-                    </div>
-                  </div>
-                </div>
-              )}
+          {/* ── Filtres dates ── */}
+          <div className="cons-controls">
+            <div className="cons-top-row">
+              <div className="cons-date">
+                <label>
+                  <BarChart3 size={15} />
+                  Date début
+                  <input type="date" value={fromDate} onChange={(e) => { setFromDate(e.target.value); setQuickMode(''); }} />
+                </label>
+                <label>
+                  Date fin
+                  <input type="date" value={toDate} onChange={(e) => { setToDate(e.target.value); setQuickMode(''); }} />
+                </label>
+              </div>
+              <div className="cons-quick">
+                {[['today', "Aujourd'hui"], ['7d', '7 jours'], ['30d', '30 jours'], ['month', 'Mois en cours']].map(([k, lbl]) => (
+                  <button key={k} className={`cons-pill ${quickMode === k ? 'active' : ''}`} onClick={() => applyQuick(k)}>{lbl}</button>
+                ))}
+              </div>
+              <button
+                className="cons-pill"
+                onClick={() => loadData(fromDate, toDate)}
+                disabled={loading}
+              >
+                <RefreshCw size={13} /> Actualiser
+              </button>
             </div>
-          </main>
+
+            <div className="cons-filter-row">
+              <div className="cons-search-wrap">
+                <Search size={14} className="cons-search-icon" />
+                <input
+                  className="cons-search"
+                  placeholder="Rechercher un bénéficiaire ou un produit..."
+                  value={searchQ}
+                  onChange={(e) => { setSearchQ(e.target.value); setPage(1); }}
+                />
+              </div>
+              <div className="cons-selects">
+                <div className="cons-select">
+                  <span>Direction</span>
+                  <select value={selDir} onChange={(e) => { setSelDir(e.target.value); setPage(1); }}>
+                    <option value="">Toutes</option>
+                    {dirOptions.map((d) => <option key={d} value={d}>{d}</option>)}
+                  </select>
+                </div>
+                <div className="cons-select">
+                  <span>Catégorie</span>
+                  <select value={selCat} onChange={(e) => { setSelCat(e.target.value); setPage(1); }}>
+                    <option value="">Toutes</option>
+                    {catOptions.map((c) => <option key={c} value={c}>{c}</option>)}
+                  </select>
+                </div>
+                <div className="cons-select">
+                  <span>Statut</span>
+                  <select value={selStat} onChange={(e) => { setSelStat(e.target.value); setPage(1); }}>
+                    <option value="">Tous</option>
+                    <option value="ok">Normal</option>
+                    <option value="warn">Élevé</option>
+                    <option value="danger">À vérifier</option>
+                  </select>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* ── KPIs ── */}
+          <div className="cons-kpis">
+            {[
+              { label: 'Lignes', value: kpis.lines, sub: 'sorties enregistrées', icon: BarChart3 },
+              { label: 'Bénéficiaires', value: kpis.benefs, sub: 'personnes concernées', icon: Users },
+              { label: 'Quantité totale', value: kpis.total, sub: 'articles sortis', icon: Package },
+              { label: 'Top produit', value: kpis.topP || 'N/A', sub: kpis.topP ? kpis.topPQ + ' unités' : 'Aucun', icon: TrendingUp },
+              { label: 'Alertes', value: kpis.alerts, sub: 'lignes à surveiller', icon: Bell, alert: kpis.alerts > 0 },
+            ].map(({ label, value, sub, icon: Icon, alert }, i) => (
+              <div key={label} className={`cons-kpi ${alert ? 'cons-kpi-alert' : ''}`} style={{ '--i': i + 1 }}>
+                <div className="cons-kpi-head">
+                  <div className={`cons-kpi-icon ${alert ? 'danger' : ''}`}><Icon size={15} /></div>
+                  <span>{label}</span>
+                </div>
+                <div className="cons-kpi-value">{value}</div>
+                <div className="cons-kpi-note">{sub}</div>
+              </div>
+            ))}
+          </div>
+
+          {/* ── Résumé ── */}
+          <div className="cons-summary">
+            <div className="cons-summary-head">
+              <span className="cons-summary-title"><TrendingUp size={15} /> Résumé de la période</span>
+              <span className="cons-summary-meta">{fmt(fromDate)} au {fmt(toDate)}</span>
+            </div>
+            <div className={`cons-summary-body ${!filteredRows.length ? 'empty' : ''}`}>
+              {filteredRows.length
+                ? <>
+                    <strong>{kpis.benefs}</strong> bénéficiaire{kpis.benefs !== 1 ? 's' : ''} ont consommé{' '}
+                    <strong>{kpis.total}</strong> article{kpis.total !== 1 ? 's' : ''}. Produit le plus demandé&nbsp;:{' '}
+                    <strong>{kpis.topP || '-'}</strong>.{' '}
+                    {kpis.alerts > 0 && <span className="cons-alert-inline">⚠ {kpis.alerts} ligne{kpis.alerts > 1 ? 's' : ''} à surveiller.</span>}
+                    {' '}Direction la plus active : <strong>{kpis.topD || '-'}</strong>.
+                  </>
+                : <em>Aucune consommation enregistrée sur cette période.</em>}
+            </div>
+          </div>
+
+          {/* ── Graphiques ── */}
+          <div className="cons-charts">
+            {/* Top bénéficiaires */}
+            <div className="cons-chart-card">
+              <div className="cons-chart-head">
+                <h3><Users size={14} /> Top bénéficiaires <span>Cliquez pour voir le profil</span></h3>
+              </div>
+              <div className="cons-bars">
+                {topBenefs.length
+                  ? topBenefs.map(([name, qty]) => (
+                      <button
+                        key={name}
+                        type="button"
+                        className={`cons-bar-row ${activeBeneficiary === name ? 'active' : ''}`}
+                        onClick={() => setActiveBeneficiary(name === activeBeneficiary ? null : name)}
+                      >
+                        <span className="cons-bar-label">{name.split(' ')[0]}</span>
+                        <span className="cons-bar-track"><span className="cons-bar-fill" style={{ width: `${Math.round((qty / maxBar) * 100)}%` }} /></span>
+                        <span className="cons-bar-value">{qty}</span>
+                      </button>
+                    ))
+                  : <div className="cons-empty-mini">Aucune donnée</div>}
+              </div>
+            </div>
+
+            {/* Top produits */}
+            <div className="cons-chart-card">
+              <div className="cons-chart-head">
+                <h3><Package size={14} /> Top produits <span>Les plus sortis</span></h3>
+              </div>
+              <div className="cons-bars">
+                {topProds.length
+                  ? topProds.map(([name, qty]) => (
+                      <button
+                        key={name}
+                        type="button"
+                        className="cons-bar-row"
+                        onClick={() => setSearchQ(name)}
+                      >
+                        <span className="cons-bar-label" title={name}>{name}</span>
+                        <span className="cons-bar-track"><span className="cons-bar-fill" style={{ width: `${Math.round((qty / maxProd) * 100)}%` }} /></span>
+                        <span className="cons-bar-value">{qty}</span>
+                      </button>
+                    ))
+                  : <div className="cons-empty-mini">Aucune donnée</div>}
+              </div>
+            </div>
+
+            {/* Bénéficiaires actifs */}
+            <div className="cons-chart-card">
+              <div className="cons-chart-head">
+                <h3><Users size={14} /> Bénéficiaires actifs <span>Voir profil →</span></h3>
+              </div>
+              <div className="cons-bars">
+                {allBeneficiaries.slice(0, 8).map((name) => {
+                  const count = allRows.filter((r) => r.beneficiary === name).length;
+                  return (
+                    <button
+                      key={name}
+                      type="button"
+                      className={`cons-bar-row ${activeBeneficiary === name ? 'active' : ''}`}
+                      onClick={() => setActiveBeneficiary(name === activeBeneficiary ? null : name)}
+                    >
+                      <span className="cons-bar-label">{name.split(' ')[0]}</span>
+                      <span className="cons-bar-track"><span className="cons-bar-fill" style={{ width: `${Math.round((count / Math.max(...allBeneficiaries.map((b) => allRows.filter((r) => r.beneficiary === b).length), 1)) * 100)}%`, background: '#8b5cf6' }} /></span>
+                      <span className="cons-bar-value">{count}</span>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          </div>
+
+          {/* ── Tableau ── */}
+          <div className="cons-table-wrap">
+            <div className="cons-table-head">
+              <div className="cons-table-title">
+                <strong>Tableau détaillé</strong>
+                <span>{filteredRows.length} ligne{filteredRows.length !== 1 ? 's' : ''}</span>
+              </div>
+              <div className="cons-export-group">
+                <div className="cons-export-menu-wrap" style={{ position: 'relative' }}>
+                  <button 
+                    className="cons-link"
+                    onClick={() => setShowExportMenu(!showExportMenu)}
+                  >
+                    <Download size={13} /> Exporter ▾
+                  </button>
+                  {showExportMenu && (
+                    <div className="cons-export-dropdown">
+                      <button onClick={exportCsv} className="cons-export-option">
+                        <FileText size={12} /> Exporter CSV
+                      </button>
+                      <button onClick={exportPdf} className="cons-export-option">
+                        <FileText size={12} /> Rapport PDF
+                      </button>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            {pageRows.length ? (
+              <table className="cons-table">
+                <thead>
+                  <tr>
+                    <th>Date</th>
+                    <th>Bénéficiaire</th>
+                    <th>Direction</th>
+                    <th>Produit</th>
+                    <th>Catégorie</th>
+                    <th className="num">Qté</th>
+                    <th>Statut</th>
+                    <th className="actions">Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {pageRows.map((r, i) => {
+                    const s = computeStatus(r, avgProd, avgBenef);
+                    return (
+                      <tr key={r.id || i}>
+                        <td className="nowrap">{fmt(r.date_exit)}</td>
+                        <td>
+                          <button
+                            type="button"
+                            className="cons-benef-link"
+                            onClick={() => setActiveBeneficiary(r.beneficiary === activeBeneficiary ? null : r.beneficiary)}
+                          >
+                            {r.beneficiary}
+                          </button>
+                        </td>
+                        <td style={{ fontSize: 12 }}>{r.direction}</td>
+                        <td>
+                          <div className="cons-product-cell">
+                            <span className="cons-product-code">{r.product_code}</span>
+                            <span className="cons-product-name">{r.product_name}</span>
+                          </div>
+                        </td>
+                        <td style={{ fontSize: 12 }}>{r.product_category}</td>
+                        <td className="num">{r.quantity}</td>
+                        <td>
+                          <span className={`cons-status ${s}`}>
+                            {s === 'ok' ? '✓' : '⚠'} {STATUS_LABEL[s]}
+                          </span>
+                        </td>
+                        <td className="actions">
+                          <button
+                            className="cons-action"
+                            type="button"
+                            onClick={() => setActiveBeneficiary(r.beneficiary === activeBeneficiary ? null : r.beneficiary)}
+                          >
+                            Profil
+                          </button>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            ) : (
+              <div className="empty-state">
+                <h4>Aucune donnée</h4>
+                <p>Aucune consommation trouvée pour les filtres sélectionnés.</p>
+              </div>
+            )}
+
+            <div className="cons-pagination">
+              <button className="cons-pager" disabled={page <= 1} onClick={() => setPage((p) => p - 1)}>Précédent</button>
+              <span className="cons-page-indicator">Page {page} / {totalPages}</span>
+              <button className="cons-pager" disabled={page >= totalPages} onClick={() => setPage((p) => p + 1)}>Suivant</button>
+            </div>
+          </div>
+
+          {/* ── Assistant IA (call-to-action floattant) ── */}
+          {!filteredRows.length && (
+            <div className="cons-ai-prompt" onClick={() => navigate('/responsable/assistant')}>
+              <Zap size={16} />
+              <div>
+                <strong>Anomalie détectée ?</strong>
+                <p>Laissez l'IA analyser l'historique de ce produit</p>
+              </div>
+              <span className="cons-ai-arrow">→</span>
+            </div>
+          )}
+
         </div>
       </div>
-    </ProtectedPage>
+
+      {/* ── Panneau bénéficiaire ── */}
+      {activeBeneficiary && (
+        <BeneficiairePanel
+          beneficiaryName={activeBeneficiary}
+          allRows={allRows}
+          allBeneficiaries={allBeneficiaries}
+          onClose={() => setActiveBeneficiary(null)}
+        />
+      )}
+    </div>
   );
 }

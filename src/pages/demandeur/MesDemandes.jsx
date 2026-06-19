@@ -1,5 +1,8 @@
 import { useState, useEffect, useMemo, useCallback } from 'react';
-import { AlertTriangle, Clock, CheckCircle, XCircle, Package, Calendar, Truck, Pencil, Trash2, X } from 'lucide-react';
+import {
+  Clock, CheckCircle, XCircle, Package, Calendar, Plus, Pencil, Trash2, X,
+  AlertCircle
+} from 'lucide-react';
 import SidebarDem from '../../components/demandeur/SidebarDem';
 import HeaderPage from '../../components/shared/HeaderPage';
 import LoadingSpinner from '../../components/shared/LoadingSpinner';
@@ -10,10 +13,11 @@ import { normalizeRequestStatus } from '../../utils/requestStatus';
 import { asPositiveInt, isSafeText, sanitizeText } from '../../utils/formGuards';
 import './MesDemandes.css';
 
-const MesDemandes = ({ userName, onLogout }) => {
+const MesDemandes = ({ userName, onLogout, onCreateRequest }) => {
   const toast = useToast();
   const [sidebarCollapsed, setSidebarCollapsed] = useState(() => (typeof window !== 'undefined' ? window.innerWidth <= 768 : false));
   const [searchQuery, setSearchQuery] = useState('');
+  const [activeFilter, setActiveFilter] = useState('tous');
   const [demandes, setDemandes] = useState([]);
   const [isLoading, setIsLoading] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -21,6 +25,15 @@ const MesDemandes = ({ userName, onLogout }) => {
   const [deleteTarget, setDeleteTarget] = useState(null);
   const [editDraft, setEditDraft] = useState({ quantite: '', directionLaboratoire: '', priority: 'normal', note: '' });
   const [editErrors, setEditErrors] = useState({});
+
+  // 📊 Statistiques
+  const stats = useMemo(() => {
+    const pending = demandes.filter(d => d.statut === 'pending').length;
+    const validated = demandes.filter(d => d.statut === 'validated' || d.statut === 'accepted').length;
+    const served = demandes.filter(d => d.statut === 'served').length;
+    const rejected = demandes.filter(d => d.statut === 'rejected').length;
+    return { pending, validated, served, rejected, total: demandes.length };
+  }, [demandes]);
 
   const loadDemandes = useCallback(async (showLoader = true, silent = false) => {
     if (showLoader) setIsLoading(true);
@@ -62,40 +75,51 @@ const MesDemandes = ({ userName, onLogout }) => {
     return () => clearInterval(intervalId);
   }, [loadDemandes]);
 
-  const getStatutInfo = (statut) => {
-    switch (statut) {
-      case 'pending':
-        return { label: 'En attente', className: 'statut-attente', icon: Clock };
-      case 'validated':
-      case 'accepted':
-        return { label: 'Validée', className: 'statut-validee', icon: CheckCircle };
-      case 'preparing':
-        return { label: 'En préparation', className: 'statut-validee', icon: Package };
-      case 'served':
-        return { label: 'Servie', className: 'statut-servie', icon: Truck };
-      case 'received':
-        return { label: 'Clôturée', className: 'statut-validee', icon: CheckCircle };
-      case 'rejected':
-      case 'refused':
-        return { label: 'Rejetée', className: 'statut-rejetee', icon: XCircle };
-      case 'cancelled':
-        return { label: 'Annulée', className: 'statut-rejetee', icon: XCircle };
-      default:
-        return { label: statut, className: '', icon: Clock };
-    }
+  const getStatutConfig = (statut) => {
+    const configs = {
+      pending: { label: 'En attente', icon: Clock, step: 1, color: 'warning' },
+      validated: { label: 'Validée', icon: CheckCircle, step: 2, color: 'info' },
+      accepted: { label: 'Validée', icon: CheckCircle, step: 2, color: 'info' },
+      preparing: { label: 'Préparation', icon: Package, step: 3, color: 'processing' },
+      served: { label: 'Servie', icon: Package, step: 4, color: 'success' },
+      received: { label: 'Clôturée', icon: CheckCircle, step: 5, color: 'success' },
+      rejected: { label: 'Rejetée', icon: XCircle, step: 0, color: 'danger' },
+    };
+    return configs[statut] || { label: statut, icon: Clock, step: 0, color: 'default' };
   };
 
+  const filteredDemandes = useMemo(() => {
+    let result = demandes;
+
+    if (activeFilter !== 'tous') {
+      result = result.filter(d => {
+        if (activeFilter === 'validated') return d.statut === 'validated' || d.statut === 'accepted';
+        return d.statut === activeFilter;
+      });
+    }
+
+    if (searchQuery.trim()) {
+      const q = searchQuery.toLowerCase();
+      result = result.filter(d =>
+        d.reference.toLowerCase().includes(q) ||
+        d.produit.toLowerCase().includes(q) ||
+        d.codeProduit.toLowerCase().includes(q)
+      );
+    }
+
+    return result;
+  }, [demandes, activeFilter, searchQuery]);
+
   const openEdit = useCallback((demande) => {
-    if (!demande?.id) return;
-    if (demande.statut !== 'pending') {
-      toast.error('Modification possible uniquement tant que la demande est en attente');
+    if (!demande?.id || demande.statut !== 'pending') {
+      toast.error('Modification possible uniquement si la demande est en attente');
       return;
     }
     setEditErrors({});
     setDeleteTarget(null);
     setEditTarget(demande);
     setEditDraft({
-      quantite: String(Number.isFinite(Number(demande.quantite)) ? Number(demande.quantite) : ''),
+      quantite: String(demande.quantite || ''),
       directionLaboratoire: String(demande.directionLaboratoire || ''),
       priority: String(demande.priority || 'normal'),
       note: String(demande.note || ''),
@@ -109,9 +133,8 @@ const MesDemandes = ({ userName, onLogout }) => {
   }, [isSubmitting]);
 
   const openDelete = useCallback((demande) => {
-    if (!demande?.id) return;
-    if (demande.statut !== 'pending') {
-      toast.error('Suppression possible uniquement tant que la demande est en attente');
+    if (!demande?.id || demande.statut !== 'pending') {
+      toast.error('Suppression possible uniquement si la demande est en attente');
       return;
     }
     setEditTarget(null);
@@ -126,14 +149,14 @@ const MesDemandes = ({ userName, onLogout }) => {
   const validateEdit = useCallback(() => {
     const next = {};
     const qty = asPositiveInt(editDraft.quantite, { min: 1, max: 1000000000 });
-    if (!Number.isFinite(qty) || Number.isNaN(qty)) next.quantite = 'Quantité valide requise';
+    if (!Number.isFinite(qty)) next.quantite = 'Quantité valide requise (min: 1)';
 
     if (!isSafeText(editDraft.directionLaboratoire, { min: 2, max: 80 })) {
-      next.directionLaboratoire = 'Direction / laboratoire obligatoire (2-80, sans < >)';
+      next.directionLaboratoire = 'Direction requise (2-80 caractères)';
     }
 
     if (editDraft.note && !isSafeText(editDraft.note, { min: 0, max: 600 })) {
-      next.note = 'Texte trop long (max 600)';
+      next.note = 'Commentaire trop long (max 600 caractères)';
     }
 
     const pr = String(editDraft.priority || '').trim().toLowerCase();
@@ -147,26 +170,25 @@ const MesDemandes = ({ userName, onLogout }) => {
 
   const submitEdit = useCallback(async (e) => {
     e.preventDefault();
-    if (!editTarget?.id) return;
-    if (!validateEdit()) {
+    if (!editTarget?.id || !validateEdit()) {
       toast.error('Veuillez corriger les erreurs');
       return;
     }
 
     setIsSubmitting(true);
     try {
-      const qty = asPositiveInt(editDraft.quantite, { min: 1, max: 1000000000 });
+      const qty = asPositiveInt(editDraft.quantite, { min: 1 });
       await patch(`/requests/${encodeURIComponent(editTarget.id)}/update`, {
         quantity_requested: qty,
-        direction_laboratory: sanitizeText(editDraft.directionLaboratoire, { maxLen: 80 }),
-        priority: String(editDraft.priority || 'normal').trim().toLowerCase(),
-        note: sanitizeText(editDraft.note || '', { maxLen: 600 }) || undefined,
+        direction_laboratory: sanitizeText(editDraft.directionLaboratoire),
+        priority: editDraft.priority.toLowerCase(),
+        note: editDraft.note || undefined,
       });
-      toast.success('Demande modifiée');
+      toast.success('Demande modifiée avec succès');
       setEditTarget(null);
       await loadDemandes(false, true);
     } catch (err) {
-      toast.error(getUiErrorMessage(err, 'Impossible de modifier la demande'));
+      toast.error(getUiErrorMessage(err, 'Erreur lors de la modification'));
     } finally {
       setIsSubmitting(false);
     }
@@ -176,15 +198,13 @@ const MesDemandes = ({ userName, onLogout }) => {
     if (!deleteTarget?.id) return;
     setIsSubmitting(true);
     try {
-      await patch(`/requests/${encodeURIComponent(deleteTarget.id)}/cancel`, {
-        note: 'Supprimee par le demandeur',
-      });
-      toast.success('Demande supprimee');
-      setDemandes((prev) => prev.filter((demande) => demande.id !== deleteTarget.id));
+      await patch(`/requests/${encodeURIComponent(deleteTarget.id)}/cancel`, {});
+      toast.success('Demande supprimée');
+      setDemandes(prev => prev.filter(d => d.id !== deleteTarget.id));
       setDeleteTarget(null);
       await loadDemandes(false, true);
     } catch (err) {
-      toast.error(getUiErrorMessage(err, 'Impossible de supprimer la demande'));
+      toast.error(getUiErrorMessage(err, 'Erreur lors de la suppression'));
     } finally {
       setIsSubmitting(false);
     }
@@ -194,281 +214,341 @@ const MesDemandes = ({ userName, onLogout }) => {
     if (!demande?.id) return;
     setIsSubmitting(true);
     try {
-      await patch(`/requests/${encodeURIComponent(demande.id)}/confirm-receipt`, {
-        receipt_token: demande.receiptToken || undefined,
-      });
-      toast.success('Reception confirmee');
+      await patch(`/requests/${encodeURIComponent(demande.id)}/confirm-receipt`, {});
+      toast.success('Réception confirmée');
+      setDemandes(prev =>
+        prev.map(d => d.id === demande.id ? { ...d, statut: 'received' } : d)
+      );
       await loadDemandes(false, true);
     } catch (err) {
-      toast.error(getUiErrorMessage(err, 'Impossible de confirmer la reception'));
+      toast.error(getUiErrorMessage(err, 'Erreur lors de la confirmation'));
     } finally {
       setIsSubmitting(false);
     }
   }, [loadDemandes, toast]);
 
-  const filteredDemandes = useMemo(() => (
-    demandes.filter((demande) =>
-      demande.produit.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      demande.reference.toLowerCase().includes(searchQuery.toLowerCase())
-    )
-  ), [demandes, searchQuery]);
+  const handleResize = useCallback(() => {
+    setSidebarCollapsed(window.innerWidth <= 768);
+  }, []);
+
+  useEffect(() => {
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, [handleResize]);
+
+  if (isLoading) {
+    return (
+      <div className="dem-layout">
+        <SidebarDem collapsed={sidebarCollapsed} onToggle={() => setSidebarCollapsed(!sidebarCollapsed)} />
+        <div className="dem-main">
+          <HeaderPage title="Mes Demandes" userName={userName} onLogout={onLogout} />
+          <main className="dem-content">
+            <LoadingSpinner text="Chargement..." />
+          </main>
+        </div>
+      </div>
+    );
+  }
 
   return (
-    <div className="app-layout">
-      <div
-        className={`sidebar-backdrop ${sidebarCollapsed ? 'hidden' : ''}`}
-        onClick={() => setSidebarCollapsed(true)}
-      />
-      <SidebarDem 
-        collapsed={sidebarCollapsed} 
-        onToggle={() => setSidebarCollapsed(!sidebarCollapsed)}
-        onLogout={onLogout}
-        userName={userName}
-      />
-      
-      <div className="main-container">
-        <HeaderPage 
-          userName={userName}
-          title="Mes Demandes"
-          searchValue={searchQuery}
-          onSearchChange={setSearchQuery}
-          onRefresh={loadDemandes}
-          onMenuClick={() => setSidebarCollapsed((prev) => !prev)}
-        />
-        
-        <main className="main-content">
-          {isLoading && <LoadingSpinner overlay text="Chargement de mes demandes..." />}
-          <div className="mes-demandes-page">
-            <div className="demandes-table-container">
-              <table className="demandes-table">
-                <thead>
-                  <tr>
-                    <th>Reference</th>
-                    <th>Produit</th>
-                    <th>Quantite</th>
-                    <th>Date</th>
-                    <th>Statut</th>
-                    <th className="actions-col">Actions</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {filteredDemandes.map((demande, index) => {
-                    const statutInfo = getStatutInfo(demande.statut);
-                    const StatutIcon = statutInfo.icon;
-                    return (
-                      <tr key={demande.id} style={{ animationDelay: `${index * 50}ms` }}>
-                        <td className="ref-cell">{demande.reference}</td>
-                        <td className="product-cell">
-                          <Package size={16} />
-                          <div>
-                            <span className="product-name">{demande.produit}</span>
-                            <span className="product-code">{demande.codeProduit}</span>
-                          </div>
-                        </td>
-                        <td className="quantity-cell">{demande.quantite}</td>
-                        <td className="date-cell">
-                          <Calendar size={14} />
-                          {demande.date}
-                        </td>
-                        <td>
-                          <span className={`statut-badge ${statutInfo.className}`}>
-                            <StatutIcon size={14} />
-                            {statutInfo.label}
-                          </span>
-                          {demande.statut === 'served' && (
-                            <div className="receipt-row">
-                              <button
-                                type="button"
-                                className="btn-confirm-receipt"
-                                onClick={() => confirmReceipt(demande)}
-                                disabled={isSubmitting}
-                              >
-                                Confirmer reception
-                              </button>
-                              {demande.receiptToken ? (
-                                <small className="receipt-code">
-                                  Code: <strong>{demande.receiptToken}</strong>
-                                </small>
-                              ) : null}
-                            </div>
-                          )}
-                        </td>
-                        <td className="actions-cell">
-                          {demande.statut === 'pending' ? (
-                            <div className="request-actions">
-                              <button
-                                type="button"
-                                className="btn-edit-request"
-                                onClick={() => openEdit(demande)}
-                                disabled={isSubmitting}
-                                aria-label={`Modifier ${demande.reference}`}
-                              >
-                                <Pencil size={14} />
-                                Modifier
-                              </button>
-                              <button
-                                type="button"
-                                className="btn-delete-request"
-                                onClick={() => openDelete(demande)}
-                                disabled={isSubmitting}
-                                aria-label={`Supprimer ${demande.reference}`}
-                              >
-                                <Trash2 size={14} />
-                                Supprimer
-                              </button>
-                            </div>
-                          ) : (
-                            <span className="actions-muted">—</span>
-                          )}
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
+    <div className="dem-layout">
+      <SidebarDem collapsed={sidebarCollapsed} onToggle={() => setSidebarCollapsed(!sidebarCollapsed)} />
+      <div className="dem-main">
+        <HeaderPage title="Mes Demandes" userName={userName} onLogout={onLogout} />
+        <main className="dem-content">
+          {/* STATS */}
+          <div className="dem-header">
+            <div className="dem-stats">
+              <div className="stat-item stat-total">
+                <div className="stat-num">{stats.total}</div>
+                <div className="stat-label">Total</div>
+              </div>
+              <div className="stat-item stat-pending">
+                <div className="stat-num">{stats.pending}</div>
+                <div className="stat-label">En attente</div>
+              </div>
+              <div className="stat-item stat-valid">
+                <div className="stat-num">{stats.validated}</div>
+                <div className="stat-label">Validées</div>
+              </div>
+              <div className="stat-item stat-served">
+                <div className="stat-num">{stats.served}</div>
+                <div className="stat-label">Servies</div>
+              </div>
             </div>
 
-            <div className="demandes-footer">
-              <p>{filteredDemandes.length} demande{filteredDemandes.length > 1 ? 's' : ''}</p>
+            <button className="dem-btn-create" onClick={onCreateRequest}>
+              <Plus size={18} />
+              Nouvelle demande
+            </button>
+          </div>
+
+          {/* FILTERS */}
+          <div className="dem-controls">
+            <div className="dem-search">
+              <input
+                type="text"
+                placeholder="Chercher une demande..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="dem-input-search"
+              />
+            </div>
+
+            <div className="dem-filters">
+              {[
+                { val: 'tous', label: 'Tous', count: stats.total },
+                { val: 'pending', label: 'Attente', count: stats.pending },
+                { val: 'validated', label: 'Validées', count: stats.validated },
+                { val: 'served', label: 'Servies', count: stats.served },
+              ].map(f => (
+                <button
+                  key={f.val}
+                  className={`dem-filter-btn ${activeFilter === f.val ? 'active' : ''}`}
+                  onClick={() => setActiveFilter(f.val)}
+                >
+                  {f.label} <span className="dem-badge">{f.count}</span>
+                </button>
+              ))}
             </div>
           </div>
+
+          {/* CARDS */}
+          {filteredDemandes.length === 0 ? (
+            <div className="dem-empty">
+              <Package size={48} strokeWidth={1} />
+              <h3>Aucune demande</h3>
+              <p>{activeFilter !== 'tous' ? 'Aucune demande avec ce filtre' : 'Créez votre première demande'}</p>
+            </div>
+          ) : (
+            <div className="dem-cards">
+              {filteredDemandes.map(demande => {
+                const config = getStatutConfig(demande.statut);
+                const Icon = config.icon;
+                const priorityLabels = { normal: 'Normal', urgent: 'Urgent', critical: 'Très urgent' };
+
+                return (
+                  <div key={demande.id} className={`dem-card dem-card-${config.color}`}>
+                    <div className="dem-card-header">
+                      <div className="dem-card-ref">
+                        <span className="dem-ref-badge">{demande.reference}</span>
+                        <span className="dem-product">{demande.produit}</span>
+                      </div>
+                      <div className={`dem-status dem-status-${config.color}`}>
+                        <Icon size={16} />
+                        <span>{config.label}</span>
+                      </div>
+                    </div>
+
+                    <div className="dem-card-body">
+                      <div className="dem-row">
+                        <div className="dem-col">
+                          <span className="dem-label">Quantité</span>
+                          <span className="dem-value">{demande.quantite}</span>
+                        </div>
+                        <div className="dem-col">
+                          <span className="dem-label">Urgence</span>
+                          <span className={`dem-priority dem-priority-${demande.priority}`}>
+                            {priorityLabels[demande.priority]}
+                          </span>
+                        </div>
+                        <div className="dem-col">
+                          <span className="dem-label">Direction</span>
+                          <span className="dem-value">{demande.directionLaboratoire}</span>
+                        </div>
+                      </div>
+
+                      {demande.note && (
+                        <div className="dem-note">
+                          <span className="dem-note-label">Note:</span>
+                          <span className="dem-note-text">{demande.note}</span>
+                        </div>
+                      )}
+
+                      <div className="dem-date">
+                        <Calendar size={14} />
+                        {demande.date}
+                      </div>
+                    </div>
+
+                    <div className="dem-card-footer">
+                      {demande.statut === 'pending' && (
+                        <div className="dem-actions">
+                          <button
+                            className="dem-action-btn dem-edit"
+                            onClick={() => openEdit(demande)}
+                            disabled={isSubmitting}
+                            title="Modifier"
+                          >
+                            <Pencil size={16} />
+                          </button>
+                          <button
+                            className="dem-action-btn dem-delete"
+                            onClick={() => openDelete(demande)}
+                            disabled={isSubmitting}
+                            title="Supprimer"
+                          >
+                            <Trash2 size={16} />
+                          </button>
+                        </div>
+                      )}
+                      {demande.statut === 'served' && (
+                        <button
+                          className="dem-action-btn dem-confirm"
+                          onClick={() => confirmReceipt(demande)}
+                          disabled={isSubmitting}
+                        >
+                          Confirmer réception
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
         </main>
       </div>
 
+      {/* MODALS */}
       {editTarget && (
-        <div
-          className="dem-edit-overlay"
-          onClick={closeEdit}
-          role="dialog"
-          aria-modal="true"
-          aria-labelledby="dem-edit-title"
-        >
-          <div className="dem-edit-content" onClick={(e) => e.stopPropagation()}>
-            {isSubmitting && <LoadingSpinner overlay text="Mise à jour en cours..." />}
+        <div className="dem-modal-overlay" onClick={closeEdit}>
+          <div className="dem-modal" onClick={(e) => e.stopPropagation()}>
+            {isSubmitting && <LoadingSpinner overlay text="Mise à jour..." />}
 
-            <div className="dem-edit-head">
-              <h2 id="dem-edit-title">Modifier la demande</h2>
-              <button type="button" className="dem-edit-close" onClick={closeEdit} disabled={isSubmitting} aria-label="Fermer">
+            <div className="dem-modal-header">
+              <h2>Modifier la demande</h2>
+              <button className="dem-modal-close" onClick={closeEdit} disabled={isSubmitting}>
                 <X size={20} />
               </button>
             </div>
 
-            <div className="dem-edit-meta">
-              <div><strong>{editTarget.reference}</strong> • {editTarget.produit}</div>
-              <div className="dem-edit-hint">
-                Modification possible uniquement tant que le statut est <strong>En attente</strong>.
-              </div>
+            <div className="dem-modal-body">
+              <form onSubmit={submitEdit} noValidate>
+                {/* SECTION 1: QUANTITÉ & URGENCE */}
+                <div style={{ marginBottom: '1.75rem', paddingBottom: '1.25rem', borderBottom: '1px solid #f3f4f6' }}>
+                  <h3 style={{ fontSize: '0.9rem', fontWeight: '600', color: '#374151', marginBottom: '1rem', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                    Demande
+                  </h3>
+                  
+                  <div className="dem-form-group">
+                    <label className="required">Quantité</label>
+                    <input
+                      type="number"
+                      min="1"
+                      value={editDraft.quantite}
+                      onChange={(e) => setEditDraft(p => ({ ...p, quantite: e.target.value }))}
+                      className={editErrors.quantite ? 'error' : ''}
+                      disabled={isSubmitting}
+                    />
+                    {editErrors.quantite && (
+                      <span className="dem-error">
+                        <AlertCircle size={14} />
+                        {editErrors.quantite}
+                      </span>
+                    )}
+                  </div>
+
+                  <div className="dem-form-group">
+                    <label className="required">Urgence</label>
+                    <select
+                      value={editDraft.priority}
+                      onChange={(e) => setEditDraft(p => ({ ...p, priority: e.target.value }))}
+                      className={editErrors.priority ? 'error' : ''}
+                      disabled={isSubmitting}
+                    >
+                      <option value="normal">Normal</option>
+                      <option value="urgent">Urgent</option>
+                      <option value="critical">Très urgent</option>
+                    </select>
+                    {editErrors.priority && (
+                      <span className="dem-error">
+                        <AlertCircle size={14} />
+                        {editErrors.priority}
+                      </span>
+                    )}
+                  </div>
+                </div>
+
+                {/* SECTION 2: DIRECTION & COMMENTAIRE */}
+                <div style={{ marginBottom: '1.75rem' }}>
+                  <h3 style={{ fontSize: '0.9rem', fontWeight: '600', color: '#374151', marginBottom: '1rem', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                    Destination
+                  </h3>
+                  
+                  <div className="dem-form-group">
+                    <label className="required">Direction / Laboratoire</label>
+                    <input
+                      type="text"
+                      maxLength={80}
+                      value={editDraft.directionLaboratoire}
+                      onChange={(e) => setEditDraft(p => ({ ...p, directionLaboratoire: e.target.value }))}
+                      className={editErrors.directionLaboratoire ? 'error' : ''}
+                      disabled={isSubmitting}
+                    />
+                    {editErrors.directionLaboratoire && (
+                      <span className="dem-error">
+                        <AlertCircle size={14} />
+                        {editErrors.directionLaboratoire}
+                      </span>
+                    )}
+                  </div>
+
+                  <div className="dem-form-group">
+                    <label>Commentaire <span style={{ color: '#9ca3af', fontWeight: '400' }}>(optionnel)</span></label>
+                    <textarea
+                      maxLength={600}
+                      rows={3}
+                      value={editDraft.note}
+                      onChange={(e) => setEditDraft(p => ({ ...p, note: e.target.value }))}
+                      className={editErrors.note ? 'error' : ''}
+                      disabled={isSubmitting}
+                      placeholder="Informations supplémentaires..."
+                    />
+                    {editErrors.note && (
+                      <span className="dem-error">
+                        <AlertCircle size={14} />
+                        {editErrors.note}
+                      </span>
+                    )}
+                  </div>
+                </div>
+
+                <div className="dem-modal-actions">
+                  <button type="button" className="dem-btn-secondary" onClick={closeEdit} disabled={isSubmitting}>
+                    Annuler
+                  </button>
+                  <button type="submit" className="dem-btn-primary" disabled={isSubmitting}>
+                    Enregistrer
+                  </button>
+                </div>
+              </form>
             </div>
-
-            <form className="dem-edit-form" onSubmit={submitEdit} noValidate>
-              <div className="dem-edit-grid">
-                <div className="form-group">
-                  <label htmlFor="edit-quantite">Quantité demandée</label>
-                  <input
-                    id="edit-quantite"
-                    type="number"
-                    min="1"
-                    max="1000000000"
-                    step="1"
-                    value={editDraft.quantite}
-                    onChange={(e) => setEditDraft((p) => ({ ...p, quantite: e.target.value }))}
-                    className={editErrors.quantite ? 'error' : ''}
-                    aria-invalid={editErrors.quantite ? 'true' : 'false'}
-                    disabled={isSubmitting}
-                  />
-                  {editErrors.quantite && <span className="error-text" role="alert">{editErrors.quantite}</span>}
-                </div>
-
-                <div className="form-group">
-                  <label htmlFor="edit-priority">Urgence</label>
-                  <select
-                    id="edit-priority"
-                    value={editDraft.priority}
-                    onChange={(e) => setEditDraft((p) => ({ ...p, priority: e.target.value }))}
-                    disabled={isSubmitting}
-                    className={editErrors.priority ? 'error' : ''}
-                    aria-invalid={editErrors.priority ? 'true' : 'false'}
-                  >
-                    <option value="normal">Normale</option>
-                    <option value="urgent">Urgente</option>
-                    <option value="critical">Très urgente</option>
-                  </select>
-                  {editErrors.priority && <span className="error-text" role="alert">{editErrors.priority}</span>}
-                </div>
-
-                <div className="form-group dem-edit-span2">
-                  <label htmlFor="edit-direction">Direction / Laboratoire</label>
-                  <input
-                    id="edit-direction"
-                    type="text"
-                    maxLength={80}
-                    value={editDraft.directionLaboratoire}
-                    onChange={(e) => setEditDraft((p) => ({ ...p, directionLaboratoire: e.target.value }))}
-                    placeholder="Ex: DSP"
-                    className={editErrors.directionLaboratoire ? 'error' : ''}
-                    aria-invalid={editErrors.directionLaboratoire ? 'true' : 'false'}
-                    disabled={isSubmitting}
-                  />
-                  {editErrors.directionLaboratoire && <span className="error-text" role="alert">{editErrors.directionLaboratoire}</span>}
-                </div>
-
-                <div className="form-group dem-edit-span2">
-                  <label htmlFor="edit-note">Détails / commentaire (optionnel)</label>
-                  <textarea
-                    id="edit-note"
-                    rows={3}
-                    maxLength={600}
-                    value={editDraft.note}
-                    onChange={(e) => setEditDraft((p) => ({ ...p, note: e.target.value }))}
-                    placeholder="Informations supplémentaires..."
-                    disabled={isSubmitting}
-                    className={editErrors.note ? 'error' : ''}
-                    aria-invalid={editErrors.note ? 'true' : 'false'}
-                  />
-                  {editErrors.note && <span className="error-text" role="alert">{editErrors.note}</span>}
-                </div>
-              </div>
-
-              <div className="dem-edit-actions">
-                <button type="button" className="btn-cancel-edit" onClick={closeEdit} disabled={isSubmitting}>
-                  Annuler
-                </button>
-                <button type="submit" className="btn-save-edit" disabled={isSubmitting}>
-                  Enregistrer
-                </button>
-              </div>
-            </form>
           </div>
         </div>
       )}
 
       {deleteTarget && (
-        <div
-          className="dem-delete-overlay"
-          onClick={closeDelete}
-          role="dialog"
-          aria-modal="true"
-          aria-labelledby="dem-delete-title"
-        >
-          <div className="dem-delete-content" onClick={(e) => e.stopPropagation()}>
-            {isSubmitting && <LoadingSpinner overlay text="Suppression en cours..." />}
+        <div className="dem-modal-overlay" onClick={closeDelete}>
+          <div className="dem-modal dem-modal-confirm" onClick={(e) => e.stopPropagation()}>
+            {isSubmitting && <LoadingSpinner overlay text="Suppression..." />}
 
-            <div className="dem-delete-icon">
-              <AlertTriangle size={22} />
+            <div className="dem-confirm-icon">
+              <AlertCircle size={48} />
             </div>
-            <h2 id="dem-delete-title">Supprimer la demande</h2>
-            <p>La demande en attente sera retiree de votre liste et ne sera plus traitee.</p>
-            <div className="dem-delete-summary">
-              <strong>{deleteTarget.reference}</strong>
-              <span>{deleteTarget.produit}</span>
-              <span>Quantite: {deleteTarget.quantite}</span>
+            <h2>Supprimer la demande ?</h2>
+            <p>Cette action est irréversible.</p>
+
+            <div className="dem-confirm-details">
+              <div><strong>{deleteTarget.reference}</strong></div>
+              <div>{deleteTarget.produit} • Qté: {deleteTarget.quantite}</div>
             </div>
 
-            <div className="dem-delete-actions">
-              <button type="button" className="btn-cancel-edit" onClick={closeDelete} disabled={isSubmitting}>
+            <div className="dem-modal-actions">
+              <button className="dem-btn-secondary" onClick={closeDelete} disabled={isSubmitting}>
                 Annuler
               </button>
-              <button type="button" className="btn-confirm-delete" onClick={deleteRequest} disabled={isSubmitting}>
+              <button className="dem-btn-danger" onClick={deleteRequest} disabled={isSubmitting}>
                 Supprimer
               </button>
             </div>
@@ -480,4 +560,3 @@ const MesDemandes = ({ userName, onLogout }) => {
 };
 
 export default MesDemandes;
-

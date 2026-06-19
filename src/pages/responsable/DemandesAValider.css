@@ -1,0 +1,756 @@
+/* ═══════════════════════════════════════════════════════════════════════
+   DemandesAValider.css — Page "Demandes à valider"
+   Thème : light uniquement, conforme PFE SENTINEL
+═══════════════════════════════════════════════════════════════════════ */
+
+/* ─── Design Tokens ────────────────────────────────────────────────── */
+.main-content {
+  --bg:         #f4f7fb;
+  --surface:    #ffffff;
+  --surface2:   #f8fafd;
+  --border:     #e4eaf3;
+  --border2:    #c8d5e8;
+  --text:       #0f172a;
+  --text2:      #475569;
+  --text3:      #94a3b8;
+  
+  /* Couleurs sémantiques */
+  --success:    #059669;  /* vert */
+  --primary:    #2563eb;  /* bleu */
+  --warn:       #d97706;  /* amber */
+  --danger:     #dc2626;  /* rouge */
+  --gray:       #6b7280;  /* gris */
+  --violet:     #7c3aed;
+  --cyan:       #0891b2;
+  
+  /* Shadows & radius */
+  --radius:     12px;
+  --radius-sm:  8px;
+  --shadow:     0 1px 3px rgba(15, 23, 42, 0.07), 0 1px 2px rgba(15, 23, 42, 0.04);
+  --shadow-md:  0 4px 16px rgba(15, 23, 42, 0.09);
+  --shadow-lg:  0 8px 32px rgba(15, 23, 42, 0.12);
+
+  background: var(--bg);
+  color: var(--text);
+  font-family: "DM Sans", "Inter", "Segoe UI", sans-serif;
+  padding: 24px 28px;
+}
+
+/* ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+   TOOLBAR : RECHERCHE ET FILTRES
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */
+
+.dav-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 18px;
+  flex-wrap: wrap;
+}
+
+.dav-search {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 1;
+  min-width: 220px;
+  padding: 0 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  box-shadow: var(--shadow);
+}
+
+.dav-search svg {
+  flex-shrink: 0;
+  color: var(--text3);
+}
+
+.dav-search input {
+  flex: 1;
+  border: 0;
+  background: transparent;
+  color: var(--text);
+  font-size: 13px;
+  padding: 10px 0;
+  font: inherit;
+}
+
+.dav-search input::placeholder {
+  color: var(--text3);
+}
+
+.dav-search input:focus {
+  outline: none;
+}
+
+/* Sélecteurs filtres */
+.dav-toolbar select {
+  padding: 8px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  color: var(--text);
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  box-shadow: var(--shadow);
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+
+.dav-toolbar select:hover {
+  border-color: var(--border2);
+  box-shadow: var(--shadow-md);
+}
+
+.dav-toolbar select:focus {
+  outline: none;
+  border-color: var(--primary);
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1);
+}
+
+/* Bouton actualiser */
+.dav-toolbar .btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 14px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  color: var(--text2);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s;
+  box-shadow: var(--shadow);
+}
+
+.dav-toolbar .btn:hover:not(:disabled) {
+  border-color: var(--border2);
+  background: var(--surface2);
+  color: var(--text);
+}
+
+.dav-toolbar .btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+   KPIs : STATISTIQUES RAPIDES
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */
+
+.dav-kpis {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 12px;
+  margin-bottom: 20px;
+}
+
+.kpi-box {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 16px 14px;
+  border: 1px solid var(--border);
+  border-top: 3px solid transparent;
+  border-radius: var(--radius);
+  background: var(--surface);
+  text-align: center;
+  box-shadow: var(--shadow);
+  transition: all 0.15s;
+}
+
+.kpi-box:hover {
+  box-shadow: var(--shadow-md);
+  transform: translateY(-1px);
+}
+
+.kpi-label {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--text3);
+}
+
+.kpi-value {
+  font-size: 28px;
+  font-weight: 800;
+  font-family: "DM Mono", monospace;
+  line-height: 1;
+  color: var(--text);
+}
+
+/* Variantes KPI */
+.kpi-box.critical {
+  border-top-color: var(--danger);
+}
+
+.kpi-box.critical .kpi-value {
+  color: var(--danger);
+}
+
+.kpi-box.warning {
+  border-top-color: var(--warn);
+}
+
+.kpi-box.warning .kpi-value {
+  color: var(--warn);
+}
+
+.kpi-box.danger {
+  border-top-color: var(--danger);
+}
+
+.kpi-box.danger .kpi-value {
+  color: var(--danger);
+}
+
+/* ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+   LISTE DEMANDES
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */
+
+.dav-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.dav-empty {
+  padding: 40px 20px;
+  text-align: center;
+  color: var(--text3);
+  font-size: 14px;
+  border: 2px dashed var(--border);
+  border-radius: var(--radius);
+  background: var(--surface2);
+}
+
+/* ─── Carte demande ────────────────────────────────────────────────── */
+
+.dav-item {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 16px;
+  border: 1px solid var(--border);
+  border-left: 4px solid transparent;
+  border-radius: var(--radius);
+  background: var(--surface);
+  box-shadow: var(--shadow);
+  transition: all 0.15s ease;
+}
+
+.dav-item:hover {
+  box-shadow: var(--shadow-md);
+  border-color: var(--border2);
+}
+
+/* Code couleur urgence sur bord gauche */
+.dav-item.critique {
+  border-left-color: var(--danger);
+}
+
+.dav-item.élevé {
+  border-left-color: var(--warn);
+}
+
+.dav-item.normal {
+  border-left-color: var(--primary);
+}
+
+.dav-item.faible {
+  border-left-color: var(--success);
+}
+
+/* ─── En-tête : référence + badges ────────────────────────────────── */
+
+.dav-item-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.dav-item-head > div:first-child {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  flex: 1;
+  min-width: 200px;
+}
+
+.dav-ref {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--text);
+  font-family: "DM Mono", monospace;
+}
+
+.dav-product {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text2);
+}
+
+.dav-demandeur {
+  font-size: 12px;
+  color: var(--text3);
+}
+
+/* Badges urgence/retard/stock */
+.dav-badges {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 10px;
+  border-radius: 6px;
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+  white-space: nowrap;
+}
+
+/* Badge urgence */
+.badge.urgency {
+  background: rgba(220, 38, 38, 0.1);
+  color: var(--danger);
+}
+
+.badge.urgency.critique {
+  background: rgba(220, 38, 38, 0.18);
+  color: var(--danger);
+}
+
+.badge.urgency.élevé {
+  background: rgba(217, 119, 6, 0.18);
+  color: var(--warn);
+}
+
+.badge.urgency.normal {
+  background: rgba(37, 99, 235, 0.1);
+  color: var(--primary);
+}
+
+.badge.urgency.faible {
+  background: rgba(5, 150, 105, 0.1);
+  color: var(--success);
+}
+
+/* Badge statut retard (nouveau code couleur) */
+.badge.delay {
+  background: rgba(107, 114, 128, 0.1);
+  color: var(--gray);
+}
+
+.badge.delay.danger {
+  background: rgba(220, 38, 38, 0.1);
+  color: var(--danger);
+}
+
+.badge.delay.warn {
+  background: rgba(217, 119, 6, 0.1);
+  color: var(--warn);
+}
+
+.badge.delay.gray {
+  background: rgba(107, 114, 128, 0.1);
+  color: var(--gray);
+}
+
+.badge.delay.blue {
+  background: rgba(37, 99, 235, 0.1);
+  color: var(--primary);
+}
+
+/* Badge stock */
+.badge.stock {
+  background: rgba(107, 114, 128, 0.1);
+  color: var(--gray);
+}
+
+.badge.stock.critique {
+  background: rgba(220, 38, 38, 0.1);
+  color: var(--danger);
+}
+
+.badge.stock.élevé {
+  background: rgba(217, 119, 6, 0.1);
+  color: var(--warn);
+}
+
+.badge.stock.ok {
+  background: rgba(5, 150, 105, 0.1);
+  color: var(--success);
+}
+
+/* ─── Détails stock et dates ──────────────────────────────────────── */
+
+.dav-details {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 12px;
+  padding: 12px;
+  background: var(--surface2);
+  border-radius: var(--radius-sm);
+  font-size: 12px;
+  color: var(--text2);
+}
+
+.dav-details span {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.dav-details strong {
+  color: var(--text);
+  font-weight: 700;
+  font-size: 13px;
+}
+
+.dav-details strong.positive {
+  color: var(--success);
+}
+
+.dav-details strong.negative {
+  color: var(--danger);
+}
+
+/* ─── Actions : boutons Approuver / Rejeter ─────────────────────── */
+
+.dav-actions {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+}
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 14px;
+  border: 0;
+  border-radius: var(--radius-sm);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+}
+
+.btn svg {
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;
+}
+
+.btn.success {
+  background: var(--success);
+  color: #fff;
+  box-shadow: 0 2px 6px rgba(5, 150, 105, 0.25);
+}
+
+.btn.success:hover:not(:disabled) {
+  background: #047857;
+  box-shadow: 0 4px 12px rgba(5, 150, 105, 0.35);
+  transform: translateY(-1px);
+}
+
+.btn.success:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.btn.danger {
+  background: var(--danger);
+  color: #fff;
+  box-shadow: 0 2px 6px rgba(220, 38, 38, 0.25);
+}
+
+.btn.danger:hover:not(:disabled) {
+  background: #b91c1c;
+  box-shadow: 0 4px 12px rgba(220, 38, 38, 0.35);
+  transform: translateY(-1px);
+}
+
+.btn.danger:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.btn.secondary {
+  background: var(--surface2);
+  color: var(--text2);
+  border: 1px solid var(--border);
+}
+
+.btn.secondary:hover:not(:disabled) {
+  background: var(--border);
+  color: var(--text);
+}
+
+.btn.disabled {
+  background: var(--border);
+  color: var(--text3);
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+/* ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+   MODAL REJET (avec motif obligatoire)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */
+
+.dav-modal-backdrop {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(15, 23, 42, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  animation: fadeIn 0.2s ease;
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+.dav-modal {
+  background: var(--surface);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-lg);
+  max-width: 500px;
+  width: 90%;
+  max-height: 90vh;
+  display: flex;
+  flex-direction: column;
+  animation: slideUp 0.3s ease;
+}
+
+@keyframes slideUp {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.dav-modal-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 18px 20px;
+  border-bottom: 1px solid var(--border);
+}
+
+.dav-modal-header h3 {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--text);
+  margin: 0;
+}
+
+.dav-modal-close {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: var(--surface2);
+  color: var(--text3);
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.dav-modal-close:hover {
+  background: var(--border);
+  color: var(--text2);
+}
+
+.dav-modal-body {
+  flex: 1;
+  padding: 18px 20px;
+  overflow-y: auto;
+}
+
+.dav-modal-body label {
+  display: block;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text);
+  margin-bottom: 6px;
+}
+
+.required {
+  color: var(--danger);
+  margin-left: 2px;
+}
+
+.dav-modal-textarea {
+  width: 100%;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  color: var(--text);
+  font: inherit;
+  font-size: 12px;
+  resize: vertical;
+  transition: all 0.15s;
+}
+
+.dav-modal-textarea:focus {
+  outline: none;
+  border-color: var(--primary);
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1);
+}
+
+.dav-modal-error {
+  margin-top: 8px;
+  padding: 8px 10px;
+  background: rgba(220, 38, 38, 0.1);
+  border-left: 3px solid var(--danger);
+  border-radius: 4px;
+  color: var(--danger);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.dav-modal-footer {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+  padding: 16px 20px;
+  border-top: 1px solid var(--border);
+  background: var(--surface2);
+}
+
+/* ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+   RESPONSIVE
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */
+
+@media (max-width: 768px) {
+  .main-content {
+    padding: 16px 14px;
+  }
+
+  .dav-toolbar {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .dav-search {
+    flex: 1;
+  }
+
+  .dav-toolbar select,
+  .dav-toolbar .btn {
+    width: 100%;
+  }
+
+  .dav-kpis {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  .dav-item-head {
+    flex-direction: column;
+  }
+
+  .dav-badges {
+    justify-content: flex-start;
+  }
+
+  .dav-details {
+    grid-template-columns: 1fr;
+  }
+
+  .dav-actions {
+    flex-direction: column;
+  }
+
+  .btn {
+    width: 100%;
+    justify-content: center;
+  }
+
+  .dav-modal {
+    width: 95%;
+    max-height: 85vh;
+  }
+}
+
+@media (max-width: 480px) {
+  .main-content {
+    padding: 12px 10px;
+  }
+
+  .dav-kpis {
+    grid-template-columns: 1fr;
+  }
+
+  .kpi-value {
+    font-size: 24px;
+  }
+
+  .dav-ref {
+    font-size: 12px;
+  }
+
+  .dav-product {
+    font-size: 12px;
+  }
+
+  .badge {
+    font-size: 9px;
+    padding: 3px 8px;
+  }
+
+  .dav-modal {
+    width: 98%;
+  }
+
+  .dav-modal-header h3 {
+    font-size: 13px;
+  }
+}
+
+/* ─── Accessibilité ───────────────────────────────────────────────── */
+@media (prefers-reduced-motion: reduce) {
+  * {
+    animation: none !important;
+    transition: none !important;
+  }
+}
+
+@media (prefers-color-scheme: dark) {
+  /* Facultatif : si besoin de dark mode à l'avenir */
+}

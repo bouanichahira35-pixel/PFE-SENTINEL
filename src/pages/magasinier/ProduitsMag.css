@@ -302,6 +302,15 @@
   cursor: not-allowed;
 }
 
+.produits-page .action-btn svg,
+.produits-page .mobile-card-actions .mobile-action-btn svg {
+  opacity: 1 !important;
+  color: inherit;
+  flex-shrink: 0;
+  display: block;
+  stroke-width: 2;
+}
+
 .produits-page .action-btn.view:hover:not(:disabled) {
   background: rgba(25, 118, 210, 0.1);
   color: #1976d2;

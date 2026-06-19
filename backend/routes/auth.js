@@ -1,3 +1,5 @@
+// BLOC 1 - Routeur d'authentification.
+// Ce fichier gere login, refresh token, logout et mot de passe oublie.
 const router = require('express').Router();
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
@@ -44,6 +46,8 @@ const REFRESH_COOKIE_NAME = String(process.env.REFRESH_COOKIE_NAME || 'sentinel_
 const ACTIVE_STATUS_ALIASES = new Set(['active', 'actif', 'enabled', 'enable', 'true', '1']);
 const BLOCKED_STATUS_ALIASES = new Set(['blocked', 'bloque', 'disabled', 'inactive', 'false', '0']);
 
+// BLOC 2 - Fonctions utilitaires d'auth.
+// Elles lisent les cookies, normalisent telephone/role/statut et preparent les recherches utilisateur.
 function parseCookies(header) {
   const raw = String(header || '').trim();
   if (!raw) return {};
@@ -295,6 +299,8 @@ async function findLoginCandidates(identifier, normalizedRole) {
 }
 
 // POST /api/auth/login
+// BLOC 3 - Connexion utilisateur.
+// POST /api/auth/login verifie l'identifiant, le mot de passe, le role, puis cree les tokens.
 router.post('/login', async (req, res) => {
   try {
     const identifier = extractIdentifier(req.body);
@@ -482,6 +488,8 @@ router.post('/login', async (req, res) => {
 }); 
 
 // POST /api/auth/forgot-password/request
+// BLOC 4 - Demande de code de recuperation.
+// POST /api/auth/forgot-password/request envoie un code par email, SMS ou WhatsApp.
 router.post('/forgot-password/request', async (req, res) => {
   try {
     const identifier = extractIdentifier(req.body);
@@ -697,6 +705,8 @@ router.post('/forgot-password/request', async (req, res) => {
 });
 
 // POST /api/auth/forgot-password/verify
+// BLOC 5 - Verification du code de recuperation.
+// Cette route verifie le code OTP avant d'autoriser le changement de mot de passe.
 router.post('/forgot-password/verify', async (req, res) => {
   try {
     const identifier = extractIdentifier(req.body);
@@ -761,6 +771,8 @@ router.post('/forgot-password/verify', async (req, res) => {
 });
 
 // POST /api/auth/forgot-password/reset
+// BLOC 6 - Reinitialisation du mot de passe.
+// Cette route remplace l'ancien mot de passe par un nouveau mot de passe fort.
 router.post('/forgot-password/reset', async (req, res) => {
   try {
     const { resetToken, newPassword, confirmPassword } = req.body;
@@ -834,6 +846,8 @@ router.post('/forgot-password/reset', async (req, res) => {
   }
 });
 
+// BLOC 7 - Renouvellement de session.
+// POST /api/auth/refresh donne un nouveau token quand la session est encore valide.
 router.post('/refresh', async (req, res) => {
   try {
     const refreshToken = String(req.body?.refreshToken || readCookie(req, REFRESH_COOKIE_NAME) || '');
@@ -921,6 +935,8 @@ router.post('/refresh', async (req, res) => {
   }
 });
 
+// BLOC 8 - Deconnexion avec token d'acces.
+// Cette route ferme la session courante cote serveur.
 router.post('/logout', requireAuth, async (req, res) => {
   try {
     const sessionId = req.user.sessionId;
@@ -952,6 +968,8 @@ router.post('/logout', requireAuth, async (req, res) => {
 
 // POST /api/auth/logout-refresh
 // Allows revoking a session when the access token is expired but a refresh token is still present.
+// BLOC 9 - Deconnexion avec refresh token.
+// Utilisee quand le token d'acces est deja expire mais que le refresh token existe encore.
 router.post('/logout-refresh', async (req, res) => {
   try {
     const refreshToken = String(req.body?.refreshToken || readCookie(req, REFRESH_COOKIE_NAME) || '');
@@ -990,6 +1008,8 @@ router.post('/logout-refresh', async (req, res) => {
   }
 });
 
+// BLOC 10 - Deconnexion de toutes les sessions.
+// Cette route ferme toutes les sessions actives de l'utilisateur.
 router.post('/logout-all', requireAuth, async (req, res) => {
   try {
     await UserSession.updateMany(

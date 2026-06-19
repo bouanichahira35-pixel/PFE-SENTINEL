@@ -78,6 +78,7 @@ function isSafeText(value, { min = 0, max = 4000 } = {}) {
   const s = String(value);
   if (s.length < min || s.length > max) return false;
   // Block control chars and trivial HTML/script injection vectors.
+  // eslint-disable-next-line no-control-regex
   if (/[\u0000-\u001F\u007F]/.test(s)) return false;
   if (/[<>]/.test(s)) return false;
   return true;

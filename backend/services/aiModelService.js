@@ -7,6 +7,7 @@ const StockEntry = require('../models/StockEntry');
 const StockLot = require('../models/StockLot');
 const AIAlert = require('../models/AIAlert');
 const { isGeminiConfigured, generateGeminiContent } = require('./geminiService');
+const { isGroqConfigured, askGroq }                       = require('./groqService');
 
 const AI_DATA_DIR = path.join(process.cwd(), 'data', 'ai');
 const AI_PY_DIR = path.join(process.cwd(), 'ai_py');
@@ -1484,7 +1485,6 @@ async function askResponsableAssistant(options = {}) {
   const history = Array.isArray(options.history) ? options.history : [];
   const providedContext = options.context && typeof options.context === 'object' ? options.context : null;
   const useGemini = options.use_gemini !== false;
-  const strictGemini = options.strict_gemini === true;
   const mode = String(options.mode || 'chat').toLowerCase() === 'report' ? 'report' : 'chat';
 
   let context = providedContext;
@@ -1578,7 +1578,6 @@ async function askResponsableAssistant(options = {}) {
     const query = String(q || '').toLowerCase();
     const stockoutAll = Array.isArray(ctx?.stockout_top) ? ctx.stockout_top : [];
     const stockoutTop = topItems(stockoutAll, 'risk_probability', 5);
-    const consumptionTop = topItems(ctx?.consumption_top, 'expected_quantity', 5);
     const anomalyTop = topItems(ctx?.anomaly_top, 'anomaly_score', 5);
     const actionPlan = Array.isArray(ctx?.action_plan) ? ctx.action_plan : [];
     const metrics = ctx && typeof ctx === 'object' && ctx.metrics && typeof ctx.metrics === 'object' ? ctx.metrics : {};
@@ -1654,33 +1653,6 @@ async function askResponsableAssistant(options = {}) {
         if ((name && qn.includes(name)) || (code && qn.includes(code))) return item;
       }
       return null;
-    };
-
-    const findInListByQuestion = (rawQ, list) => {
-      const qn = normalize(rawQ);
-      if (!qn || !Array.isArray(list)) return null;
-      for (const item of list) {
-        const candidates = [
-          item?.product_name,
-          item?.name,
-          item?.product,
-          item?.title,
-          item?.code_product,
-        ].map(normalize).filter(Boolean);
-        if (candidates.some((c) => qn.includes(c))) return item;
-      }
-      return null;
-    };
-
-    const describeActionStep = (step, index) => {
-      const name = step?.product_name || step?.name || step?.code_product || 'Produit';
-      const action = step?.action || 'Verifier le besoin et commander si le seuil est confirme';
-      const urgency = step?.urgency || step?.level || 'normale';
-      const reason = step?.why || step?.reason || step?.explanation || null;
-      return [
-        `- P${index + 1} ${name}: ${action} (urgence ${urgency}).`,
-        reason ? `  Raison: ${String(reason).slice(0, 180)}.` : null,
-      ].filter(Boolean).join('\n');
     };
 
     // If user explicitly asks for a 5-line summary, keep it short even in fallback mode.
@@ -1954,89 +1926,54 @@ async function askResponsableAssistant(options = {}) {
       'Tu as acces a des outils (lecture seule) pour interroger le stock et les alertes. Utilise-les si ca aide a repondre avec des chiffres reels.',
     ].join(' ');
 
-  try {
-    if (!allowGemini) throw new Error('Gemini disabled');
+  /* ── Priorité 1 : Groq (gratuit, intelligent, langage naturel) ── */
+  const groqConfigured = isGroqConfigured();
 
+  if (groqConfigured) {
     try {
-      return await runGeminiAgent({
-        question,
+      const result = await askGroq({
+        systemInstruction,
         history,
-        system_instruction: systemInstruction,
+        question: `${prompt}`,
         mode,
-        context,
       });
-    } catch (agentErr) {
-      const agentMsg = String(agentErr?.message || agentErr || '');
+      return result;
+    } catch (groqErr) {
+      const gMsg = String(groqErr?.message || '').toLowerCase();
+      const isGroqQuota =
+        groqErr?.code === 'QUOTA_EXCEEDED' ||
+        groqErr?.groq429 === true          ||
+        gMsg.includes('429')               ||
+        gMsg.includes('quota')             ||
+        gMsg.includes('rate limit');
 
-      /* Si l'agent échoue sur un 429 / quota → on court-circuite,
-         on ne retente PAS generateGeminiContent (même quota = même erreur). */
-      const agentIsQuota =
-        agentMsg.includes('429')                ||
-        agentMsg.includes('RESOURCE_EXHAUSTED') ||
-        agentMsg.includes('quota')              ||
-        agentMsg.includes('Too Many Requests')  ||
-        agentMsg.includes('rate limit')         ||
-        agentMsg.includes('503')                ||
-        agentMsg.includes('overloaded');
-
-      if (agentIsQuota) {
-        /* On relance l'erreur vers le catch externe qui gère le fallback */
-        throw agentErr;
+      if (isGroqQuota) {
+        /* Quota Groq → fallback local propre */
+        const answer = mode === 'report'
+          ? fallbackReportAnswer(question, context)
+          : await fallbackChatAnswer(question, context);
+        return { answer, source: 'fallback', mode, groq_skipped: 'quota_exceeded' };
       }
-
-      /* Autre erreur d'agent → tentative directe sans function calling */
-      const result = await generateGeminiContent({
-        prompt,
-        history,
-        system_instruction: systemInstruction,
-        temperature: mode === 'report' ? 0.25 : 0.45,
-        max_output_tokens: mode === 'report' ? 1600 : 1100,
-      });
-
-      const text = String(result?.text || '').trim();
-      if (!text) throw new Error(`Empty Gemini response: ${agentMsg || 'agent_failed'}`);
-      return { answer: text, source: 'gemini', mode };
+      /* Autre erreur Groq → on continue vers fallback local */
+      console.warn('[aiModelService] Groq error, using local fallback:', groqErr?.message);
     }
-  } catch (err) {
-    const errMsg = String(err?.message || err || '');
-
-    /* ── Détection des erreurs de quota / limite API ──────────────────────
-       429 Too Many Requests  → quota RPM/RPD dépassé
-       503 Service Unavailable → Gemini surchargé
-       RESOURCE_EXHAUSTED      → libellé officiel de l'erreur quota Gemini
-       Ces erreurs NE doivent JAMAIS bloquer l'utilisateur :
-       on bascule toujours sur le fallback local, même si strictGemini=true.
-    ──────────────────────────────────────────────────────────────────────── */
-    const isQuotaError =
-      errMsg.includes('429')                 ||
-      errMsg.includes('RESOURCE_EXHAUSTED')  ||
-      errMsg.includes('quota')               ||
-      errMsg.includes('Too Many Requests')   ||
-      errMsg.includes('rate limit')          ||
-      errMsg.includes('503')                 ||
-      errMsg.includes('overloaded');
-
-    /* strictGemini bloque seulement les vraies erreurs (clé invalide, etc.)
-       Il ne bloque JAMAIS les erreurs de quota → toujours fallback. */
-    if (allowGemini && strictGemini && !isQuotaError) {
-      const e = new Error(`Gemini call failed: ${errMsg.slice(0, 400)}`);
-      e.code    = 'GEMINI_ERROR';
-      e.details = errMsg.slice(0, 1200);
-      throw e;
-    }
-
-    /* Fallback local — répond toujours, même sans Gemini */
-    const answer = mode === 'report'
-      ? fallbackReportAnswer(question, context)
-      : await fallbackChatAnswer(question, context);
-
-    return {
-      answer,
-      source:        'fallback',
-      mode,
-      gemini_skipped: isQuotaError ? 'quota_exceeded' : 'gemini_disabled_or_error',
-    };
   }
+
+  /* ── Priorité 2 : Gemini (si configuré) ── */
+  if (allowGemini) {
+    try {
+      return await runGeminiAgent({ question, history, system_instruction: systemInstruction, mode, context });
+    } catch (geminiErr) {
+      console.warn('[aiModelService] Gemini error, using local fallback:', geminiErr?.message);
+    }
+  }
+
+  /* ── Priorité 3 : Fallback local (toujours disponible) ── */
+  const answer = mode === 'report'
+    ? fallbackReportAnswer(question, context)
+    : await fallbackChatAnswer(question, context);
+
+  return { answer, source: 'fallback', mode };
 }
 
 module.exports = {

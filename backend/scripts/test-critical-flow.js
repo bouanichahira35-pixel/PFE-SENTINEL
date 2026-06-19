@@ -128,6 +128,8 @@ async function run() {
       quantity: 30,
       unit_price: 1,
       supplier: 'Auto Supplier',
+      delivery_note_number: `AUTO-BL-${uniq}`,
+      date_entry: new Date().toISOString(),
     };
     await magApi.post('/stock/entries', entryPayload);
 

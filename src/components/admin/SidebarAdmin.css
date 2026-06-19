@@ -3,6 +3,7 @@
   background: var(--color-bg-primary);
   border-right: 1px solid var(--color-border);
   min-height: 100vh;
+  position: -webkit-sticky;
   position: sticky;
   top: 0;
   z-index: 20;
@@ -52,14 +53,6 @@
   color: var(--color-text-primary);
 }
 
-.sidebar-admin .sidebar-user-avatar {
-  width: 34px;
-  height: 34px;
-  border-radius: 50%;
-  object-fit: cover;
-  border: 2px solid var(--color-border-light);
-}
-
 .sidebar-admin .sidebar-toggle-btn,
 .sidebar-admin .sidebar-expand-btn {
   border: none;
@@ -89,7 +82,7 @@
   font-weight: 1000;
   letter-spacing: 0.08em;
   text-transform: uppercase;
-  color: rgba(2, 132, 199, 0.65);
+  color: color-mix(in srgb, var(--color-primary) 72%, var(--color-text-muted));
 }
 
 .sidebar-admin .sidebar-section:first-child .sidebar-section-title {
@@ -101,6 +94,7 @@
   align-items: center;
   gap: 12px;
   padding: 10px 10px;
+  border: 1px solid transparent;
   border-radius: 12px;
   color: var(--color-text-primary);
   text-decoration: none;
@@ -114,8 +108,9 @@
 }
 
 .sidebar-admin .sidebar-nav-item.active {
-  background: rgba(2, 132, 199, 0.12);
-  color: var(--color-text-primary);
+  background: color-mix(in srgb, var(--color-primary) 12%, var(--color-bg-primary));
+  color: var(--color-primary);
+  border: 1px solid color-mix(in srgb, var(--color-primary) 24%, var(--color-border));
 }
 
 .sidebar-admin .sidebar-nav-icon {

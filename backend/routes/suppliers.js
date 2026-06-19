@@ -29,7 +29,6 @@ const {
 const {
   asNonNegativeNumber,
   asOptionalString,
-  asPositiveNumber,
   isValidObjectIdLike,
   normalizeEmail,
   normalizePhone,

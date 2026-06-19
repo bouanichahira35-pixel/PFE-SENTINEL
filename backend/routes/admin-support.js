@@ -3,7 +3,6 @@ const router = require('express').Router();
 const requireAuth = require('../middlewares/requireAuth');
 const strictBody = require('../middlewares/strictBody');
 
-const User = require('../models/User');
 const Notification = require('../models/Notification');
 const { SupportTicket, SUPPORT_TICKET_CATEGORIES, SUPPORT_TICKET_PRIORITIES, SUPPORT_TICKET_STATUSES } = require('../models/SupportTicket');
 const { asDate, isSafeText } = require('../utils/validation');
@@ -22,12 +21,6 @@ function ensureAdmin(req, res) {
 function normalizeEnum(value, allowed) {
   const key = String(value || '').trim().toUpperCase();
   return allowed.includes(key) ? key : null;
-}
-
-function notifTypeForPriority(priority) {
-  if (priority === 'URGENT') return 'alert';
-  if (priority === 'HIGH') return 'warning';
-  return 'info';
 }
 
 function startOfDay(d) {

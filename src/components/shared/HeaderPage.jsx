@@ -13,6 +13,7 @@ const HeaderPage = ({
   icon,
   searchValue,
   onSearchChange,
+  searchPlaceholder,
   showSearch = true,
   onRefresh,
   onMenuClick,
@@ -209,7 +210,7 @@ const HeaderPage = ({
             <Search size={18} className="header-search-icon" aria-hidden="true" />
             <input
               type="search"
-              placeholder={i18n.search}
+              placeholder={searchPlaceholder || i18n.search}
               value={searchValue || ''}
               onChange={(e) => onSearchChange && onSearchChange(e.target.value)}
               className="header-search-input"

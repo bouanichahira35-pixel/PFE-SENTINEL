@@ -7,6 +7,15 @@ const mongoose = require('mongoose');
 const AppSetting = require('../models/AppSetting');
 
 async function run() {
+  const cleanup = spawnSync(process.execPath, ['scripts/cleanup-demo-data.js'], {
+    cwd: process.cwd(),
+    env: process.env,
+    stdio: 'inherit',
+  });
+  if (cleanup.status !== 0) {
+    throw new Error(`Cleanup demo data failed (exit=${cleanup.status})`);
+  }
+
   // 0) Seed test users (including admin) for demos/tests.
   const seedUsers = spawnSync(process.execPath, ['seed-human-users.js'], {
     cwd: process.cwd(),
@@ -42,15 +51,6 @@ async function run() {
     throw new Error(`Seed failed (exit=${seed.status})`);
   }
 
-  const seedAnomalies = spawnSync(process.execPath, ['scripts/seed-critical-anomalies.js'], {
-    cwd: process.cwd(),
-    env: process.env,
-    stdio: 'inherit',
-  });
-  if (seedAnomalies.status !== 0) {
-    throw new Error(`Seed critical anomalies failed (exit=${seedAnomalies.status})`);
-  }
-
   // 3) Seed inventory missions for demo screens (idempotent).
   const seedInventory = spawnSync(process.execPath, ['scripts/seed-inventory-demo.js'], {
     cwd: process.cwd(),
@@ -65,7 +65,7 @@ async function run() {
   console.log('DEMO_SETUP_OK', {
     users: 'seed-human',
     ai_config: 'enabled',
-    seed: 'magasinier-large + anomalies + inventory-demo',
+    seed: 'humanized-catalogue + inventory-demo',
   });
 }
 

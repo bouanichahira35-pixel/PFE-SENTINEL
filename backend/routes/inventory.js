@@ -74,6 +74,7 @@ function computeProductStatus(quantity, seuilMinimum) {
 }
 
 const ACTIVE_INVENTORY_STATUSES = ['A_FAIRE', 'EN_COURS', 'A_VALIDER', 'A_RECOMPTER'];
+const EDITABLE_INVENTORY_STATUSES = ['A_FAIRE', 'EN_COURS', 'A_RECOMPTER'];
 const DEFAULT_INVENTORY_MAGASIN_CODE = 'MAG-01';
 const DEFAULT_INVENTORY_MAGASIN_NAME = 'Magasin principal';
 const INVENTORY_FAMILIES = [
@@ -208,6 +209,51 @@ async function listProductsForInventory({ typeInventaire, categorieId, familleId
   return items;
 }
 
+function uniqueObjectIdStrings(values = []) {
+  const out = [];
+  const seen = new Set();
+  for (const value of Array.isArray(values) ? values : []) {
+    const key = String(value?._id || value || '').trim();
+    if (!key || seen.has(key)) continue;
+    seen.add(key);
+    out.push(key);
+  }
+  return out;
+}
+
+function buildMovementLockConfig({ enabled, typeInventaire, productIds = [] }) {
+  const ids = uniqueObjectIdStrings(productIds);
+  if (!enabled) {
+    return {
+      bloquer_mouvements: false,
+      movement_blocked: false,
+      movement_block_scope: 'none',
+      movement_blocked_product_ids: [],
+    };
+  }
+
+  if (String(typeInventaire) === 'GLOBAL' && ids.length === 0) {
+    return {
+      bloquer_mouvements: true,
+      movement_blocked: true,
+      movement_block_scope: 'global',
+      movement_blocked_product_ids: [],
+    };
+  }
+
+  return {
+    bloquer_mouvements: true,
+    movement_blocked: ids.length > 0,
+    movement_block_scope: ids.length > 0 ? 'products' : 'none',
+    movement_blocked_product_ids: ids,
+  };
+}
+
+async function resolveInventoryLineProductIds(inventoryId) {
+  const rows = await InventoryLine.find({ inventory_id: inventoryId }).select('product_id').lean();
+  return uniqueObjectIdStrings(rows.map((row) => row.product_id));
+}
+
 function computeProgress({ total, counted }) {
   const t = Math.max(0, Number(total || 0));
   const c = Math.max(0, Number(counted || 0));
@@ -321,7 +367,7 @@ router.get('/launch/options', async (req, res) => {
   try {
     if (!ensureRole(req, res, ['responsable'])) return;
 
-    let [magasins, categories, products, magasiniers] = await Promise.all([
+    let [magasins, categories, products, productBuckets, magasiniers] = await Promise.all([
       Laboratory.find({ active: true }).select('_id code name active').sort({ name: 1 }).lean(),
       Category.find({ lifecycle_status: 'active' }).select('_id name parent_family').sort({ name: 1 }).lean(),
       Product.find({ lifecycle_status: 'active', validation_status: 'approved' })
@@ -329,8 +375,41 @@ router.get('/launch/options', async (req, res) => {
         .sort({ name: 1 })
         .limit(500)
         .lean(),
+      Product.aggregate([
+        { $match: { lifecycle_status: 'active', validation_status: 'approved' } },
+        {
+          $group: {
+            _id: { family: '$family', category: '$category' },
+            count: { $sum: 1 },
+          },
+        },
+      ]),
       User.find({ role: 'magasinier', status: 'active' }).select('_id username role status').sort({ username: 1 }).lean(),
     ]);
+
+    const familyCounts = new Map();
+    const categoryCounts = new Map();
+    for (const row of Array.isArray(productBuckets) ? productBuckets : []) {
+      const count = Math.max(0, Number(row?.count || 0));
+      const family = String(row?._id?.family || '').trim();
+      const category = row?._id?.category ? String(row._id.category) : '';
+      if (family) familyCounts.set(family, Number(familyCounts.get(family) || 0) + count);
+      if (category) categoryCounts.set(category, Number(categoryCounts.get(category) || 0) + count);
+    }
+
+    categories = categories
+      .map((c) => ({
+        ...c,
+        article_count: Number(categoryCounts.get(String(c._id)) || 0),
+      }))
+      .filter((c) => Number(c.article_count || 0) > 0);
+
+    const familles = INVENTORY_FAMILIES
+      .map((f) => ({
+        ...f,
+        article_count: Number(familyCounts.get(String(f.value)) || 0),
+      }))
+      .filter((f) => Number(f.article_count || 0) > 0);
 
     if (!magasins.length) {
       const defaultMagasin = await getOrCreateDefaultInventoryMagasin(req.user?.id);
@@ -342,7 +421,8 @@ router.get('/launch/options', async (req, res) => {
       magasins,
       categories,
       products,
-      familles: INVENTORY_FAMILIES,
+      familles,
+      active_product_count: Array.from(familyCounts.values()).reduce((sum, n) => sum + Number(n || 0), 0),
       magasiniers,
     });
   } catch (err) {
@@ -1338,6 +1418,221 @@ router.post('/magasinier/inventories/:id/submit', async (req, res) => {
   }
 });
 
+// PATCH /api/inventory/responsable/inventories/:id/settings
+router.patch(
+  '/responsable/inventories/:id/settings',
+  strictBody(['date_prevue', 'commentaire', 'magasinier_ids', 'notifications_activees', 'bloquer_mouvements', 'movement_blocked_product_ids']),
+  async (req, res) => {
+    try {
+      if (!ensureRole(req, res, ['responsable'])) return;
+      if (!isValidObjectIdLike(req.params.id)) return res.status(400).json({ error: 'id invalide' });
+
+      const inv = await Inventory.findById(req.params.id);
+      if (!inv) return res.status(404).json({ error: 'Inventaire introuvable' });
+      if (String(inv.responsable_id) !== String(req.user.id)) return res.status(403).json({ error: 'Acces refuse' });
+      if (!EDITABLE_INVENTORY_STATUSES.includes(String(inv.status))) {
+        return res.status(409).json({ error: 'Inventaire non modifiable pendant ce statut' });
+      }
+
+      const changes = [];
+
+      if (req.body?.date_prevue !== undefined) {
+        const datePrevue = asDate(req.body?.date_prevue);
+        if (datePrevue === undefined || datePrevue === null) return res.status(400).json({ error: 'date_prevue invalide' });
+        inv.date_prevue = datePrevue;
+        changes.push('date_prevue');
+      }
+
+      if (req.body?.commentaire !== undefined) {
+        const commentaire = asOptionalString(req.body?.commentaire) || '';
+        if (commentaire && !isSafeText(commentaire, { min: 0, max: 600 })) return res.status(400).json({ error: 'commentaire invalide' });
+        inv.commentaire = commentaire;
+        changes.push('commentaire');
+      }
+
+      if (req.body?.notifications_activees !== undefined) {
+        inv.notifications_activees = Boolean(req.body.notifications_activees);
+        changes.push('notifications_activees');
+      }
+
+      if (req.body?.magasinier_ids !== undefined) {
+        const rawIds = Array.isArray(req.body.magasinier_ids) ? req.body.magasinier_ids : [];
+        const magasinierIds = uniqueObjectIdStrings(rawIds);
+        if (!magasinierIds.length) return res.status(400).json({ error: 'magasinier_ids obligatoire' });
+        if (magasinierIds.some((id) => !isValidObjectIdLike(id))) return res.status(400).json({ error: 'magasinier_id invalide' });
+
+        const users = await User.find({ _id: { $in: magasinierIds } }).select('_id username role status').lean();
+        const byId = new Map(users.map((u) => [String(u._id), u]));
+        const ordered = magasinierIds.map((id) => byId.get(id)).filter(Boolean);
+        if (ordered.length !== magasinierIds.length) return res.status(404).json({ error: 'Magasinier introuvable' });
+        if (ordered.some((u) => String(u.role) !== 'magasinier')) return res.status(400).json({ error: 'Utilisateur non magasinier' });
+        if (ordered.some((u) => String(u.status || 'active') !== 'active')) return res.status(409).json({ error: 'Magasinier inactif/bloque' });
+
+        inv.magasinier_id = ordered[0]._id;
+        inv.magasinier_ids = ordered.map((u) => u._id);
+        changes.push('magasinier_ids');
+      }
+
+      if (req.body?.bloquer_mouvements !== undefined || req.body?.movement_blocked_product_ids !== undefined) {
+        const enabled = req.body?.bloquer_mouvements !== undefined
+          ? Boolean(req.body.bloquer_mouvements)
+          : Boolean(inv.bloquer_mouvements);
+        const allLineProductIds = await resolveInventoryLineProductIds(inv._id);
+        let productIds = [];
+
+        if (enabled) {
+          const requested = uniqueObjectIdStrings(req.body?.movement_blocked_product_ids || []);
+          if (requested.length) {
+            const allowed = new Set(allLineProductIds.map(String));
+            const invalid = requested.find((id) => !allowed.has(String(id)));
+            if (invalid) return res.status(400).json({ error: 'Produit hors perimetre inventaire' });
+            productIds = requested;
+          } else if (String(inv.type_inventaire) !== 'GLOBAL') {
+            productIds = allLineProductIds;
+          }
+        }
+
+        const movementLock = buildMovementLockConfig({
+          enabled,
+          typeInventaire: inv.type_inventaire,
+          productIds,
+        });
+        inv.bloquer_mouvements = movementLock.bloquer_mouvements;
+        inv.movement_blocked = movementLock.movement_blocked;
+        inv.movement_block_scope = movementLock.movement_block_scope;
+        inv.movement_blocked_product_ids = movementLock.movement_blocked_product_ids;
+        changes.push('mouvement_lock');
+      }
+
+      if (!changes.length) return res.status(400).json({ error: 'Aucune modification' });
+
+      await inv.save();
+      await History.create({
+        action_type: 'inventory',
+        user: req.user.id,
+        source: 'ui',
+        description: "Le responsable a modifie les parametres de l'inventaire.",
+        actor_role: req.user.role,
+        tags: ['inventory', 'settings', 'INVENTORY_UPDATED'],
+        context: {
+          event: 'INVENTORY_UPDATED',
+          inventory_id: String(inv._id),
+          reference: inv.reference,
+          changes,
+          movement_blocked: Boolean(inv.movement_blocked),
+          movement_block_scope: inv.movement_block_scope || 'none',
+          movement_blocked_product_ids: uniqueObjectIdStrings(inv.movement_blocked_product_ids),
+        },
+      });
+
+      const updated = await Inventory.findById(inv._id)
+        .populate('responsable_id', 'username role')
+        .populate('magasinier_id', 'username role')
+        .populate('magasinier_ids', 'username role')
+        .populate('magasin_id', 'code name')
+        .populate('zone_id', 'code name')
+        .populate('categorie_id', 'name')
+        .populate('product_id', '_id code_product name')
+        .lean();
+
+      return res.json({ ok: true, inventory: updated });
+    } catch (err) {
+      return res.status(400).json({ error: 'Failed to update inventory settings', details: err.message });
+    }
+  }
+);
+
+// POST /api/inventory/responsable/inventories/:id/cancel
+router.post(
+  '/responsable/inventories/:id/cancel',
+  strictBody(['motif']),
+  async (req, res) => {
+    try {
+      if (!ensureRole(req, res, ['responsable'])) return;
+      if (!isValidObjectIdLike(req.params.id)) return res.status(400).json({ error: 'id invalide' });
+
+      const motif = asOptionalString(req.body?.motif);
+      if (!motif || !isSafeText(motif, { min: 5, max: 400 })) return res.status(400).json({ error: 'motif obligatoire (min 5)' });
+
+      const inv = await Inventory.findById(req.params.id);
+      if (!inv) return res.status(404).json({ error: 'Inventaire introuvable' });
+      if (String(inv.responsable_id) !== String(req.user.id)) return res.status(403).json({ error: 'Acces refuse' });
+      if (!ACTIVE_INVENTORY_STATUSES.includes(String(inv.status))) return res.status(409).json({ error: 'Inventaire deja cloture' });
+
+      const before = String(inv.status);
+      const now = new Date();
+
+      await runInTransaction(async (mongoSession) => {
+        inv.status = 'ANNULE';
+        inv.motif_annulation = motif;
+        inv.cancelled_at = now;
+        inv.cancelled_by = req.user.id;
+        inv.movement_blocked = false;
+        inv.movement_block_scope = 'none';
+        inv.movement_blocked_product_ids = [];
+        await inv.save(mongoSession ? { session: mongoSession } : undefined);
+
+        await History.create(
+          [
+            {
+              action_type: 'inventory',
+              user: req.user.id,
+              source: 'ui',
+              description: "Le responsable a annule l'inventaire.",
+              actor_role: req.user.role,
+              tags: ['inventory', 'cancel', 'INVENTORY_CANCELLED'],
+              status_before: before,
+              status_after: 'ANNULE',
+              context: { event: 'INVENTORY_CANCELLED', inventory_id: String(inv._id), reference: inv.reference, motif },
+            },
+          ],
+          mongoSession ? { session: mongoSession } : undefined
+        );
+
+        const targets = listAssignedMagasinierIds(inv);
+        if (targets.length) {
+          await Notification.insertMany(
+            targets.map((userId) => ({
+              user: userId,
+              title: 'Inventaire annule',
+              message: `L'inventaire ${inv.reference} a ete annule. Motif : ${motif}`,
+              type: 'warning',
+              is_read: false,
+              event_type: 'INVENTORY_CANCELLED',
+              inventory_id: inv._id,
+            })),
+            mongoSession ? { session: mongoSession } : undefined
+          );
+        }
+      });
+
+      return res.json({ ok: true, inventory: { id: inv._id, reference: inv.reference, status: inv.status } });
+    } catch (err) {
+      return res.status(500).json({ error: 'Failed to cancel inventory', details: err.message });
+    }
+  }
+);
+
+// DELETE /api/inventory/responsable/inventories/:id
+router.delete('/responsable/inventories/:id', async (req, res) => {
+  try {
+    if (!ensureRole(req, res, ['responsable'])) return;
+    if (!isValidObjectIdLike(req.params.id)) return res.status(400).json({ error: 'id invalide' });
+
+    const inv = await Inventory.findById(req.params.id);
+    if (!inv) return res.status(404).json({ error: 'Inventaire introuvable' });
+    if (String(inv.responsable_id) !== String(req.user.id)) return res.status(403).json({ error: 'Acces refuse' });
+
+    return res.status(409).json({
+      code: 'INVENTORY_DELETE_DISABLED',
+      error: "Suppression definitive des inventaires desactivee. Utilisez l'annulation pour desactiver l'inventaire et conserver l'audit.",
+      inventory: { id: inv._id, reference: inv.reference, status: inv.status },
+    });
+  } catch (err) {
+    return res.status(500).json({ error: 'Failed to delete inventory', details: err.message });
+  }
+});
+
 // GET /api/inventory/inventories
 router.get('/inventories', async (req, res) => {
   try {
@@ -1346,10 +1641,12 @@ router.get('/inventories', async (req, res) => {
     const q = {};
     if (role === 'magasinier') {
       q.$or = [{ magasinier_id: req.user.id }, { magasinier_ids: req.user.id }];
+    } else if (role === 'responsable') {
+      q.responsable_id = req.user.id;
     }
 
     const status = asOptionalString(req.query?.status);
-    if (status && ACTIVE_INVENTORY_STATUSES.concat(['BROUILLON', 'VALIDE', 'REJETE']).includes(status)) {
+    if (status && ACTIVE_INVENTORY_STATUSES.concat(['BROUILLON', 'VALIDE', 'REJETE', 'ANNULE']).includes(status)) {
       q.status = status;
     }
 
@@ -1365,9 +1662,31 @@ router.get('/inventories', async (req, res) => {
       .populate('product_id', '_id code_product name')
       .lean();
 
-    const inventories = role === 'magasinier'
-      ? items.map((inv) => sanitizeInventoryForMagasinier(inv))
-      : items;
+    const ids = items.map((inv) => inv._id);
+    const progressAgg = ids.length
+      ? await InventoryLine.aggregate([
+          { $match: { inventory_id: { $in: ids } } },
+          {
+            $group: {
+              _id: '$inventory_id',
+              total: { $sum: 1 },
+              counted: { $sum: { $cond: ['$is_counted', 1, 0] } },
+              recount: { $sum: { $cond: ['$requires_recount', 1, 0] } },
+            },
+          },
+        ])
+      : [];
+    const progressById = new Map(progressAgg.map((row) => [String(row._id), computeProgress(row)]));
+    const recountById = new Map(progressAgg.map((row) => [String(row._id), Number(row.recount || 0)]));
+
+    const inventories = items.map((inv) => {
+      const base = role === 'magasinier' ? sanitizeInventoryForMagasinier(inv) : inv;
+      return {
+        ...base,
+        progress: progressById.get(String(inv._id)) || computeProgress({ total: 0, counted: 0 }),
+        recount_lines_count: Number(recountById.get(String(inv._id)) || 0),
+      };
+    });
 
     return res.json({ ok: true, inventories });
   } catch (err) {
@@ -1467,6 +1786,10 @@ router.post(
         if (!productId && !familleId && !categorieId) {
           errors.push('Pour TOURNANT, choisir au moins un produit, une famille ou une categorie');
         }
+        const perimeterCount = [productId, familleId, categorieId].filter(Boolean).length;
+        if (perimeterCount > 1) {
+          errors.push('Pour TOURNANT, choisir un seul perimetre: produit, famille ou categorie');
+        }
       }
 
       if (errors.length) return res.status(400).json({ error: 'Validation failed', details: errors });
@@ -1496,15 +1819,19 @@ router.post(
         .lean();
       if (existingActive) {
         return res.status(409).json({
+          code: 'ACTIVE_INVENTORY_EXISTS',
           error: 'Inventaire deja actif sur ce perimetre',
           details: `Existant: ${existingActive.reference} (${existingActive.status})`,
+          existing_inventory: {
+            id: existingActive._id,
+            reference: existingActive.reference,
+            status: existingActive.status,
+          },
         });
       }
 
       const reference = await getNextInventoryReference();
       const dateLancement = new Date();
-      const movementBlocked = Boolean(typeInventaire === 'GLOBAL' && bloquerMouvements);
-
       const products = await listProductsForInventory({
         typeInventaire,
         categorieId,
@@ -1513,8 +1840,17 @@ router.post(
       });
 
       if (!products.length) {
-        return res.status(409).json({ error: 'Aucun article concerne par cet inventaire' });
+        return res.status(409).json({
+          code: 'NO_PRODUCTS_FOR_INVENTORY',
+          error: 'Aucun article concerne par cet inventaire',
+        });
       }
+
+      const movementLock = buildMovementLockConfig({
+        enabled: bloquerMouvements,
+        typeInventaire,
+        productIds: typeInventaire === 'GLOBAL' ? [] : products.map((p) => p._id),
+      });
 
       const result = await runInTransaction(async (mongoSession) => {
         const inventoryDoc = await Inventory.create(
@@ -1533,10 +1869,12 @@ router.post(
               magasinier_ids: orderedMagasiniers.map((u) => u._id),
               date_lancement: dateLancement,
               date_prevue: datePrevue,
-              bloquer_mouvements: bloquerMouvements,
+              bloquer_mouvements: movementLock.bloquer_mouvements,
               notifications_activees: notificationsActives,
               commentaire,
-              movement_blocked: movementBlocked,
+              movement_blocked: movementLock.movement_blocked,
+              movement_block_scope: movementLock.movement_block_scope,
+              movement_blocked_product_ids: movementLock.movement_blocked_product_ids,
             },
           ],
           mongoSession ? { session: mongoSession } : undefined
@@ -1585,7 +1923,9 @@ router.post(
                 magasinier_id: String(primaryMagasinier._id),
                 magasinier_ids: orderedMagasiniers.map((u) => String(u._id)),
                 lines_count: lines.length,
-                movement_blocked: movementBlocked,
+                movement_blocked: movementLock.movement_blocked,
+                movement_block_scope: movementLock.movement_block_scope,
+                movement_blocked_product_ids: movementLock.movement_blocked_product_ids.map(String),
               },
             },
           ],

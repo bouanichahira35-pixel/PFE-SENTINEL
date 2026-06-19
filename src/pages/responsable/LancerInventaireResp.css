@@ -32,7 +32,7 @@
 
 .inv-launch-grid {
   display: grid;
-  grid-template-columns: 1fr 320px;
+  grid-template-columns: minmax(0, 1fr) minmax(300px, 360px);
   gap: 16px;
   align-items: start;
 }
@@ -40,12 +40,15 @@
 .inv-launch-card {
   background: hsl(var(--app-bg));
   border: 1px solid hsl(var(--border));
-  border-radius: 16px;
+  border-radius: 8px;
   padding: 14px;
+  min-width: 0;
 }
 
 .inv-launch-card.side {
   background: var(--color-bg-primary);
+  position: sticky;
+  top: 84px;
 }
 
 .inv-launch-card-head {
@@ -65,7 +68,7 @@
   border: 1px solid hsl(var(--border));
   background: var(--color-bg-primary);
   color: var(--color-text-primary);
-  border-radius: 12px;
+  border-radius: 8px;
   padding: 10px 12px;
   font-weight: 800;
   cursor: pointer;
@@ -95,7 +98,7 @@
   text-align: left;
   border: 1px solid hsl(var(--border));
   background: var(--color-bg-primary);
-  border-radius: 16px;
+  border-radius: 8px;
   padding: 12px;
   cursor: pointer;
   transition: box-shadow 0.15s ease, border-color 0.15s ease, transform 0.15s ease;
@@ -135,7 +138,7 @@
   display: flex;
   gap: 10px;
   padding: 10px 12px;
-  border-radius: 16px;
+  border-radius: 8px;
   border: 1px solid var(--color-border);
   margin-bottom: 12px;
   font-weight: 700;
@@ -171,7 +174,7 @@
   width: 100%;
   border: 1px solid var(--color-border);
   background: var(--color-bg-primary);
-  border-radius: 12px;
+  border-radius: 8px;
   padding: 10px 12px;
   color: var(--color-text-primary);
   outline: none;
@@ -200,7 +203,7 @@
 .inv-launch-multi-list {
   border: 1px solid var(--color-border);
   background: var(--color-bg-primary);
-  border-radius: 12px;
+  border-radius: 8px;
   padding: 8px 10px;
   max-height: 170px;
   overflow: auto;
@@ -275,7 +278,7 @@
 .inv-launch-errors {
   border: 1px solid rgba(239, 68, 68, 0.35);
   background: rgba(239, 68, 68, 0.08);
-  border-radius: 14px;
+  border-radius: 8px;
   padding: 10px 12px;
   color: #b91c1c;
   font-weight: 800;
@@ -304,10 +307,11 @@
 
 .inv-launch-kv {
   display: grid;
-  grid-template-columns: 110px 1fr;
+  grid-template-columns: minmax(92px, 110px) minmax(0, 1fr);
   gap: 10px;
   padding: 8px 0;
   border-bottom: 1px dashed var(--color-border-light);
+  align-items: start;
 }
 
 .inv-launch-kv .k {
@@ -322,16 +326,52 @@
   color: var(--color-text-primary);
   font-weight: 700;
   word-break: break-word;
+  min-width: 0;
+  line-height: 1.35;
 }
 
 .inv-launch-side-note {
   margin-top: 12px;
   padding: 10px 12px;
   border: 1px solid var(--color-border);
-  border-radius: 14px;
+  border-radius: 8px;
   background: var(--color-bg-secondary);
   font-weight: 800;
   color: var(--color-text-primary);
+}
+
+.inv-launch-assignment-summary {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+}
+
+.inv-launch-assignment-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  min-width: 0;
+}
+
+.inv-launch-assignment-chip,
+.inv-launch-assignment-more {
+  max-width: 100%;
+  border: 1px solid rgba(25, 118, 210, 0.18);
+  background: rgba(25, 118, 210, 0.08);
+  color: #1d4ed8;
+  border-radius: 999px;
+  padding: 4px 8px;
+  font-size: 12px;
+  font-weight: 900;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.inv-launch-assignment-empty {
+  color: var(--color-text-secondary);
+  font-size: 12px;
+  font-weight: 800;
 }
 
 .inv-status-badge {
@@ -348,11 +388,16 @@
 .inv-status-badge.a_faire { background: rgba(59, 130, 246, 0.12); color: #1d4ed8; }
 
 @media (max-width: 1024px) {
-  .inv-launch-grid { grid-template-columns: 1fr; }
+  .inv-launch-grid { grid-template-columns: minmax(0, 1fr); }
+  .inv-launch-card.side { position: static; }
 }
 
 @media (max-width: 640px) {
   .inv-launch-type { grid-template-columns: 1fr; }
   .inv-launch-row.two { grid-template-columns: 1fr; }
   .inv-launch-checks { margin-top: 0; }
+  .inv-launch-multi-head { grid-template-columns: 1fr; }
+  .inv-launch-multi-actions { justify-content: stretch; }
+  .inv-launch-multi-actions .inv-launch-btn { flex: 1; justify-content: center; }
+  .inv-launch-kv { grid-template-columns: 1fr; gap: 4px; }
 }

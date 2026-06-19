@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ArrowRight, CheckCircle2, ClipboardCheck, Info, RefreshCw, Rocket, RotateCcw, Search, XCircle } from 'lucide-react';
+import { ArrowRight, CheckCircle2, ClipboardCheck, ClipboardList, Info, RefreshCw, Rocket, RotateCcw, Search, XCircle } from 'lucide-react';
 import SidebarResp from '../../components/responsable/SidebarResp';
 import HeaderPage from '../../components/shared/HeaderPage';
 import ProtectedPage from '../../components/shared/ProtectedPage';
@@ -170,6 +170,9 @@ const InventairesAValiderResp = ({ userName, onLogout }) => {
                   </div>
                   <button className="inv-btn primary" type="button" onClick={() => navigate('/responsable/inventaires/lancer')} disabled={isLoading}>
                     <Rocket size={16} /> Lancer un inventaire
+                  </button>
+                  <button className="inv-btn" type="button" onClick={() => navigate('/responsable/inventaires')} disabled={isLoading}>
+                    <ClipboardList size={16} /> Tous les inventaires
                   </button>
                   <button className="inv-btn" type="button" onClick={load} disabled={isLoading}>
                     <RefreshCw size={16} /> Actualiser

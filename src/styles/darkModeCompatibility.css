@@ -1,0 +1,126 @@
+/* Compatibility bridge for legacy screens that still use hard-coded light surfaces.
+   Keep new code on the token system instead of extending this list. */
+[data-theme="dark"] {
+  color-scheme: dark;
+}
+
+[data-theme="dark"] :where(
+  .app-layout,
+  .main-container,
+  .main-content,
+  [class$="-page"],
+  [class*="-page "],
+  [class$="-container"],
+  [class*="-container "]
+) {
+  background-color: var(--color-bg-secondary) !important;
+  color: var(--color-text-primary);
+}
+
+[data-theme="dark"] :where(
+  .header-page,
+  .header-mag,
+  .sidebar-admin,
+  .sidebar-mag,
+  .sidebar-dem,
+  .sidebar-resp
+) {
+  background-color: var(--color-bg-primary) !important;
+  border-color: var(--color-border) !important;
+  color: var(--color-text-primary);
+}
+
+[data-theme="dark"] :where(
+  [class$="-card"],
+  [class*="-card "],
+  [class$="-panel"],
+  [class*="-panel "],
+  [class$="-table-container"],
+  [class*="-table-container "],
+  [class$="-modal"],
+  [class*="-modal "],
+  [class$="-drawer"],
+  [class*="-drawer "],
+  [class$="-toolbar"],
+  [class*="-toolbar "],
+  [class$="-filters"],
+  [class*="-filters "],
+  [class$="-form"],
+  [class*="-form "],
+  .resp-card,
+  .resp-summary-pill,
+  .resp-ai-alerts-panel,
+  .resp-recommendations-panel,
+  .resp-priority-card,
+  .resp-shortcut-card,
+  .resp-product-row,
+  .resp-recommendation-item,
+  .mobile-card
+) {
+  background-color: var(--color-bg-primary) !important;
+  border-color: var(--color-border) !important;
+  color: var(--color-text-primary);
+}
+
+[data-theme="dark"] :where(
+  [class$="-row"],
+  [class*="-row "],
+  [class$="-item"],
+  [class*="-item "],
+  [class$="-list"],
+  [class*="-list "],
+  table,
+  th,
+  td
+) {
+  border-color: var(--color-border) !important;
+  color: var(--color-text-primary);
+}
+
+[data-theme="dark"] :where(th, thead td) {
+  background-color: var(--color-bg-tertiary) !important;
+}
+
+[data-theme="dark"] :where(
+  input:not([type="checkbox"]):not([type="radio"]),
+  select,
+  textarea
+) {
+  background-color: var(--color-bg-primary) !important;
+  border-color: var(--color-border) !important;
+  color: var(--color-text-primary) !important;
+}
+
+[data-theme="dark"] :where(
+  input:not([type="checkbox"]):not([type="radio"])::placeholder,
+  textarea::placeholder
+) {
+  color: var(--color-text-muted) !important;
+}
+
+[data-theme="dark"] :where(
+  h1,
+  h2,
+  h3,
+  h4,
+  h5,
+  h6,
+  strong,
+  label,
+  .sidebar-user-name,
+  .sidebar-logo-title,
+  .resp-product-info strong,
+  .resp-card-header h3
+) {
+  color: var(--color-text-primary);
+}
+
+[data-theme="dark"] :where(
+  p,
+  small,
+  .sidebar-nav-label,
+  .resp-card-note,
+  .risk-meta
+) {
+  border-color: var(--color-border);
+}

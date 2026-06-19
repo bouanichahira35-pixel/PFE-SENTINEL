@@ -1,5 +1,4 @@
 const PurchaseOrder = require('../models/PurchaseOrder');
-const Supplier = require('../models/Supplier');
 const Notification = require('../models/Notification');
 const User = require('../models/User');
 const { getSupplierEmailPolicy, sendPurchaseOrderEmailToSupplier } = require('./purchaseOrderSupplierMailService');

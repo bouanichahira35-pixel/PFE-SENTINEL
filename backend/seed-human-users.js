@@ -2,6 +2,7 @@ require('./loadEnv');
 const mongoose = require('./db');
 const bcrypt = require('bcryptjs');
 const User = require('./models/User');
+const { HUMANIZED_CORE_USERS } = require('./data/humanizedCatalogue');
 
 function getTestEnv(name, fallbackForLocal) {
   const value = String(process.env[name] || '').trim();
@@ -22,36 +23,20 @@ function getTestEnv(name, fallbackForLocal) {
     process.exit(1);
   }
 
-  const users = [
-    {
-      username: 'Admin Informatique',
-      email: getTestEnv('TEST_ADMIN_EMAIL', 'admin@example.local'),
-      telephone: '+21698000000',
-      role: 'admin',
-      password: getTestEnv('TEST_ADMIN_PASSWORD', 'ChangeMe_Admin_123'),
-    },
-    {
-      username: 'Sarra Ben Youssef',
-      email: getTestEnv('TEST_DEMANDEUR_EMAIL', 'demandeur@example.local'),
-      telephone: '+21698123456',
-      role: 'demandeur',
-      password: getTestEnv('TEST_DEMANDEUR_PASSWORD', 'ChangeMe_Demandeur_123')
-    },
-    {
-      username: 'Ahmed Trabelsi',
-      email: getTestEnv('TEST_MAGASINIER_EMAIL', 'magasinier@example.local'),
-      telephone: '+21698111111',
-      role: 'magasinier',
-      password: getTestEnv('TEST_MAGASINIER_PASSWORD', 'ChangeMe_Magasinier_123')
-    },
-    {
-      username: 'Mohamed Gharbi',
-      email: getTestEnv('TEST_RESPONSABLE_EMAIL', 'responsable@example.local'),
-      telephone: '+21698222222',
-      role: 'responsable',
-      password: getTestEnv('TEST_RESPONSABLE_PASSWORD', 'ChangeMe_Responsable_123')
-    }
-  ];
+  const envByRole = {
+    admin: 'TEST_ADMIN_EMAIL',
+    demandeur: 'TEST_DEMANDEUR_EMAIL',
+    magasinier: 'TEST_MAGASINIER_EMAIL',
+    responsable: 'TEST_RESPONSABLE_EMAIL',
+  };
+
+  const users = HUMANIZED_CORE_USERS.map((user) => ({
+    username: user.username,
+    email: getTestEnv(envByRole[user.role], user.email),
+    telephone: user.telephone,
+    role: user.role,
+    password: getTestEnv(user.passwordEnv, user.fallbackPassword),
+  }));
 
   for (const u of users) {
     const hash = await bcrypt.hash(u.password, 12);

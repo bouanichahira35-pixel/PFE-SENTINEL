@@ -6,7 +6,7 @@ const strictBody = require('../middlewares/strictBody');
 const User = require('../models/User');
 const Notification = require('../models/Notification');
 const Sequence = require('../models/Sequence');
-const { SupportTicket, SUPPORT_TICKET_CATEGORIES, SUPPORT_TICKET_PRIORITIES, SUPPORT_TICKET_STATUSES } = require('../models/SupportTicket');
+const { SupportTicket, SUPPORT_TICKET_CATEGORIES, SUPPORT_TICKET_PRIORITIES } = require('../models/SupportTicket');
 const { isSafeText } = require('../utils/validation');
 
 router.use(requireAuth);

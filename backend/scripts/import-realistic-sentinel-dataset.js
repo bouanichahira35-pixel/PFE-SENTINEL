@@ -1120,7 +1120,6 @@ async function importNotifications(filePath, { actors, dryRun }) {
     const notifId = sanitizeKey(row.notification_id);
     if (!notifId) return;
 
-    const date = parseDateTime(row.date) || new Date();
     const title = sanitizeKey(row.title);
     const message = sanitizeKey(row.message);
     const role = String(row.target_role || '').trim().toLowerCase();

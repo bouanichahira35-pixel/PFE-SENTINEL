@@ -2,15 +2,12 @@ import { Link, useLocation } from 'react-router-dom';
 import { Package, History, FileText, MessageCircle, Settings, ChevronLeft, ChevronRight, LogOut, ClipboardList, ClipboardCheck } from 'lucide-react';
 import logoETAP from '../../assets/logoETAP.png';
 import { useUiLanguage } from '../../utils/uiLanguage';
-import useProtectedFileUrl from '../../hooks/useProtectedFileUrl';
 import './SidebarMag.css';
 
 const SidebarMag = ({ collapsed, onToggle, onLogout, userName }) => {
   const language = useUiLanguage();
   const location = useLocation();
   const sessionUserName = sessionStorage.getItem('userName') || localStorage.getItem('userName') || userName || 'Utilisateur';
-  const profileImage = sessionStorage.getItem('imageProfile') || localStorage.getItem('imageProfile') || '';
-  const avatarUrl = useProtectedFileUrl(profileImage);
 
   const labels = {
     fr: { inbox: 'Centre de préparation', produits: 'Produits', demandes: 'Suivi demandes', inventaire: 'Inventaire', historique: 'Historique', chat: 'Chat', parametres: 'Paramètres', logout: 'Déconnexion' },
@@ -44,7 +41,6 @@ const SidebarMag = ({ collapsed, onToggle, onLogout, userName }) => {
               <span className="sidebar-logo-title">MAGASINIER</span>
               <span className="sidebar-user-name">{sessionUserName}</span>
             </div>
-            {avatarUrl && <img src={avatarUrl} alt="Profil" className="sidebar-user-avatar" />}
             <button onClick={onToggle} className="sidebar-toggle-btn">
               <ChevronLeft size={20} />
             </button>

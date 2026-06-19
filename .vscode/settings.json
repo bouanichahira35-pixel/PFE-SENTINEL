@@ -1,0 +1,25 @@
+{
+  "semgrep.scan.exclude": [
+    ".git",
+    ".cache",
+    ".semgrep",
+    ".sixth",
+    "build",
+    "node_modules",
+    "backend/node_modules",
+    "backend/data",
+    "backend/uploads",
+    "mobile/**/node_modules",
+    "frontend",
+    "docs",
+    "*.pdf",
+    "*.zip"
+  ],
+  "semgrep.scan.jobs": 1,
+  "semgrep.scan.maxTargetBytes": 500000,
+  "semgrep.scan.timeout": 15,
+  "semgrep.scan.onlyGitDirty": true,
+  "semgrep.metrics": false,
+  "semgrep.scan.pro_intrafile": false,
+  "semgrep.scan.secrets": false
+}

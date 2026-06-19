@@ -1,5 +1,8 @@
+// BLOC 1 - Importation des pages et outils React.
+// Ce fichier rassemble les ecrans de l'application et decide quelle page afficher.
 import { useState, useEffect, useCallback } from "react";
 import { ToastProvider } from "./components/shared/Toast";
+import "./App.css";
 
 import SplashScreen from "./components/shared/SplashScreen";
 import LoginPage from "./components/shared/LoginPage";
@@ -70,6 +73,7 @@ import { decodeJwtPayload } from "./utils/jwt";
 import { API_BASE } from "./services/api";
 
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
+import "./styles/darkModeCompatibility.css";
 
 // Align with backend inactivity policy (default 2h via SESSION_INACTIVITY_MS).
 // Frontend inactivity guard is best-effort and should not log out earlier than backend.
@@ -79,8 +83,18 @@ const LAST_LOGIN_ROLE_KEY = "lastLoginRole";
 const LOGOUT_REASON_KEY = "logoutReason";
 const REFRESH_SESSION_HINT_KEY = "hasRefreshSession";
 const AUTH_LOGOUT_EVENT_NAME = "auth-logout";
-const AUTH_RESTORE_TIMEOUT_MS = 4000;
 
+function readTimeoutEnv(name, fallback, { min = 2_000, max = 60_000 } = {}) {
+  const raw = String(process.env[name] || "").trim();
+  const parsed = Number(raw);
+  if (!Number.isFinite(parsed) || parsed <= 0) return fallback;
+  return Math.min(Math.max(parsed, min), max);
+}
+
+const AUTH_RESTORE_TIMEOUT_MS = readTimeoutEnv("REACT_APP_AUTH_RESTORE_TIMEOUT_MS", 15_000);
+
+// BLOC 2 - Gestion de l'indice de session.
+// Ces fonctions savent si le navigateur peut essayer de restaurer une session utilisateur.
 function hasRefreshSessionHint() {
   return (
     sessionStorage.getItem(REFRESH_SESSION_HINT_KEY) === "1" ||
@@ -100,6 +114,8 @@ function clearRefreshSessionHint() {
 }
 
 const App = () => {
+  // BLOC 3 - Etat principal de l'application.
+  // Ici React garde l'information: splash visible, utilisateur connecte, role et nom.
   const [showSplash, setShowSplash] = useState(true);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [userRole, setUserRole] = useState("");
@@ -109,6 +125,8 @@ const App = () => {
     applyUiLanguage(getUiLanguage());
   }, []);
 
+  // BLOC 4 - Deconnexion utilisateur.
+  // Cette fonction nettoie les tokens, le stockage navigateur et previent le backend.
   const handleLogout = useCallback((reason = "", options = {}) => {
     const remote = options?.remote !== false;
     const token = sessionStorage.getItem("token") || "";
@@ -176,6 +194,8 @@ const App = () => {
     }
   }, []);
 
+  // BLOC 5 - Ecoute d'une deconnexion forcee.
+  // Si le client API detecte une session expiree, App.js recoit l'evenement et deconnecte.
   useEffect(() => {
     const onAuthLogout = (event) => {
       const reason = typeof event?.detail?.reason === "string" ? event.detail.reason : "";
@@ -186,6 +206,8 @@ const App = () => {
     return () => window.removeEventListener(AUTH_LOGOUT_EVENT_NAME, onAuthLogout);
   }, [handleLogout]);
 
+  // BLOC 6 - Restauration de session au chargement.
+  // Au demarrage, l'application essaie de recuperer l'utilisateur depuis le token ou le refresh.
   useEffect(() => {
     let cancelled = false;
 
@@ -266,7 +288,8 @@ const App = () => {
     };
   }, [handleLogout]);
 
-  // Inactivity timeout timer (best-effort; aligned with backend inactivity policy).
+  // BLOC 7 - Deconnexion apres inactivite.
+  // Si l'utilisateur ne fait rien pendant longtemps, l'application le deconnecte.
   useEffect(() => {
     if (!isAuthenticated) return undefined;
 
@@ -342,6 +365,8 @@ const App = () => {
     setShowSplash(false);
   };
 
+  // BLOC 8 - Connexion reussie.
+  // Quand LoginPage renvoie un utilisateur valide, on garde son role et ses tokens.
   const handleLogin = (user, token, refreshToken, sessionId) => { 
     const normalizedRole = String(user?.role || "").toLowerCase();
     if (!isKnownRole(normalizedRole)) {
@@ -380,6 +405,8 @@ const App = () => {
   const homePath = HOME_PATH_BY_ROLE[userRole] || "/";
   const loginRedirect = "/login";
 
+  // BLOC 9 - Routes principales de l'application.
+  // Cette partie affiche les pages selon l'etat de connexion et selon le role utilisateur.
   return (
     <ToastProvider>
       <BrowserRouter>
@@ -400,6 +427,7 @@ const App = () => {
               <Route path="/login/*" element={<Navigate to={homePath} replace />} />
               {userRole === ROLES.MAGASINIER && (
                 <>
+                  {/* BLOC 10 - Routes du magasinier: stock, inventaire, demandes et historique. */}
                   <Route path="/magasinier" element={<ProduitsMag userName={userName} onLogout={handleLogout} />} />
                   <Route path="/magasinier/inbox" element={<InboxMag userName={userName} onLogout={handleLogout} />} />
                   <Route path="/magasinier/demandes" element={<ListeDemandes userName={userName} onLogout={handleLogout} />} />
@@ -419,6 +447,7 @@ const App = () => {
 
               {userRole === ROLES.RESPONSABLE && (
                 <>
+                  {/* BLOC 11 - Routes du responsable: pilotage, produits, fournisseurs, inventaires et IA. */}
                   <Route path="/responsable" element={<DashboardResp userName={userName} onLogout={handleLogout} />} />
                   <Route path="/responsable/demandes-a-traiter" element={<Navigate to="/responsable/pilotage" replace />} />
                   <Route path="/responsable/produits" element={<ProduitsResp userName={userName} onLogout={handleLogout} />} />
@@ -461,6 +490,7 @@ const App = () => {
 
               {userRole === ROLES.ADMIN && (
                 <>
+                  {/* BLOC 12 - Routes de l'admin: utilisateurs, securite, sessions, RBAC et support. */}
                   <Route path="/admin" element={<AdminDashboard userName={userName} onLogout={handleLogout} />} />
                   <Route path="/admin/utilisateurs" element={<AdminUsers userName={userName} onLogout={handleLogout} />} />
                   <Route path="/admin/supervision-ia" element={<AdminIA userName={userName} onLogout={handleLogout} />} />
@@ -479,6 +509,7 @@ const App = () => {
 
               {userRole === ROLES.DEMANDEUR && (
                 <>
+                  {/* BLOC 13 - Routes du demandeur: catalogue, demandes et parametres. */}
                   <Route path="/demandeur" element={<ProduitsDem userName={userName} onLogout={handleLogout} />} />
                   <Route path="/demandeur/mes-demandes" element={<MesDemandes userName={userName} onLogout={handleLogout} />} />
                   <Route path="/demandeur/parametres" element={<ParametresDem userName={userName} onLogout={handleLogout} />} />

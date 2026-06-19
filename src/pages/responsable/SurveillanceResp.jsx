@@ -22,7 +22,7 @@ const SurveillanceResp = ({ userName, onLogout }) => {
   const toast = useToast();
   const [sidebarCollapsed, setSidebarCollapsed] = useState(() => (typeof window !== 'undefined' ? window.innerWidth <= 768 : false));
   const [isLoading, setIsLoading] = useState(false);
-  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isSubmitting] = useState(false);
   const [aiStockout, setAiStockout] = useState([]);
   const [aiCopilot, setAiCopilot] = useState(null);
   const [aiAnomaly, setAiAnomaly] = useState([]);

@@ -1,0 +1,101 @@
+category_name;category_description;category_audiences;product_name;product_description;family;unite;seuil_minimum;emplacement
+Bureautique;Catalogue operationnel bureautique;bureautique;Papier A4 Navigator 80 g ramette 500 feuilles;Article catalogue humanise: Papier A4 Navigator 80 g ramette 500 feuilles.;economat;Ramette;24;MAG-BUR-R01
+Bureautique;Catalogue operationnel bureautique;bureautique;Papier A3 Clairefontaine 80 g ramette 500 feuilles;Article catalogue humanise: Papier A3 Clairefontaine 80 g ramette 500 feuilles.;economat;Ramette;8;MAG-BUR-R01
+Bureautique;Catalogue operationnel bureautique;bureautique;Toner HP 26A noir compatible LaserJet;Article catalogue humanise: Toner HP 26A noir compatible LaserJet.;economat;Unite;4;MAG-BUR-R02
+Bureautique;Catalogue operationnel bureautique;bureautique;Toner Canon 719 noir compatible;Article catalogue humanise: Toner Canon 719 noir compatible.;economat;Unite;3;MAG-BUR-R02
+Bureautique;Catalogue operationnel bureautique;bureautique;Stylo BIC Cristal bleu boite de 50;Article catalogue humanise: Stylo BIC Cristal bleu boite de 50.;economat;Boite;10;MAG-BUR-R03
+Bureautique;Catalogue operationnel bureautique;bureautique;Marqueur permanent Staedtler Lumocolor noir;Article catalogue humanise: Marqueur permanent Staedtler Lumocolor noir.;economat;Boite;6;MAG-BUR-R03
+Bureautique;Catalogue operationnel bureautique;bureautique;Classeur Esselte A4 dos 8 cm;Article catalogue humanise: Classeur Esselte A4 dos 8 cm.;economat;Unite;20;MAG-BUR-R04
+Bureautique;Catalogue operationnel bureautique;bureautique;Chemise cartonnee Exacompta lot de 100;Article catalogue humanise: Chemise cartonnee Exacompta lot de 100.;economat;Lot;8;MAG-BUR-R04
+Bureautique;Catalogue operationnel bureautique;bureautique;Bande adhesive Scotch 19 mm x 33 m;Article catalogue humanise: Bande adhesive Scotch 19 mm x 33 m.;economat;Rouleau;12;MAG-BUR-R05
+Bureautique;Catalogue operationnel bureautique;bureautique;Pile Duracell AA alcaline lot de 20;Article catalogue humanise: Pile Duracell AA alcaline lot de 20.;economat;Lot;10;MAG-BUR-R05
+EPI;Catalogue operationnel epi;;Casque de securite JSP EVO3 blanc;Article catalogue humanise: Casque de securite JSP EVO3 blanc.;economat;Unite;15;MAG-HSE-R01
+EPI;Catalogue operationnel epi;;Lunettes de protection 3M SecureFit 400;Article catalogue humanise: Lunettes de protection 3M SecureFit 400.;economat;Unite;20;MAG-HSE-R01
+EPI;Catalogue operationnel epi;;Gants anti-coupure Ansell HyFlex 11-727;Article catalogue humanise: Gants anti-coupure Ansell HyFlex 11-727.;economat;Paire;30;MAG-HSE-R02
+EPI;Catalogue operationnel epi;;Gants nitrile Ansell TouchNTuff boite de 100;Article catalogue humanise: Gants nitrile Ansell TouchNTuff boite de 100.;economat;Boite;12;MAG-HSE-R02
+EPI;Catalogue operationnel epi;;Chaussures de securite S3 basse taille 42;Article catalogue humanise: Chaussures de securite S3 basse taille 42.;economat;Paire;8;MAG-HSE-R03
+EPI;Catalogue operationnel epi;;Masque FFP2 3M Aura 9320 boite de 20;Article catalogue humanise: Masque FFP2 3M Aura 9320 boite de 20.;economat;Boite;10;MAG-HSE-R03
+EPI;Catalogue operationnel epi;;Bouchons anti-bruit 3M 1100 boite de 200;Article catalogue humanise: Bouchons anti-bruit 3M 1100 boite de 200.;economat;Boite;6;MAG-HSE-R04
+EPI;Catalogue operationnel epi;;Gilet haute visibilite classe 2 orange;Article catalogue humanise: Gilet haute visibilite classe 2 orange.;economat;Unite;25;MAG-HSE-R04
+EPI;Catalogue operationnel epi;;Harnais antichute Petzl Newton;Article catalogue humanise: Harnais antichute Petzl Newton.;economat;Unite;4;MAG-HSE-R05
+EPI;Catalogue operationnel epi;;Extincteur CO2 5 kg recharge controlee;Article catalogue humanise: Extincteur CO2 5 kg recharge controlee.;economat;Unite;3;MAG-HSE-R05
+Maintenance mecanique;Catalogue operationnel maintenance mecanique;;Roulement SKF 6205-2RS1;Article catalogue humanise: Roulement SKF 6205-2RS1.;economat;Unite;8;MAG-MEC-R01
+Maintenance mecanique;Catalogue operationnel maintenance mecanique;;Roulement SKF 6306-2RS1;Article catalogue humanise: Roulement SKF 6306-2RS1.;economat;Unite;6;MAG-MEC-R01
+Maintenance mecanique;Catalogue operationnel maintenance mecanique;;Courroie trapezoidale Optibelt A42;Article catalogue humanise: Courroie trapezoidale Optibelt A42.;economat;Unite;5;MAG-MEC-R02
+Maintenance mecanique;Catalogue operationnel maintenance mecanique;;Courroie trapezoidale Optibelt B56;Article catalogue humanise: Courroie trapezoidale Optibelt B56.;economat;Unite;5;MAG-MEC-R02
+Maintenance mecanique;Catalogue operationnel maintenance mecanique;;Joint torique NBR 70 Shore coffret;Article catalogue humanise: Joint torique NBR 70 Shore coffret.;economat;Coffret;3;MAG-MEC-R03
+Maintenance mecanique;Catalogue operationnel maintenance mecanique;;Boulon hexagonal M10 classe 8.8 boite de 100;Article catalogue humanise: Boulon hexagonal M10 classe 8.8 boite de 100.;economat;Boite;8;MAG-MEC-R04
+Maintenance mecanique;Catalogue operationnel maintenance mecanique;;Boulon hexagonal M16 classe 8.8 boite de 50;Article catalogue humanise: Boulon hexagonal M16 classe 8.8 boite de 50.;economat;Boite;6;MAG-MEC-R04
+Maintenance mecanique;Catalogue operationnel maintenance mecanique;;Rondelle plate M12 inox A2 boite de 100;Article catalogue humanise: Rondelle plate M12 inox A2 boite de 100.;economat;Boite;8;MAG-MEC-R05
+Maintenance mecanique;Catalogue operationnel maintenance mecanique;;Graisse Shell Gadus S2 V220 cartouche 400 g;Article catalogue humanise: Graisse Shell Gadus S2 V220 cartouche 400 g.;produit_chimique;Cartouche;20;MAG-MEC-R06
+Maintenance mecanique;Catalogue operationnel maintenance mecanique;;Huile hydraulique Total Azolla ZS 46 bidon 20 L;Article catalogue humanise: Huile hydraulique Total Azolla ZS 46 bidon 20 L.;produit_chimique;Bidon;6;MAG-MEC-R06
+Instrumentation;Catalogue operationnel instrumentation;petrole;Transmetteur pression WIKA 0-10 bar 4-20 mA;Article catalogue humanise: Transmetteur pression WIKA 0-10 bar 4-20 mA.;economat;Unite;3;MAG-INS-R01
+Instrumentation;Catalogue operationnel instrumentation;petrole;Transmetteur pression WIKA 0-100 bar 4-20 mA;Article catalogue humanise: Transmetteur pression WIKA 0-100 bar 4-20 mA.;economat;Unite;2;MAG-INS-R01
+Instrumentation;Catalogue operationnel instrumentation;petrole;Manometre inox WIKA 0-16 bar DN100;Article catalogue humanise: Manometre inox WIKA 0-16 bar DN100.;economat;Unite;5;MAG-INS-R02
+Instrumentation;Catalogue operationnel instrumentation;petrole;Manometre inox WIKA 0-250 bar DN100;Article catalogue humanise: Manometre inox WIKA 0-250 bar DN100.;economat;Unite;3;MAG-INS-R02
+Instrumentation;Catalogue operationnel instrumentation;petrole;Sonde temperature PT100 classe A 150 mm;Article catalogue humanise: Sonde temperature PT100 classe A 150 mm.;economat;Unite;4;MAG-INS-R03
+Instrumentation;Catalogue operationnel instrumentation;petrole;Thermometre industriel bimettal 0-200 C;Article catalogue humanise: Thermometre industriel bimettal 0-200 C.;economat;Unite;4;MAG-INS-R03
+Instrumentation;Catalogue operationnel instrumentation;petrole;Debitmetre electromagnetique DN50;Article catalogue humanise: Debitmetre electromagnetique DN50.;economat;Unite;1;MAG-INS-R04
+Instrumentation;Catalogue operationnel instrumentation;petrole;Connecteur M12 droit 5 broches IP67;Article catalogue humanise: Connecteur M12 droit 5 broches IP67.;economat;Unite;15;MAG-INS-R05
+Electricite;Catalogue operationnel electricite;;Disjoncteur Schneider Acti9 iC60N 16A;Article catalogue humanise: Disjoncteur Schneider Acti9 iC60N 16A.;economat;Unite;8;MAG-ELE-R01
+Electricite;Catalogue operationnel electricite;;Disjoncteur Schneider Acti9 iC60N 32A;Article catalogue humanise: Disjoncteur Schneider Acti9 iC60N 32A.;economat;Unite;6;MAG-ELE-R01
+Electricite;Catalogue operationnel electricite;;Contacteur Schneider TeSys D 25A bobine 220V;Article catalogue humanise: Contacteur Schneider TeSys D 25A bobine 220V.;economat;Unite;4;MAG-ELE-R02
+Electricite;Catalogue operationnel electricite;;Relais thermique Schneider LRD 12;Article catalogue humanise: Relais thermique Schneider LRD 12.;economat;Unite;4;MAG-ELE-R02
+Electricite;Catalogue operationnel electricite;;Cable U1000 R2V 3G2.5 mm2 bobine 100 m;Article catalogue humanise: Cable U1000 R2V 3G2.5 mm2 bobine 100 m.;economat;Bobine;3;MAG-ELE-R03
+Electricite;Catalogue operationnel electricite;;Cable U1000 R2V 5G6 mm2 bobine 100 m;Article catalogue humanise: Cable U1000 R2V 5G6 mm2 bobine 100 m.;economat;Bobine;2;MAG-ELE-R03
+Electricite;Catalogue operationnel electricite;;Gaine thermoretractable 12 mm rouleau;Article catalogue humanise: Gaine thermoretractable 12 mm rouleau.;economat;Rouleau;5;MAG-ELE-R04
+Electricite;Catalogue operationnel electricite;;Collier nylon 200 x 4.8 mm sachet 100;Article catalogue humanise: Collier nylon 200 x 4.8 mm sachet 100.;economat;Sachet;10;MAG-ELE-R04
+Laboratoire;Catalogue operationnel laboratoire;;Isopropanol 99.9 pour analyse bouteille 1 L;Article catalogue humanise: Isopropanol 99.9 pour analyse bouteille 1 L.;produit_chimique;Bouteille;10;LAB-STK-R01
+Laboratoire;Catalogue operationnel laboratoire;;Acide chlorhydrique 37 pour analyse bouteille 1 L;Article catalogue humanise: Acide chlorhydrique 37 pour analyse bouteille 1 L.;produit_chimique;Bouteille;6;LAB-STK-R01
+Laboratoire;Catalogue operationnel laboratoire;;Acide sulfurique 95-97 pour analyse bouteille 1 L;Article catalogue humanise: Acide sulfurique 95-97 pour analyse bouteille 1 L.;produit_chimique;Bouteille;4;LAB-STK-R02
+Laboratoire;Catalogue operationnel laboratoire;;Hydroxyde de sodium pastilles flacon 1 kg;Article catalogue humanise: Hydroxyde de sodium pastilles flacon 1 kg.;produit_chimique;Flacon;5;LAB-STK-R02
+Laboratoire;Catalogue operationnel laboratoire;;Flacon echantillon verre 250 ml carton de 48;Article catalogue humanise: Flacon echantillon verre 250 ml carton de 48.;consommable_laboratoire;Carton;6;LAB-STK-R03
+Laboratoire;Catalogue operationnel laboratoire;;Pipette Pasteur plastique 3 ml boite de 500;Article catalogue humanise: Pipette Pasteur plastique 3 ml boite de 500.;consommable_laboratoire;Boite;5;LAB-STK-R03
+Laboratoire;Catalogue operationnel laboratoire;;Filtre seringue PTFE 0.45 um boite de 100;Article catalogue humanise: Filtre seringue PTFE 0.45 um boite de 100.;consommable_laboratoire;Boite;4;LAB-STK-R04
+Laboratoire;Catalogue operationnel laboratoire;;Papier pH Merck bandelettes 0-14;Article catalogue humanise: Papier pH Merck bandelettes 0-14.;consommable_laboratoire;Boite;5;LAB-STK-R04
+Gaz techniques;Catalogue operationnel gaz techniques;;Bouteille azote industriel 50 L 200 bar;Article catalogue humanise: Bouteille azote industriel 50 L 200 bar.;gaz;Bouteille;3;ZONE-GAZ-R01
+Gaz techniques;Catalogue operationnel gaz techniques;;Bouteille argon industriel 50 L 200 bar;Article catalogue humanise: Bouteille argon industriel 50 L 200 bar.;gaz;Bouteille;2;ZONE-GAZ-R01
+Gaz techniques;Catalogue operationnel gaz techniques;;Bouteille oxygene industriel 50 L 200 bar;Article catalogue humanise: Bouteille oxygene industriel 50 L 200 bar.;gaz;Bouteille;2;ZONE-GAZ-R02
+Gaz techniques;Catalogue operationnel gaz techniques;;Bouteille dioxyde de carbone 34 kg;Article catalogue humanise: Bouteille dioxyde de carbone 34 kg.;gaz;Bouteille;2;ZONE-GAZ-R02
+Gaz techniques;Catalogue operationnel gaz techniques;;Detendeur azote 200 bar sortie 10 bar;Article catalogue humanise: Detendeur azote 200 bar sortie 10 bar.;economat;Unite;2;ZONE-GAZ-R03
+Gaz techniques;Catalogue operationnel gaz techniques;;Flexible gaz haute pression inox 1 m;Article catalogue humanise: Flexible gaz haute pression inox 1 m.;economat;Unite;4;ZONE-GAZ-R03
+Tuyauterie;Catalogue operationnel tuyauterie;petrole;Bride acier carbone DN50 PN16 EN1092-1;Article catalogue humanise: Bride acier carbone DN50 PN16 EN1092-1.;economat;Unite;6;MAG-TUY-R01
+Tuyauterie;Catalogue operationnel tuyauterie;petrole;Bride acier carbone DN100 PN16 EN1092-1;Article catalogue humanise: Bride acier carbone DN100 PN16 EN1092-1.;economat;Unite;4;MAG-TUY-R01
+Tuyauterie;Catalogue operationnel tuyauterie;petrole;Joint spirale graphite DN50 PN16;Article catalogue humanise: Joint spirale graphite DN50 PN16.;economat;Unite;12;MAG-TUY-R02
+Tuyauterie;Catalogue operationnel tuyauterie;petrole;Joint spirale graphite DN100 PN16;Article catalogue humanise: Joint spirale graphite DN100 PN16.;economat;Unite;10;MAG-TUY-R02
+Tuyauterie;Catalogue operationnel tuyauterie;petrole;Vanne papillon DN80 PN16 levier;Article catalogue humanise: Vanne papillon DN80 PN16 levier.;economat;Unite;2;MAG-TUY-R03
+Tuyauterie;Catalogue operationnel tuyauterie;petrole;Clapet anti-retour DN50 PN16;Article catalogue humanise: Clapet anti-retour DN50 PN16.;economat;Unite;2;MAG-TUY-R03
+Tuyauterie;Catalogue operationnel tuyauterie;petrole;Flexible inox tresse DN25 longueur 1 m;Article catalogue humanise: Flexible inox tresse DN25 longueur 1 m.;economat;Unite;4;MAG-TUY-R04
+Tuyauterie;Catalogue operationnel tuyauterie;petrole;Raccord union galvanise 1 pouce;Article catalogue humanise: Raccord union galvanise 1 pouce.;economat;Unite;10;MAG-TUY-R04
+Exploitation site;Catalogue operationnel exploitation site;petrole;Filtre huile moteur Donaldson P550318;Article catalogue humanise: Filtre huile moteur Donaldson P550318.;economat;Unite;8;SITE-OPS-R01
+Exploitation site;Catalogue operationnel exploitation site;petrole;Filtre carburant Fleetguard FF5320;Article catalogue humanise: Filtre carburant Fleetguard FF5320.;economat;Unite;8;SITE-OPS-R01
+Exploitation site;Catalogue operationnel exploitation site;petrole;Filtre air Donaldson P181038;Article catalogue humanise: Filtre air Donaldson P181038.;economat;Unite;6;SITE-OPS-R02
+Exploitation site;Catalogue operationnel exploitation site;petrole;Kit absorbant hydrocarbures 120 L;Article catalogue humanise: Kit absorbant hydrocarbures 120 L.;economat;Kit;4;SITE-OPS-R03
+Exploitation site;Catalogue operationnel exploitation site;petrole;Barrage absorbant hydrocarbures 3 m;Article catalogue humanise: Barrage absorbant hydrocarbures 3 m.;economat;Unite;6;SITE-OPS-R03
+Exploitation site;Catalogue operationnel exploitation site;petrole;Rubalise chantier rouge blanc rouleau 100 m;Article catalogue humanise: Rubalise chantier rouge blanc rouleau 100 m.;economat;Rouleau;10;SITE-OPS-R04
+Exploitation site;Catalogue operationnel exploitation site;petrole;Cadenas de consignation Master Lock 410;Article catalogue humanise: Cadenas de consignation Master Lock 410.;economat;Unite;12;SITE-OPS-R04
+Exploitation site;Catalogue operationnel exploitation site;petrole;Etiquette consignation danger lot de 25;Article catalogue humanise: Etiquette consignation danger lot de 25.;economat;Lot;8;SITE-OPS-R04
+Consommables informatiques;Catalogue operationnel consommables informatiques;;Disque SSD Samsung 870 EVO 500 Go;Article catalogue humanise: Disque SSD Samsung 870 EVO 500 Go.;consommable_informatique;Unite;4;MAG-IT-R01
+Consommables informatiques;Catalogue operationnel consommables informatiques;;Disque SSD Kingston A400 480 Go;Article catalogue humanise: Disque SSD Kingston A400 480 Go.;consommable_informatique;Unite;4;MAG-IT-R01
+Consommables informatiques;Catalogue operationnel consommables informatiques;;Cable reseau Cat6 UTP 2 m;Article catalogue humanise: Cable reseau Cat6 UTP 2 m.;consommable_informatique;Unite;20;MAG-IT-R02
+Consommables informatiques;Catalogue operationnel consommables informatiques;;Cable reseau Cat6 UTP 5 m;Article catalogue humanise: Cable reseau Cat6 UTP 5 m.;consommable_informatique;Unite;15;MAG-IT-R02
+Consommables informatiques;Catalogue operationnel consommables informatiques;;Switch TP-Link 8 ports gigabit;Article catalogue humanise: Switch TP-Link 8 ports gigabit.;consommable_informatique;Unite;3;MAG-IT-R03
+Consommables informatiques;Catalogue operationnel consommables informatiques;;Adaptateur USB-C vers HDMI;Article catalogue humanise: Adaptateur USB-C vers HDMI.;consommable_informatique;Unite;6;MAG-IT-R03
+Consommables informatiques;Catalogue operationnel consommables informatiques;;Cle USB SanDisk Ultra 64 Go;Article catalogue humanise: Cle USB SanDisk Ultra 64 Go.;consommable_informatique;Unite;12;MAG-IT-R04
+Consommables informatiques;Catalogue operationnel consommables informatiques;;Souris Logitech M185 sans fil;Article catalogue humanise: Souris Logitech M185 sans fil.;consommable_informatique;Unite;8;MAG-IT-R04
+Nettoyage industriel;Catalogue operationnel nettoyage industriel;;Detergent degraissant industriel bidon 5 L;Article catalogue humanise: Detergent degraissant industriel bidon 5 L.;produit_chimique;Bidon;8;MAG-NET-R01
+Nettoyage industriel;Catalogue operationnel nettoyage industriel;;Desinfectant surfaces alimentaires bidon 5 L;Article catalogue humanise: Desinfectant surfaces alimentaires bidon 5 L.;produit_chimique;Bidon;6;MAG-NET-R01
+Nettoyage industriel;Catalogue operationnel nettoyage industriel;;Chiffon microfibre industriel lot de 50;Article catalogue humanise: Chiffon microfibre industriel lot de 50.;economat;Lot;8;MAG-NET-R02
+Nettoyage industriel;Catalogue operationnel nettoyage industriel;;Balai cantonnier 60 cm avec manche;Article catalogue humanise: Balai cantonnier 60 cm avec manche.;economat;Unite;5;MAG-NET-R02
+Nettoyage industriel;Catalogue operationnel nettoyage industriel;;Sacs dechets industriels 100 L rouleau de 20;Article catalogue humanise: Sacs dechets industriels 100 L rouleau de 20.;economat;Rouleau;12;MAG-NET-R03
+Nettoyage industriel;Catalogue operationnel nettoyage industriel;;Raclette sol mousse 75 cm;Article catalogue humanise: Raclette sol mousse 75 cm.;economat;Unite;4;MAG-NET-R03
+Consignation et signalisation;Catalogue operationnel consignation et signalisation;;Panneau danger travaux 600 x 400 mm;Article catalogue humanise: Panneau danger travaux 600 x 400 mm.;economat;Unite;6;MAG-SIG-R01
+Consignation et signalisation;Catalogue operationnel consignation et signalisation;;Cone de signalisation 75 cm classe 2;Article catalogue humanise: Cone de signalisation 75 cm classe 2.;economat;Unite;12;MAG-SIG-R01
+Consignation et signalisation;Catalogue operationnel consignation et signalisation;;Ruban antiderapant jaune noir 50 mm x 18 m;Article catalogue humanise: Ruban antiderapant jaune noir 50 mm x 18 m.;economat;Rouleau;5;MAG-SIG-R02
+Consignation et signalisation;Catalogue operationnel consignation et signalisation;;Boite de consignation collective 12 cadenas;Article catalogue humanise: Boite de consignation collective 12 cadenas.;economat;Unite;2;MAG-SIG-R02
+Consignation et signalisation;Catalogue operationnel consignation et signalisation;;Etiquette echafaudage inspection verte lot de 25;Article catalogue humanise: Etiquette echafaudage inspection verte lot de 25.;economat;Lot;4;MAG-SIG-R03
+Pompes et etancheite;Catalogue operationnel pompes et etancheite;;Garniture mecanique pompe type 2100 diametre 35 mm;Article catalogue humanise: Garniture mecanique pompe type 2100 diametre 35 mm.;economat;Unite;3;MAG-PMP-R01
+Pompes et etancheite;Catalogue operationnel pompes et etancheite;;Tresse graphite 8 mm rouleau 5 kg;Article catalogue humanise: Tresse graphite 8 mm rouleau 5 kg.;economat;Rouleau;2;MAG-PMP-R01
+Pompes et etancheite;Catalogue operationnel pompes et etancheite;;Kit membrane pompe doseuse PTFE;Article catalogue humanise: Kit membrane pompe doseuse PTFE.;economat;Kit;2;MAG-PMP-R02
+Pompes et etancheite;Catalogue operationnel pompes et etancheite;;Crepine aspiration inox DN25;Article catalogue humanise: Crepine aspiration inox DN25.;economat;Unite;4;MAG-PMP-R02
+Pompes et etancheite;Catalogue operationnel pompes et etancheite;;Manchon elastique accouplement HRC 90;Article catalogue humanise: Manchon elastique accouplement HRC 90.;economat;Unite;4;MAG-PMP-R03

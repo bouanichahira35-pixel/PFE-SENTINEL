@@ -68,9 +68,12 @@ function normalizeFamily(raw) {
 }
 
 async function run() {
+  const mongoReady = await mongoose.waitForMongoReady({ timeoutMs: 15_000 });
+  if (!mongoReady.ok) throw new Error(`Mongo indisponible: ${mongoReady.reason}`);
+
   const argFileIndex = process.argv.findIndex((a) => a === '--file');
   const argFile = argFileIndex >= 0 ? process.argv[argFileIndex + 1] : '';
-  const fileName = String(argFile || 'catalogue_produits_petrolier_etap_exemples.csv').trim();
+  const fileName = String(argFile || 'catalogue_produits_petrolier_etap_humanise.csv').trim();
   const csvPath = path.isAbsolute(fileName)
     ? fileName
     : path.join(__dirname, '..', '..', 'docs', fileName);

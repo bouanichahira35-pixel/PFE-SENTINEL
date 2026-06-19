@@ -17,11 +17,9 @@ import {
   ShoppingCart,
   TrendingUp,
   Truck,
-  User,
 } from 'lucide-react';
 import logoETAP from '../../assets/logoETAP.png';
 import { useUiLanguage } from '../../utils/uiLanguage';
-import useProtectedFileUrl from '../../hooks/useProtectedFileUrl';
 import './SidebarResp.css';
 
 /* ─── Helpers ─────────────────────────────────── */
@@ -59,7 +57,7 @@ function useSections(labels, badges) {
       defaultOpen: true,
       items: [
         { key: 'requests', icon: ClipboardList,  label: labels.demandes,    to: '/responsable/pilotage',              search: 'tab=validations', badge: badges.demandes    },
-        { key: 'inv',      icon: ClipboardCheck, label: labels.inventaires, to: '/responsable/inventaires/a-valider',                            badge: badges.inventaires },
+        { key: 'inv',      icon: ClipboardCheck, label: labels.inventaires, to: '/responsable/inventaires',                                      badge: badges.inventaires },
       ],
     },
     {
@@ -135,13 +133,11 @@ export default function SidebarResp({ collapsed, onToggle, onLogout, userName })
   const labels   = LABELS[lang] ?? LABELS.fr;
 
   const sessionName  = sessionStorage.getItem('userName') || localStorage.getItem('userName') || userName || 'Utilisateur';
-  const profileImage = sessionStorage.getItem('imageProfile') || localStorage.getItem('imageProfile') || '';
-  const avatarUrl    = useProtectedFileUrl(profileImage);
 
   /* Badges — à brancher sur vos vraies données */
   const badges = useMemo(() => ({
     demandes:    3,
-    inventaires: 0,
+    inventaires: null,
     critiques:   65,
     alertes:     '99+',
   }), []);
@@ -208,10 +204,6 @@ export default function SidebarResp({ collapsed, onToggle, onLogout, userName })
         {!collapsed && (
           <div className="sb-head-body">
             <div className="sb-user-info">
-              {avatarUrl
-                ? <img src={avatarUrl} alt="Avatar" className="sb-avatar" />
-                : <span className="sb-avatar-placeholder"><User size={14} /></span>
-              }
               <span className="sb-username">{sessionName}</span>
             </div>
             <button type="button" className="sb-toggle" onClick={onToggle} aria-label="Réduire">

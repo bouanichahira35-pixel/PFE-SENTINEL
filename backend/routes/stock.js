@@ -31,19 +31,34 @@ const SAFE_USER_FIELDS = 'username email role status telephone';
 
 const ACTIVE_INVENTORY_STATUSES = ['A_FAIRE', 'EN_COURS', 'A_VALIDER', 'A_RECOMPTER'];
 
-async function ensureStockMovementNotBlocked(req, res) {
+async function ensureStockMovementNotBlocked(req, res, productId = null) {
   try {
-    const locked = await Inventory.findOne({
+    const productKey = String(productId || req.body?.product || '').trim();
+    const lockFilter = {
       movement_blocked: true,
       status: { $in: ACTIVE_INVENTORY_STATUSES },
-    })
-      .select('_id reference type_inventaire date_lancement')
+    };
+
+    if (productKey && isValidObjectIdLike(productKey)) {
+      lockFilter.$or = [
+        { movement_block_scope: 'global' },
+        { movement_block_scope: { $exists: false } },
+        { movement_block_scope: null },
+        { movement_blocked_product_ids: productKey },
+      ];
+    }
+
+    const locked = await Inventory.findOne(lockFilter)
+      .select('_id reference type_inventaire date_lancement movement_block_scope')
       .lean();
 
     if (!locked) return true;
     res.status(409).json({
       error: 'Mouvements stock bloqués par inventaire',
       details: `Inventaire ${locked.reference} (${locked.type_inventaire}) en cours`,
+      code: 'INVENTORY_MOVEMENT_LOCKED',
+      inventory_id: locked._id,
+      scope: locked.movement_block_scope || 'global',
     });
     return false;
   } catch {
@@ -119,37 +134,6 @@ function validateOptionalText(errors, field, value, { min = 0, max = 200 } = {})
     return undefined;
   }
   return v;
-}
-
-function validateOptionalEnum(errors, field, value, allowed) {
-  const v = asOptionalString(value);
-  if (v === undefined) return undefined;
-  if (!allowed.includes(v)) {
-    errors.push(`${field} invalide`);
-    return undefined;
-  }
-  return v;
-}
-
-function validateAttachments(errors, value) {
-  if (value === undefined || value === null) return undefined;
-  if (!Array.isArray(value)) {
-    errors.push('attachments invalide (tableau attendu)');
-    return undefined;
-  }
-  if (value.length > 8) {
-    errors.push('attachments trop nombreux (max 8)');
-    return undefined;
-  }
-  const sanitized = [];
-  for (const item of value) {
-    if (!item || typeof item !== 'object') continue;
-    const fileName = validateOptionalText(errors, 'attachments.file_name', item.file_name, { min: 1, max: 140 });
-    const fileUrl = validateOptionalText(errors, 'attachments.file_url', item.file_url, { min: 1, max: 220 });
-    if (!fileName || !fileUrl) continue;
-    sanitized.push({ file_name: fileName, file_url: fileUrl });
-  }
-  return sanitized;
 }
 
 function escapeHtml(value) {

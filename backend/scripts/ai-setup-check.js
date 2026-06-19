@@ -29,7 +29,7 @@ function main() {
   // eslint-disable-next-line no-console
   console.log('- GET  /api/ai/assistant/status');
   // eslint-disable-next-line no-console
-  console.log('- POST /api/ai/assistant/ask   { question, history: [], mode: \"chat\" }');
+  console.log('- POST /api/ai/assistant/ask   { question, history: [], mode: "chat" }');
   // eslint-disable-next-line no-console
   console.log('- GET  /api/ai/gemini/status');
   // eslint-disable-next-line no-console

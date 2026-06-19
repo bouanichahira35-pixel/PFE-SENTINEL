@@ -1,3 +1,6 @@
+// BLOC 1 - Choix de l'adresse de l'API.
+// En production on peut utiliser REACT_APP_API_URL.
+// En developpement, React appelle simplement /api grace au proxy.
 function computeDefaultApiBase() {
   const fromEnv = String(process.env.REACT_APP_API_URL || "").trim();
   if (fromEnv) return fromEnv.replace(/\/+$/, "");
@@ -9,20 +12,39 @@ function computeDefaultApiBase() {
 
 export const API_BASE = computeDefaultApiBase();
 
-const API_TIMEOUT_MS = (() => {
-  const raw = String(process.env.REACT_APP_API_TIMEOUT_MS || "").trim();
-  const parsed = Number(raw);
-  if (Number.isFinite(parsed) && parsed > 0) return Math.min(Math.max(parsed, 2_000), 120_000);
-  // Keep it high enough for slow dev machines, but not infinite.
-  return 20_000;
-})();
+function normalizeApiPath(path) {
+  const raw = String(path || "");
+  const withLeadingSlash = raw.startsWith("/") ? raw : `/${raw}`;
+  if (API_BASE.endsWith("/api") && withLeadingSlash === "/api") return "/";
+  if (API_BASE.endsWith("/api") && withLeadingSlash.startsWith("/api/")) {
+    return withLeadingSlash.slice(4);
+  }
+  return withLeadingSlash;
+}
 
-const AUTH_API_TIMEOUT_MS = (() => {
-  const raw = String(process.env.REACT_APP_AUTH_API_TIMEOUT_MS || "").trim();
+// BLOC 2 - Lecture des delais d'attente.
+// Ces fonctions evitent qu'une requete reste bloquee trop longtemps.
+function readTimeoutEnv(name, fallback, { min = 2_000, max = 300_000 } = {}) {
+  const raw = String(process.env[name] || "").trim();
   const parsed = Number(raw);
-  if (Number.isFinite(parsed) && parsed > 0) return Math.min(Math.max(parsed, 2_000), API_TIMEOUT_MS);
-  return Math.min(8_000, API_TIMEOUT_MS);
-})();
+  if (!Number.isFinite(parsed) || parsed <= 0) return fallback;
+  return Math.min(Math.max(parsed, min), max);
+}
+
+const API_TIMEOUT_MS = readTimeoutEnv("REACT_APP_API_TIMEOUT_MS", 180_000, {
+  min: 10_000,
+  max: 300_000,
+});
+
+const AUTH_API_TIMEOUT_MS = readTimeoutEnv("REACT_APP_AUTH_API_TIMEOUT_MS", 45_000, {
+  min: 8_000,
+  max: 120_000,
+});
+
+const LONG_API_TIMEOUT_MS = readTimeoutEnv("REACT_APP_LONG_API_TIMEOUT_MS", 300_000, {
+  min: API_TIMEOUT_MS,
+  max: 600_000,
+});
 
 const API_CACHE_TTL_MS = 45 * 1000;
 const API_CACHE_MAX_ITEMS = 60;
@@ -30,6 +52,8 @@ const PERF_STORAGE_KEY = "api_perf_metrics_v1";
 const PERF_EVENT_NAME = "api-perf-updated";
 const AUTH_LOGOUT_EVENT_NAME = "auth-logout";
 
+// BLOC 3 - Cache et mesures de performance.
+// Le frontend garde temporairement certaines reponses GET et mesure la vitesse des appels API.
 const responseCache = new Map();
 
 const defaultPerfMetrics = {
@@ -97,6 +121,8 @@ function updatePerfMetrics(patch = {}) {
 
 perfMetrics = readPerfMetrics();
 
+// BLOC 4 - Fonctions utilitaires du client API.
+// Elles gerent le cache, les pauses de retry, les tokens et les erreurs lisibles.
 function makeCacheKey(path) {
   const token = getAuthToken();
   const authKey = token ? "auth" : "anon";
@@ -118,6 +144,17 @@ function getRequestTimeoutMs(path) {
   const key = String(path || "");
   if (key === "/auth/login" || key === "/auth/refresh" || key === "/auth/logout" || key === "/auth/logout-refresh") {
     return AUTH_API_TIMEOUT_MS;
+  }
+  if (
+    key.startsWith("/ai/models/train") ||
+    key.startsWith("/ai/alerts/rebuild") ||
+    key.startsWith("/ai/alerts/refresh") ||
+    key.startsWith("/ai/copilot/recommendations") ||
+    key.startsWith("/reports/") ||
+    key.includes("/import") ||
+    key.includes("/export")
+  ) {
+    return LONG_API_TIMEOUT_MS;
   }
   return API_TIMEOUT_MS;
 }
@@ -206,6 +243,8 @@ function recordNetworkResult({ latencyMs = 0, failed = false }) {
 
 let refreshInFlight = null;
 
+// BLOC 5 - Rafraichissement du token.
+// Si le token d'acces expire, cette fonction essaie de demander un nouveau token au backend.
 async function refreshAccessTokenOnce() {
   if (refreshInFlight) return refreshInFlight;
 
@@ -250,7 +289,10 @@ async function refreshAccessTokenOnce() {
   }
 }
 
+// BLOC 6 - Fonction centrale pour toutes les requetes JSON.
+// Tous les get/post/put/patch/delete passent ici: token, timeout, cache, erreurs et retry.
 async function requestInternal(path, method, payload, opts = {}) {
+  const requestPath = normalizeApiPath(path);
   const retriedAuth = Boolean(opts?.retriedAuth);
   const networkRetries = Math.max(0, Number(opts?.networkRetries || 0));
 
@@ -264,7 +306,7 @@ async function requestInternal(path, method, payload, opts = {}) {
   }
 
   if (cacheableGet) {
-    const cacheKey = makeCacheKey(path);
+    const cacheKey = makeCacheKey(requestPath);
     const cached = responseCache.get(cacheKey);
     if (cached && cached.expires_at > Date.now()) {
       recordCacheHit();
@@ -277,13 +319,13 @@ async function requestInternal(path, method, payload, opts = {}) {
   let res;
   let data;
   const controller = typeof AbortController !== "undefined" ? new AbortController() : null;
-  const requestTimeoutMs = getRequestTimeoutMs(path);
+  const requestTimeoutMs = getRequestTimeoutMs(requestPath);
   const timeoutId = controller
     ? setTimeout(() => controller.abort(), requestTimeoutMs)
     : null;
 
   try {
-    res = await fetch(`${API_BASE}${path}`, {
+    res = await fetch(`${API_BASE}${requestPath}`, {
       method: normalizedMethod,
       headers,
       credentials: "include",
@@ -307,18 +349,20 @@ async function requestInternal(path, method, payload, opts = {}) {
 
     if (canRetryGet) {
       await waitMs(computeGetRetryDelayMs(networkRetries));
-      return requestInternal(path, normalizedMethod, payload, {
+      return requestInternal(requestPath, normalizedMethod, payload, {
         ...opts,
         networkRetries: networkRetries + 1,
       });
     }
 
     if (isAbort) {
-      const timeoutErr = new Error("Connexion trop lente. Veuillez réessayer.");
+      const timeoutErr = new Error(
+        "Operation plus lente que prevu. Verifiez la connexion ou l'etat du serveur, puis reessayez."
+      );
       timeoutErr.cause = err;
       timeoutErr.debug = {
         kind: "timeout",
-        path,
+        path: requestPath,
         api_base: API_BASE,
         timeout_ms: requestTimeoutMs,
         latency_ms: latencyMs,
@@ -335,7 +379,7 @@ async function requestInternal(path, method, payload, opts = {}) {
       netErr.cause = err;
       netErr.debug = {
         kind: "network",
-        path,
+        path: requestPath,
         api_base: API_BASE,
         latency_ms: latencyMs,
       };
@@ -353,10 +397,10 @@ async function requestInternal(path, method, payload, opts = {}) {
   // Otherwise, a legitimate 401 from public endpoints like `/auth/login`
   // would incorrectly trigger a refresh call and surface confusing errors
   // (ex: "refreshToken obligatoire").
-  if (res.status === 401 && token && !retriedAuth && path !== "/auth/refresh") {
+  if (res.status === 401 && token && !retriedAuth && requestPath !== "/auth/refresh") {
     const refreshed = await refreshAccessTokenOnce();
     if (refreshed?.ok && refreshed.token) {
-      return requestInternal(path, normalizedMethod, payload, {
+      return requestInternal(requestPath, normalizedMethod, payload, {
         ...opts,
         retriedAuth: true,
       });
@@ -377,7 +421,7 @@ async function requestInternal(path, method, payload, opts = {}) {
   }
 
   if (cacheableGet) {
-    saveGetCache(makeCacheKey(path), data);
+    saveGetCache(makeCacheKey(requestPath), data);
   } else if (normalizedMethod !== "GET") {
     clearGetCache();
   }
@@ -386,6 +430,8 @@ async function requestInternal(path, method, payload, opts = {}) {
   return data;
 }
 
+// BLOC 7 - Acces aux mesures de performance API.
+// Ces fonctions permettent aux pages de lire ou ecouter les statistiques des appels API.
 export function getApiPerfMetrics() {
   return { ...perfMetrics };
 }
@@ -402,6 +448,8 @@ export function subscribeApiPerf(onMetrics) {
   return () => window.removeEventListener(PERF_EVENT_NAME, handler);
 }
 
+// BLOC 8 - Raccourcis REST utilises par les pages.
+// Au lieu d'ecrire fetch partout, les pages utilisent get, post, put, patch ou del.
 export function post(path, payload) {
   return requestInternal(path, "POST", payload);
 }
@@ -418,27 +466,30 @@ export function patch(path, payload) {
   return requestInternal(path, "PATCH", payload);
 }
 
-export function del(path) {
-  return requestInternal(path, "DELETE");
+export function del(path, payload) {
+  return requestInternal(path, "DELETE", payload);
 }
 
+// BLOC 9 - Envoi de fichiers.
+// Cette partie utilise FormData au lieu de JSON pour envoyer images, PDF ou pieces jointes.
 async function uploadFileInternal(path, file, fieldName, retried = false) {
+  const requestPath = normalizeApiPath(path);
   const token = getAuthToken();
   const formData = new FormData();
   formData.append(fieldName, file);
 
   const startedAt = nowMs();
-  const res = await fetch(`${API_BASE}${path}`, {
+  const res = await fetch(`${API_BASE}${requestPath}`, {
     method: "POST",
     headers: token ? { Authorization: `Bearer ${token}` } : undefined,
     credentials: "include",
     body: formData,
   });
 
-  if (res.status === 401 && token && !retried && path !== "/auth/refresh") {
+  if (res.status === 401 && token && !retried && requestPath !== "/auth/refresh") {
     const refreshed = await refreshAccessTokenOnce();
     if (refreshed?.ok && refreshed.token) {
-      return uploadFileInternal(path, file, fieldName, true);
+      return uploadFileInternal(requestPath, file, fieldName, true);
     }
   }
 

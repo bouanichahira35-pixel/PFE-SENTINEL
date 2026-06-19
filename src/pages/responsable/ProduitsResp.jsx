@@ -1,11 +1,26 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
-import { Archive, Package, Pencil, RefreshCw } from 'lucide-react';
+import {
+  Archive,
+  CheckCircle2,
+  Clock,
+  Layers,
+  Mail,
+  Package,
+  PanelRightOpen,
+  Pencil,
+  RefreshCw,
+  ShoppingCart,
+  Sparkles,
+  Truck,
+  X,
+} from 'lucide-react';
 import SidebarResp from '../../components/responsable/SidebarResp';
 import HeaderPage from '../../components/shared/HeaderPage';
 import ProtectedPage from '../../components/shared/ProtectedPage';
 import LoadingSpinner from '../../components/shared/LoadingSpinner';
 import { get, post, put } from '../../services/api';
+import { recommendFournisseurs } from '../../services/fournisseurRecommendationService';
 import { useToast } from '../../components/shared/Toast';
 import './ProduitsResp.css';
 
@@ -22,12 +37,62 @@ const INACTIVE_REASON_LABEL = {
   no_demand: 'Manque de demandes',
 };
 
+const OPEN_ORDER_STATUSES = new Set(['draft', 'ordered']);
+
 function computeProductStockStatus(quantity, seuil) {
   const q = Number(quantity || 0);
   const s = Number(seuil || 0);
   if (q <= 0) return 'rupture';
   if (q <= s) return 'sous_seuil';
   return 'ok';
+}
+
+function getRecommendedOrderQty(product) {
+  const stock = Number(product?.quantity_current || 0);
+  const seuil = Number(product?.seuil_minimum || 0);
+  const buffer = Math.max(5, Math.ceil(seuil * 1.5));
+  return Math.max(1, Math.ceil((seuil + buffer) - stock));
+}
+
+function normalizeSupplierRecommendation(raw) {
+  if (!raw) return null;
+  return {
+    id: String(raw?.supplier_id || raw?._id || raw?.id || '').trim(),
+    name: raw?.supplier_name || raw?.name || raw?.nom || 'Fournisseur',
+    score: Number(raw?.score || 0),
+    leadTimeDays: Number(raw?.lead_time_days ?? raw?.default_lead_time_days ?? 7),
+    email: raw?.email || raw?.supplier_email || '',
+    phone: raw?.phone || raw?.supplier_phone || '',
+  };
+}
+
+function getProductId(value) {
+  return String(value?._id || value?.id || '').trim();
+}
+
+function getOrderProductId(line) {
+  return String(line?.product?._id || line?.product || line?.product_id || '').trim();
+}
+
+function formatDateFr(value) {
+  if (!value) return '-';
+  const d = new Date(value);
+  if (Number.isNaN(d.getTime())) return '-';
+  return d.toLocaleDateString('fr-FR');
+}
+
+function getProductOpenOrder(product, orders) {
+  const productId = getProductId(product);
+  if (!productId) return null;
+  return (Array.isArray(orders) ? orders : []).find((order) => {
+    const status = String(order?.status || '').toLowerCase();
+    if (!OPEN_ORDER_STATUSES.has(status)) return false;
+    return (Array.isArray(order?.lines) ? order.lines : []).some((line) => getOrderProductId(line) === productId);
+  }) || null;
+}
+
+function getOrderEta(order) {
+  return order?.supplier_ack?.eta_date || order?.promised_at || order?.delivered_at || null;
 }
 
 const ProduitsResp = ({ userName, onLogout }) => {
@@ -47,6 +112,16 @@ const ProduitsResp = ({ userName, onLogout }) => {
   const [categories, setCategories] = useState([]);
   const [editModalOpen, setEditModalOpen] = useState(false);
   const [editDraft, setEditDraft] = useState(null);
+  const [openOrders, setOpenOrders] = useState([]);
+  const [quickOrderProduct, setQuickOrderProduct] = useState(null);
+  const [quickOrderQty, setQuickOrderQty] = useState(1);
+  const [quickSupplier, setQuickSupplier] = useState(null);
+  const [quickSupplierLoading, setQuickSupplierLoading] = useState(false);
+  const [detailProduct, setDetailProduct] = useState(null);
+  const [detailSupplier, setDetailSupplier] = useState(null);
+  const [bulkPanelOpen, setBulkPanelOpen] = useState(false);
+  const [bulkGroups, setBulkGroups] = useState([]);
+  const [bulkLoading, setBulkLoading] = useState(false);
 
   const categoryFilterId = useMemo(() => {
     const params = new URLSearchParams(location.search || '');
@@ -113,7 +188,11 @@ const ProduitsResp = ({ userName, onLogout }) => {
         const payload = await get(`/products/inactive?days=${Math.max(1, Math.min(365, Number(inactiveDays || 60)))}`);
         setProducts(Array.isArray(payload?.items) ? payload.items : []);
       } else {
-        const data = await get(`/products?include_archived=${includeArchived ? '1' : '0'}`);
+        const productParams = new URLSearchParams({
+          include_archived: includeArchived || archivedOnly ? '1' : '0',
+        });
+        if (archivedOnly) productParams.set('archived_only', '1');
+        const data = await get(`/products?${productParams.toString()}`);
         setProducts(Array.isArray(data) ? data : []);
       }
     } catch (err) {
@@ -122,7 +201,7 @@ const ProduitsResp = ({ userName, onLogout }) => {
     } finally {
       setLoading(false);
     }
-  }, [includeArchived, inactiveDays, inactiveOnly, toast]);
+  }, [archivedOnly, includeArchived, inactiveDays, inactiveOnly, toast]);
 
   const loadCategories = useCallback(async () => {
     try {
@@ -135,6 +214,20 @@ const ProduitsResp = ({ userName, onLogout }) => {
     }
   }, []);
 
+  const loadOpenOrders = useCallback(async () => {
+    try {
+      const payload = await get('/purchase-orders?limit=160');
+      const items = Array.isArray(payload?.purchase_orders) ? payload.purchase_orders : [];
+      setOpenOrders(items.filter((order) => OPEN_ORDER_STATUSES.has(String(order?.status || '').toLowerCase())));
+    } catch {
+      setOpenOrders([]);
+    }
+  }, []);
+
+  const refreshPage = useCallback(async () => {
+    await Promise.all([load(), loadOpenOrders()]);
+  }, [load, loadOpenOrders]);
+
   useEffect(() => {
     load();
   }, [load]);
@@ -142,6 +235,10 @@ const ProduitsResp = ({ userName, onLogout }) => {
   useEffect(() => {
     loadCategories();
   }, [loadCategories]);
+
+  useEffect(() => {
+    loadOpenOrders();
+  }, [loadOpenOrders]);
 
   const filtered = useMemo(() => {
     const q = String(search || '').trim().toLowerCase();
@@ -190,6 +287,71 @@ const ProduitsResp = ({ userName, onLogout }) => {
     statusFilter,
   ]);
 
+  const productById = useMemo(() => {
+    const map = new Map();
+    for (const p of products || []) {
+      const id = getProductId(p);
+      if (id) map.set(id, p);
+    }
+    return map;
+  }, [products]);
+
+  const pageStats = useMemo(() => {
+    const base = products || [];
+    return base.reduce((acc, p) => {
+      const status = computeProductStockStatus(p?.quantity_current, p?.seuil_minimum);
+      acc.total += 1;
+      if (status === 'rupture') acc.rupture += 1;
+      if (status === 'sous_seuil') acc.sousSeuil += 1;
+      if (String(p?.lifecycle_status || 'active') === 'archived') acc.archived += 1;
+      return acc;
+    }, { total: 0, rupture: 0, sousSeuil: 0, archived: 0 });
+  }, [products]);
+
+  const selectedProducts = useMemo(
+    () => (selectedIds || []).map((id) => productById.get(String(id))).filter(Boolean),
+    [productById, selectedIds]
+  );
+
+  const selectedCriticalProducts = useMemo(
+    () => selectedProducts.filter((p) => {
+      const status = computeProductStockStatus(p?.quantity_current, p?.seuil_minimum);
+      return status === 'rupture' || status === 'sous_seuil';
+    }),
+    [selectedProducts]
+  );
+
+  const attentionCategory = useMemo(() => {
+    const currentId = String(categoryFilterId || '');
+    const counts = new Map();
+    for (const p of products || []) {
+      const status = computeProductStockStatus(p?.quantity_current, p?.seuil_minimum);
+      if (status !== 'rupture' && status !== 'sous_seuil') continue;
+      const id = p?.category?._id ? String(p.category._id) : '';
+      if (!id || id === currentId) continue;
+      counts.set(id, (counts.get(id) || 0) + 1);
+    }
+    const best = Array.from(counts.entries()).sort((a, b) => b[1] - a[1])[0];
+    if (!best) return null;
+    const category = (categories || []).find((c) => String(c?._id || '') === best[0]);
+    return category ? { ...category, criticalCount: best[1] } : null;
+  }, [categories, categoryFilterId, products]);
+
+  const detailAlternatives = useMemo(() => {
+    if (!detailProduct) return [];
+    const categoryId = detailProduct?.category?._id ? String(detailProduct.category._id) : '';
+    const family = String(detailProduct?.family || '');
+    return (products || [])
+      .filter((p) => getProductId(p) !== getProductId(detailProduct))
+      .filter((p) => {
+        if (computeProductStockStatus(p?.quantity_current, p?.seuil_minimum) !== 'ok') return false;
+        const sameCategory = categoryId && p?.category?._id && String(p.category._id) === categoryId;
+        const sameFamily = family && String(p?.family || '') === family;
+        return sameCategory || sameFamily;
+      })
+      .slice(0, 4);
+  }, [detailProduct, products]);
+
   const openEdit = useCallback((p) => {
     if (!p?._id) return;
     setEditDraft({
@@ -209,6 +371,72 @@ const ProduitsResp = ({ userName, onLogout }) => {
   const closeEdit = useCallback(() => {
     setEditModalOpen(false);
     setEditDraft(null);
+  }, []);
+
+  const openQuickOrder = useCallback((product) => {
+    if (!product?._id) return;
+    const qty = getRecommendedOrderQty(product);
+    setQuickOrderProduct(product);
+    setQuickOrderQty(qty);
+    setQuickSupplier(null);
+    setQuickSupplierLoading(true);
+    recommendFournisseurs({ productId: String(product._id), quantity: qty })
+      .then((payload) => setQuickSupplier(normalizeSupplierRecommendation(payload?.recommended)))
+      .catch(() => setQuickSupplier(null))
+      .finally(() => setQuickSupplierLoading(false));
+  }, []);
+
+  const closeQuickOrder = useCallback(() => {
+    setQuickOrderProduct(null);
+    setQuickSupplier(null);
+    setQuickSupplierLoading(false);
+  }, []);
+
+  const createQuickOrder = useCallback(async () => {
+    if (!quickOrderProduct?._id) return;
+    const qty = Number(quickOrderQty);
+    if (!Number.isFinite(qty) || qty <= 0) {
+      toast.error('Quantite invalide.');
+      return;
+    }
+
+    setSubmitting(true);
+    try {
+      const created = await post('/purchase-orders/quick', {
+        product_id: String(quickOrderProduct._id),
+        quantity: qty,
+        supplier_id: quickSupplier?.id || undefined,
+        note: `Commande rapide depuis Produits Responsable. Stock=${Number(quickOrderProduct?.quantity_current || 0)}, seuil=${Number(quickOrderProduct?.seuil_minimum || 0)}.`,
+        decision_id: `PROD-SMART-${Date.now()}`,
+        decision_title: 'Smart Action produit critique',
+        decision_kind: 'product_smart_action',
+        decision_level: 'warning',
+      });
+      toast.success('Commande fournisseur creee.');
+      closeQuickOrder();
+      await Promise.all([load(), loadOpenOrders()]);
+      const poId = String(created?._id || created?.purchase_order_id || '').trim();
+      if (poId) navigate(`/responsable/commandes/${poId}`);
+    } catch (err) {
+      toast.error(err?.message || 'Creation commande echouee');
+    } finally {
+      setSubmitting(false);
+    }
+  }, [closeQuickOrder, load, loadOpenOrders, navigate, quickOrderProduct, quickOrderQty, quickSupplier?.id, toast]);
+
+  const openDetailPanel = useCallback((product) => {
+    if (!product?._id) return;
+    setDetailProduct(product);
+    setDetailSupplier(null);
+    const qty = getRecommendedOrderQty(product);
+    recommendFournisseurs({ productId: String(product._id), quantity: qty })
+      .then((payload) => setDetailSupplier(normalizeSupplierRecommendation(payload?.recommended)))
+      .catch(() => setDetailSupplier(null));
+  }, []);
+
+  const closeDetailPanel = useCallback(() => {
+    setDetailProduct(null);
+    setDetailSupplier(null);
   }, []);
 
   const targetCategory = useMemo(() => {
@@ -240,6 +468,85 @@ const ProduitsResp = ({ userName, onLogout }) => {
   const clearSelection = useCallback(() => {
     setSelectedIds([]);
   }, []);
+
+  const prepareBulkSelection = useCallback(async () => {
+    if (!selectedCriticalProducts.length) {
+      toast.warning('Selectionnez au moins un produit critique ou en rupture.');
+      return;
+    }
+
+    setBulkPanelOpen(true);
+    setBulkLoading(true);
+    try {
+      const enriched = await Promise.all(selectedCriticalProducts.map(async (product) => {
+        const qty = getRecommendedOrderQty(product);
+        try {
+          const payload = await recommendFournisseurs({ productId: getProductId(product), quantity: qty });
+          return { product, qty, supplier: normalizeSupplierRecommendation(payload?.recommended) };
+        } catch {
+          return { product, qty, supplier: null };
+        }
+      }));
+
+      const groups = new Map();
+      for (const item of enriched) {
+        const supplierId = item.supplier?.id || '';
+        const fallbackKey = `pending:${String(item.product?.category?.name || item.product?.family || 'A confirmer')}`;
+        const key = supplierId ? `supplier:${supplierId}` : fallbackKey;
+        if (!groups.has(key)) {
+          groups.set(key, {
+            key,
+            supplier: item.supplier,
+            label: item.supplier?.name || String(item.product?.category?.name || item.product?.family || 'Fournisseur a confirmer'),
+            items: [],
+          });
+        }
+        groups.get(key).items.push(item);
+      }
+
+      setBulkGroups(Array.from(groups.values()));
+    } finally {
+      setBulkLoading(false);
+    }
+  }, [selectedCriticalProducts, toast]);
+
+  const createBulkOrders = useCallback(async () => {
+    const readyGroups = (bulkGroups || []).filter((group) => group?.supplier?.id && Array.isArray(group.items) && group.items.length);
+    if (!readyGroups.length) {
+      toast.warning('Aucun groupe avec fournisseur recommande exploitable.');
+      return;
+    }
+
+    setSubmitting(true);
+    try {
+      for (const group of readyGroups) {
+        const lead = Number(group?.supplier?.leadTimeDays || 7);
+        const promisedAt = new Date();
+        promisedAt.setDate(promisedAt.getDate() + Math.max(1, Math.floor(lead)));
+        await post('/purchase-orders', {
+          supplier_id: group.supplier.id,
+          promised_at: promisedAt.toISOString().slice(0, 10),
+          status: 'ordered',
+          note: `Commande groupee depuis Produits Responsable (${group.items.length} ligne(s)).`,
+          decision_id: `PROD-BULK-${Date.now()}-${String(group.supplier.id).slice(-6)}`,
+          lines: group.items.map((item) => ({
+            product_id: getProductId(item.product),
+            quantity: Number(item.qty || 1),
+            unit_price: 0,
+          })),
+        });
+      }
+      toast.success(`${readyGroups.length} commande(s) fournisseur creee(s).`);
+      setBulkPanelOpen(false);
+      setBulkGroups([]);
+      clearSelection();
+      await Promise.all([load(), loadOpenOrders()]);
+    } catch (err) {
+      toast.error(err?.message || 'Creation des commandes groupees echouee');
+    } finally {
+      setSubmitting(false);
+    }
+  }, [bulkGroups, clearSelection, load, loadOpenOrders, toast]);
 
   useEffect(() => {
     if (!assignMode) {
@@ -352,10 +659,11 @@ const ProduitsResp = ({ userName, onLogout }) => {
     }
   }, [inactiveDays, load, toast]);
 
-  const title = inactiveOnly ? 'Produits inactifs' : 'Référentiel Produits';
+  const title = inactiveOnly ? 'Produits inactifs' : 'Référentiel produits';
   const subtitle = inactiveOnly
-    ? `Rupture ou manque de demandes (fenêtre ${inactiveDays} jours)`
-    : 'Catalogue produits — stock & pilotage';
+    ? `Rupture ou manque de demandes sur ${inactiveDays} jours`
+    : 'Catalogue, seuils, ruptures et actions d approvisionnement';
+  const selectionEnabled = assignMode || !inactiveOnly;
 
   return (
     <ProtectedPage userName={userName}>
@@ -376,13 +684,29 @@ const ProduitsResp = ({ userName, onLogout }) => {
             icon={<Package size={24} />}
             searchValue={search}
             onSearchChange={setSearch}
-            onRefresh={load}
+            onRefresh={refreshPage}
             onMenuClick={() => setSidebarCollapsed((p) => !p)}
           />
 
           {(loading || submitting) && <LoadingSpinner overlay text="Chargement..." />}
 
           <div className="resp-products-page">
+            <section className="resp-products-crisis-head" aria-label="Synthese produits">
+              <div className="resp-products-crisis-title">
+                <Sparkles size={18} />
+                <div>
+                  <strong>Priorisation intelligente</strong>
+                  <span>Ruptures, seuils critiques et commandes ouvertes au même endroit.</span>
+                </div>
+              </div>
+              <div className="resp-products-kpis">
+                <div className="resp-products-kpi danger"><span>Ruptures</span><strong>{pageStats.rupture}</strong></div>
+                <div className="resp-products-kpi warning"><span>Sous seuil</span><strong>{pageStats.sousSeuil}</strong></div>
+                <div className="resp-products-kpi info"><span>Commandes ouvertes</span><strong>{openOrders.length}</strong></div>
+                <div className="resp-products-kpi neutral"><span>Total catalogue</span><strong>{pageStats.total}</strong></div>
+              </div>
+            </section>
+
             <div className="resp-products-toolbar">
               <div className="resp-products-filters">
                 {inactiveOnly && (
@@ -459,6 +783,35 @@ const ProduitsResp = ({ userName, onLogout }) => {
               </div>
             )}
 
+            {!assignMode && !inactiveOnly && (
+              <div className={`resp-products-bulkbar ${selectedCriticalProducts.length ? 'active' : ''}`}>
+                <div className="resp-products-bulk-left">
+                  <ShoppingCart size={18} />
+                  <div>
+                    <strong>Mode commande groupée</strong>
+                    <span>{selectedCriticalProducts.length} produit(s) critique(s) sélectionné(s)</span>
+                  </div>
+                </div>
+                <div className="resp-products-bulk-actions">
+                  <button className="btn" type="button" onClick={selectAllFiltered} disabled={loading || submitting || !filtered.length}>
+                    Tout cocher
+                  </button>
+                  <button className="btn" type="button" onClick={clearSelection} disabled={loading || submitting || !selectedIds.length}>
+                    Vider
+                  </button>
+                  <button
+                    className="btn primary"
+                    type="button"
+                    onClick={prepareBulkSelection}
+                    disabled={loading || submitting || !selectedCriticalProducts.length}
+                  >
+                    <ShoppingCart size={16} />
+                    Traiter la sélection
+                  </button>
+                </div>
+              </div>
+            )}
+
             {assignMode && (
               <div className="resp-products-assign" role="region" aria-label="Affectation catégorie">
                 <div className="resp-products-assign-left">
@@ -510,7 +863,7 @@ const ProduitsResp = ({ userName, onLogout }) => {
               <table className="resp-products-table">
                 <thead>
                   <tr>
-                    {assignMode ? <th style={{ width: 42 }}></th> : null}
+                    {selectionEnabled ? <th style={{ width: 42 }}></th> : null}
                     <th>Code</th>
                     <th>Produit</th>
                     <th>Catégorie</th>
@@ -518,6 +871,7 @@ const ProduitsResp = ({ userName, onLogout }) => {
                     <th>Stock</th>
                     <th>Seuil</th>
                     <th>Statut</th>
+                    {!inactiveOnly ? <th>Action IA</th> : null}
                     {inactiveOnly ? (
                       <>
                         <th>Raison</th>
@@ -538,9 +892,11 @@ const ProduitsResp = ({ userName, onLogout }) => {
                     const rowId = String(p?._id || '');
                     const isSelected = rowId ? selectedIds.includes(rowId) : false;
                     const inTargetCategory = Boolean(categoryFilterId && p?.category?._id && String(p.category._id) === String(categoryFilterId));
+                    const openOrder = getProductOpenOrder(p, openOrders);
+                    const orderEta = getOrderEta(openOrder);
                     return (
                       <tr key={String(p?._id)}>
-                        {assignMode ? (
+                        {selectionEnabled ? (
                           <td>
                             <input
                               type="checkbox"
@@ -552,7 +908,12 @@ const ProduitsResp = ({ userName, onLogout }) => {
                           </td>
                         ) : null}
                         <td className="muted">{p?.code_product || '-'}</td>
-                        <td className="prod-name">{p?.name || 'Produit'}</td>
+                        <td>
+                          <button className="prod-name prod-name-btn" type="button" onClick={() => openDetailPanel(p)}>
+                            <span>{p?.name || 'Produit'}</span>
+                            <PanelRightOpen size={15} />
+                          </button>
+                        </td>
                         <td className="muted">
                           {p?.category?.name || '-'}
                           {assignMode && inTargetCategory ? <span className="pill ok" style={{ marginLeft: 8 }}>OK</span> : null}
@@ -565,6 +926,31 @@ const ProduitsResp = ({ userName, onLogout }) => {
                             {stockStatus === 'ok' ? 'OK' : stockStatus === 'sous_seuil' ? 'Sous seuil' : 'Rupture'}
                           </span>
                         </td>
+                        {!inactiveOnly ? (
+                          <td>
+                            {openOrder && stockStatus !== 'ok' ? (
+                              <button
+                                className="smart-action follow"
+                                type="button"
+                                title={`Arrivee prevue le ${formatDateFr(orderEta)}${openOrder?.supplier?.name ? ` par ${openOrder.supplier.name}` : ''}`}
+                                onClick={() => navigate(`/responsable/commandes/${String(openOrder._id)}`)}
+                              >
+                                <Clock size={15} />
+                                Suivre livraison
+                              </button>
+                            ) : stockStatus === 'rupture' || stockStatus === 'sous_seuil' ? (
+                              <button className="smart-action order" type="button" onClick={() => openQuickOrder(p)} disabled={submitting}>
+                                <Package size={15} />
+                                Commander
+                              </button>
+                            ) : (
+                              <button className="smart-action inspect" type="button" onClick={() => openDetailPanel(p)}>
+                                <PanelRightOpen size={15} />
+                                Analyser
+                              </button>
+                            )}
+                          </td>
+                        ) : null}
                         {inactiveOnly ? (
                           <>
                             <td>
@@ -592,14 +978,223 @@ const ProduitsResp = ({ userName, onLogout }) => {
               </table>
 
               {!loading && filtered.length === 0 && (
-                <div className="resp-products-empty">
-                  Aucun produit ne correspond aux filtres.
+                <div className="resp-products-empty crisis">
+                  <CheckCircle2 size={34} />
+                  <div>
+                    <strong>
+                      {statusFilter === 'rupture' || statusFilter === 'sous_seuil' || criticalOnly
+                        ? 'Bravo, aucun produit critique dans ce périmètre.'
+                        : 'Aucun produit ne correspond aux filtres.'}
+                    </strong>
+                    <span>
+                      {attentionCategory
+                        ? `${attentionCategory.name} demande encore de l attention (${attentionCategory.criticalCount} alerte(s)).`
+                        : 'Le catalogue visible est propre pour ce filtre.'}
+                    </span>
+                  </div>
+                  {attentionCategory ? (
+                    <button
+                      className="btn primary"
+                      type="button"
+                      onClick={() => navigate(`/responsable/produits?category=${encodeURIComponent(String(attentionCategory._id))}&filter=critiques`)}
+                    >
+                      Voir {attentionCategory.name}
+                    </button>
+                  ) : null}
                 </div>
               )}
             </div>
           </div>
         </div>
       </div>
+
+      {quickOrderProduct && (
+        <div className="prod-modal-backdrop" role="dialog" aria-modal="true" onClick={closeQuickOrder}>
+          <div className="prod-modal smart-order-modal" onClick={(e) => e.stopPropagation()}>
+            <div className="prod-modal-head">
+              <div>
+                <strong>Commande rapide</strong>
+                <div className="muted">{quickOrderProduct.code_product || getProductId(quickOrderProduct)}</div>
+              </div>
+              <button className="btn" type="button" onClick={closeQuickOrder} disabled={submitting}>Fermer</button>
+            </div>
+            <div className="prod-modal-body">
+              <div className="smart-order-product">
+                <Package size={22} />
+                <div>
+                  <strong>{quickOrderProduct.name || 'Produit'}</strong>
+                  <span>Stock actuel {Number(quickOrderProduct.quantity_current || 0)} / seuil {Number(quickOrderProduct.seuil_minimum || 0)}</span>
+                </div>
+              </div>
+              <div className="prod-form-grid">
+                <label className="prod-field">
+                  <span>Quantité recommandée</span>
+                  <input
+                    type="number"
+                    min="1"
+                    value={quickOrderQty}
+                    onChange={(e) => setQuickOrderQty(e.target.value)}
+                    disabled={submitting}
+                  />
+                </label>
+                <div className="prod-field">
+                  <span>Fournisseur recommandé</span>
+                  <div className="supplier-reco-box">
+                    {quickSupplierLoading ? (
+                      'Recherche du meilleur fournisseur...'
+                    ) : quickSupplier ? (
+                      <>
+                        <strong>{quickSupplier.name}</strong>
+                        <span>Score {quickSupplier.score ? quickSupplier.score.toFixed(1) : '-'} / 100 • délai {quickSupplier.leadTimeDays || 7}j</span>
+                      </>
+                    ) : (
+                      'Aucun fournisseur recommandé. Le backend choisira un fournisseur actif si possible.'
+                    )}
+                  </div>
+                </div>
+              </div>
+            </div>
+            <div className="prod-modal-footer">
+              <button className="btn" type="button" onClick={() => navigate(`/responsable/commandes/nouvelle?produitId=${encodeURIComponent(getProductId(quickOrderProduct))}&quantite=${encodeURIComponent(String(quickOrderQty || 1))}&source=produits-smart-action`)} disabled={submitting}>
+                Ouvrir formulaire complet
+              </button>
+              <button className="btn primary" type="button" onClick={createQuickOrder} disabled={submitting || quickSupplierLoading}>
+                <ShoppingCart size={16} />
+                Créer commande
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {bulkPanelOpen && (
+        <div className="prod-modal-backdrop" role="dialog" aria-modal="true" onClick={() => setBulkPanelOpen(false)}>
+          <div className="prod-modal bulk-order-modal" onClick={(e) => e.stopPropagation()}>
+            <div className="prod-modal-head">
+              <div>
+                <strong>Traitement groupé</strong>
+                <div className="muted">{selectedCriticalProducts.length} produit(s) critique(s) à approvisionner</div>
+              </div>
+              <button className="btn" type="button" onClick={() => setBulkPanelOpen(false)} disabled={submitting}>Fermer</button>
+            </div>
+            <div className="prod-modal-body">
+              {bulkLoading ? (
+                <div className="resp-products-empty">Regroupement par fournisseur recommandé...</div>
+              ) : (
+                <div className="bulk-groups">
+                  {bulkGroups.map((group) => (
+                    <div className="bulk-group" key={group.key}>
+                      <div className="bulk-group-head">
+                        <div>
+                          <strong>{group.label}</strong>
+                          <span>{group.items.length} ligne(s) • {group.supplier?.id ? 'commande automatique possible' : 'fournisseur à confirmer'}</span>
+                        </div>
+                        {group.supplier?.leadTimeDays ? <span className="pill pending">Délai {group.supplier.leadTimeDays}j</span> : null}
+                      </div>
+                      <div className="bulk-lines">
+                        {group.items.map((item) => (
+                          <div className="bulk-line" key={getProductId(item.product)}>
+                            <span>{item.product?.name || 'Produit'}</span>
+                            <strong>Qté {item.qty}</strong>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  ))}
+                  {!bulkGroups.length ? <div className="resp-products-empty">Aucun groupe exploitable.</div> : null}
+                </div>
+              )}
+            </div>
+            <div className="prod-modal-footer">
+              <button className="btn" type="button" onClick={() => navigate('/responsable/commandes/nouvelle?source=produits-selection')} disabled={submitting}>
+                Préparer manuellement
+              </button>
+              <button className="btn primary" type="button" onClick={createBulkOrders} disabled={submitting || bulkLoading || !bulkGroups.some((g) => g?.supplier?.id)}>
+                <Layers size={16} />
+                Générer les commandes
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {detailProduct && (
+        <div className="prod-slide-overlay" onClick={closeDetailPanel}>
+          <aside className="prod-slide-panel" aria-label="Analyse produit" onClick={(e) => e.stopPropagation()}>
+            <div className="prod-slide-head">
+              <div>
+                <span className="pill pending">{detailProduct.code_product || 'Produit'}</span>
+                <h2>{detailProduct.name || 'Produit'}</h2>
+              </div>
+              <button className="header-icon-btn" type="button" onClick={closeDetailPanel} aria-label="Fermer">
+                <X size={18} />
+              </button>
+            </div>
+
+            <div className="prod-slide-section">
+              <h3><Truck size={17} />Fournisseur recommandé</h3>
+              {detailSupplier ? (
+                <div className="supplier-contact">
+                  <strong>{detailSupplier.name}</strong>
+                  <span>Score {detailSupplier.score ? detailSupplier.score.toFixed(1) : '-'} / 100 • délai {detailSupplier.leadTimeDays || 7}j</span>
+                  <div className="supplier-contact-actions">
+                    <a className="btn" href={`mailto:${detailSupplier.email || ''}?subject=${encodeURIComponent(`Demande ETA - ${detailProduct.name || 'Produit'}`)}`}>
+                      <Mail size={15} />
+                      Email type
+                    </a>
+                    <button className="btn primary" type="button" onClick={() => openQuickOrder(detailProduct)}>
+                      <ShoppingCart size={15} />
+                      Commander
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <div className="resp-products-empty">Aucun fournisseur recommandé disponible.</div>
+              )}
+            </div>
+
+            <div className="prod-slide-section">
+              <h3><Sparkles size={17} />Evolution stock estimée</h3>
+              <div className="stock-trend">
+                {[90, 60, 30].map((daysBack, idx) => {
+                  const stockNow = Number(detailProduct?.quantity_current || 0);
+                  const seuilNow = Number(detailProduct?.seuil_minimum || 0);
+                  const estimated = Math.max(0, Math.round(stockNow + (2 - idx) * Math.max(1, Math.ceil(seuilNow / 3))));
+                  const width = Math.min(100, Math.max(8, seuilNow > 0 ? (estimated / Math.max(seuilNow * 2, 1)) * 100 : 35));
+                  return (
+                    <div className="trend-row" key={daysBack}>
+                      <span>M-{daysBack}</span>
+                      <div><i style={{ width: `${width}%` }} /></div>
+                      <strong>{estimated}</strong>
+                    </div>
+                  );
+                })}
+                <div className="trend-row now">
+                  <span>Aujourd hui</span>
+                  <div><i style={{ width: `${Math.min(100, Math.max(8, Number(detailProduct?.quantity_current || 0) / Math.max(Number(detailProduct?.seuil_minimum || 1) * 2, 1) * 100))}%` }} /></div>
+                  <strong>{Number(detailProduct?.quantity_current || 0)}</strong>
+                </div>
+              </div>
+            </div>
+
+            <div className="prod-slide-section">
+              <h3><Package size={17} />Alternatives disponibles</h3>
+              {detailAlternatives.length ? (
+                <div className="alternative-list">
+                  {detailAlternatives.map((alt) => (
+                    <button className="alternative-item" type="button" key={getProductId(alt)} onClick={() => openDetailPanel(alt)}>
+                      <span>{alt.name || 'Produit'}</span>
+                      <strong>Stock {Number(alt.quantity_current || 0)}</strong>
+                    </button>
+                  ))}
+                </div>
+              ) : (
+                <div className="resp-products-empty">Aucune alternative active avec stock suffisant.</div>
+              )}
+            </div>
+          </aside>
+        </div>
+      )}
 
       {editModalOpen && editDraft && (
         <div className="prod-modal-backdrop" role="dialog" aria-modal="true" onClick={closeEdit}>

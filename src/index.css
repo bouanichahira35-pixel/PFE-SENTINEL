@@ -1,19 +1,30 @@
 /* Global theme tokens */
 :root { 
-  --color-primary: #1976d2; 
-  --color-primary-dark: #1565c0; 
+  --color-primary: #2563eb; 
+  --color-primary-dark: #1d4ed8; 
+  --color-accent: #059669;
+  --color-danger: #dc2626;
+  --color-success: #16a34a;
+  --color-info: #0891b2;
   --color-bg-primary: #ffffff; 
-  --color-bg-secondary: #f3f4f6;
-  --color-bg-tertiary: #e5e7eb;
-  --color-text-primary: #1f2937;
-  --color-text-secondary: #6b7280;
-  --color-text-muted: #9ca3af; 
-  --color-border: #e5e7eb; 
-  --color-border-light: #f3f4f6; 
+  --color-bg-secondary: #f6f8fb;
+  --color-bg-tertiary: #eef2f7;
+  --color-text-primary: #0f172a;
+  --color-text-secondary: #475569;
+  --color-text-muted: #94a3b8; 
+  --color-border: #dfe7f0; 
+  --color-border-light: #eef2f7; 
   --color-warning: #7b3ff2;
   --color-warning-soft: #ece4fb;
   --color-warning-soft-strong: #dfd0f8;
   --color-warning-border: rgba(123, 63, 242, 0.45);
+  --app-page-padding: 1rem;
+  --app-page-padding-mobile: 0.75rem;
+  --app-radius-surface: 8px;
+  --app-radius-control: 7px;
+  --app-shadow-surface: 0 8px 20px rgba(15, 23, 42, 0.055);
+  --app-shadow-hover: 0 12px 26px rgba(15, 23, 42, 0.09);
+  --app-focus-ring: 0 0 0 3px rgba(37, 99, 235, 0.14);
 
   /* Legacy HSL tokens used across magasinier/responsable pages */ 
   --primary: 210 79% 46%; 
@@ -30,18 +41,25 @@
 [data-theme="dark"] { 
   --color-primary: #60a5fa; 
   --color-primary-dark: #3b82f6;
+  --color-accent: #34d399;
+  --color-danger: #f87171;
+  --color-success: #22c55e;
+  --color-info: #38bdf8;
   --color-bg-primary: #111827;
-  --color-bg-secondary: #1f2937;
-  --color-bg-tertiary: #374151;
+  --color-bg-secondary: #172033;
+  --color-bg-tertiary: #253044;
   --color-text-primary: #f3f4f6;
-  --color-text-secondary: #d1d5db;
+  --color-text-secondary: #cbd5e1;
   --color-text-muted: #9ca3af; 
-  --color-border: #374151; 
-  --color-border-light: #1f2937; 
+  --color-border: #334155; 
+  --color-border-light: #253044; 
   --color-warning: #b598ff;
   --color-warning-soft: rgba(181, 152, 255, 0.16);
   --color-warning-soft-strong: rgba(181, 152, 255, 0.28);
   --color-warning-border: rgba(181, 152, 255, 0.5);
+  --app-shadow-surface: 0 8px 22px rgba(0, 0, 0, 0.22);
+  --app-shadow-hover: 0 12px 28px rgba(0, 0, 0, 0.3);
+  --app-focus-ring: 0 0 0 3px rgba(96, 165, 250, 0.2);
 
   /* Legacy HSL tokens (dark mode) */ 
   --primary: 210 93% 67%; 
@@ -120,7 +138,7 @@ button:disabled {
 
 .main-content {
   flex: 1;
-  padding: 1.5rem;
+  padding: var(--app-page-padding);
   min-width: 0;
   max-width: 100%;
   overflow-y: auto;
@@ -157,13 +175,13 @@ button:disabled {
 
 @media (max-width: 640px) {
   .main-content {
-    padding: 1rem;
+    padding: var(--app-page-padding-mobile);
   }
 }
 
 @media (max-width: 480px) {
   .main-content {
-    padding: 0.85rem;
+    padding: 0.65rem;
   }
 }
 
@@ -181,9 +199,9 @@ code {
 .mobile-card {
   background: var(--color-bg-primary);
   border: 1px solid var(--color-border);
-  border-radius: 12px;
-  padding: 0.9rem;
-  box-shadow: 0 10px 22px rgba(15, 23, 42, 0.06);
+  border-radius: var(--app-radius-surface);
+  padding: 0.8rem;
+  box-shadow: var(--app-shadow-surface);
 }
 
 .mobile-card-header {
@@ -247,7 +265,7 @@ code {
   gap: 0.45rem;
   width: 100%;
   padding: 0.7rem 0.75rem;
-  border-radius: 10px;
+  border-radius: var(--app-radius-control);
   border: 1px solid var(--color-border);
   background: var(--color-bg-secondary);
   color: var(--color-text-primary);
@@ -255,6 +273,67 @@ code {
   font-weight: 600;
   cursor: pointer;
   transition: transform 0.15s ease, background 0.15s ease, border-color 0.15s ease;
+}
+
+/* Global UI normalization: compact SaaS surfaces, consistent focus and neutral colors. */
+:where(input:not([type="checkbox"]):not([type="radio"]), select, textarea) {
+  border-radius: var(--app-radius-control);
+}
+
+:where(input:not([type="checkbox"]):not([type="radio"]), select, textarea):focus {
+  box-shadow: var(--app-focus-ring);
+}
+
+:where(
+  .admin-hero,
+  .admin-command-pill,
+  .admin-quick-actions,
+  .admin-panel,
+  .admin-card,
+  .admin-sessions-table,
+  .admin-sec-table,
+  .admin-settings-card,
+  .dashboard-card,
+  .kpi-card,
+  .pending-item,
+  .resp-summary-pill,
+  .resp-card,
+  .resp-panel,
+  .chatbot-header,
+  .chatbot-capabilities,
+  .chatbot-toolbar,
+  .chatbot-messages,
+  .chatbot-suggestions,
+  .chatbot-input,
+  .history-table-container,
+  .products-dem-table-container,
+  .demandes-table-container,
+  .historique-table-container,
+  .produits-table-container,
+  .mobile-card
+) {
+  border-color: var(--color-border);
+  border-radius: var(--app-radius-surface);
+  box-shadow: var(--app-shadow-surface);
+}
+
+:where(
+  .admin-command-pill.as-button,
+  .dashboard-card,
+  .kpi-card,
+  .pending-item,
+  .resp-card,
+  .mobile-card
+):hover {
+  box-shadow: var(--app-shadow-hover);
+}
+
+:where(.admin-page, .resp-dash-page, .categories-resp-container) {
+  padding: var(--app-page-padding);
+}
+
+:where(.admin-eyebrow, .mobile-kv-label, .suggestions-label, .sb-section-head, .sidebar-section-title) {
+  letter-spacing: 0.04em;
 }
 
 .mobile-action-btn:active:not(:disabled) {

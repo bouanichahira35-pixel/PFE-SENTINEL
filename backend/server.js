@@ -1,4 +1,8 @@
 require('./loadEnv');
+
+// BLOC 1 - Importation des outils principaux.
+// Ici on charge Express pour creer l'API, les protections HTTP,
+// les limites de requetes, la base MongoDB, les middlewares et les services.
 const express = require('express');
 const cors = require('cors');
 const helmet = require('helmet');
@@ -23,9 +27,18 @@ const Product = require('./models/Product');
 const { sanitizeStockRulesConfig } = require('./constants/stockRules');
 const { startPurchaseOrderRemindersJob } = require('./services/purchaseOrderReminderJob');
 
+// BLOC 2 - Creation de l'application serveur.
+// `app` represente le backend Express. C'est lui qui recoit les requetes HTTP.
 const app = express();
 app.disable('x-powered-by');
 
+// BLOC 3 - Configuration proxy.
+// Necessaire pour que les limites de requetes fonctionnent correctement
+// quand le frontend React passe par un proxy local.
+app.set('trust proxy', 1);
+
+// BLOC 4 - Origines autorisees pour le frontend.
+// Le backend accepte les appels venant de React en local, par exemple localhost:3000.
 const defaultDevOrigins = [
   'http://localhost:3000',
   'http://localhost:3001',
@@ -47,12 +60,16 @@ const configuredOrigins = String(
 const allowedOrigins = Array.from(new Set([...configuredOrigins, ...defaultDevOrigins]));
 const isProduction = String(process.env.NODE_ENV || '').toLowerCase() === 'production';
 
+// BLOC 5 - Lecture simple des options dans le fichier .env.
+// Cette fonction transforme une variable texte en vrai/faux.
 function envFlag(name, defaultValue = false) {
   const raw = process.env[name];
   if (raw === undefined || raw === null || String(raw).trim() === '') return Boolean(defaultValue);
   return ['1', 'true', 'yes', 'on'].includes(String(raw).trim().toLowerCase());
 }
 
+// BLOC 6 - Securite obligatoire en production.
+// En production, les secrets doivent etre forts. Sinon le serveur refuse de demarrer.
 if (isProduction) {
   const jwtSecret = String(process.env.JWT_SECRET || '').trim();
   const piiHashSecret = String(process.env.PII_HASH_SECRET || '').trim();
@@ -71,6 +88,8 @@ if (isProduction) {
   }
 }
 
+// BLOC 7 - Aide pour reconnaitre les adresses du frontend en developpement.
+// Ces fonctions disent si une origine vient de localhost ou du reseau local.
 function isLocalDevOrigin(origin) {
   try {
     const parsed = new URL(origin);
@@ -107,6 +126,9 @@ function isLanDevOrigin(origin) {
   }
 }
 
+// BLOC 8 - Middlewares globaux.
+// Ces middlewares passent sur presque toutes les requetes avant les routes:
+// CORS, securite HTTP, contexte de requete, performance, logs et lecture JSON.
 app.use(cors({
   origin(origin, cb) {
     if (!origin) return cb(null, true);
@@ -114,6 +136,7 @@ app.use(cors({
     // Dev ergonomics: allow any origin in development so phones on LAN can use the app
     // without constantly updating FRONTEND_URLS when the dev server port changes.
     // In production, we keep strict allow-listing via FRONTEND_URLS.
+    if (!isProduction && (isLocalDevOrigin(origin) || isLanDevOrigin(origin))) return cb(null, true);
     if (!isProduction) return cb(null, true);
 
     if (allowedOrigins.includes(origin)) return cb(null, true);
@@ -131,6 +154,8 @@ app.use(pinoHttp({
 }));
 app.use(express.json({ limit: process.env.JSON_BODY_LIMIT || '2mb' }));
 
+// BLOC 9 - Traduction de l'etat MongoDB.
+// MongoDB donne un numero; cette fonction transforme le numero en mot lisible.
 function mongoStateLabel(readyState) {
   const stateMap = {
     0: 'disconnected',
@@ -141,7 +166,8 @@ function mongoStateLabel(readyState) {
   return stateMap[readyState] || 'unknown';
 }
 
-// Fail fast when MongoDB is unavailable to avoid requests hanging until client timeouts.
+// BLOC 10 - Protection si MongoDB est indisponible.
+// Si la base de donnees n'est pas connectee, l'API repond vite avec une erreur 503.
 app.use((req, res, next) => {
   if (req.method === 'OPTIONS') return next();
 
@@ -161,6 +187,8 @@ app.use((req, res, next) => {
 });
 app.use(idempotencyGuard);
 
+// BLOC 11 - Limites de requetes.
+// Ces limites evitent qu'une personne ou un bug envoie trop de requetes trop vite.
 const authLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
   max: Number(process.env.RATE_LIMIT_AUTH_MAX || 100),
@@ -183,6 +211,9 @@ const chatLimiter = rateLimit({
   message: { error: 'Trop de requetes chat, reessayez dans quelques instants.' },
 });
 
+// BLOC 12 - Route de sante du serveur.
+// GET /api/health sert a verifier si le backend, MongoDB, les mails,
+// les files d'attente et certains secrets de securite sont en bon etat.
 app.get('/api/health', async (req, res) => {
   const stateMap = {
     0: 'disconnected',
@@ -314,6 +345,9 @@ app.get('/api/health', async (req, res) => {
   });
 });
 
+// BLOC 13 - Branchement des routes REST.
+// Chaque ligne envoie une famille d'URL vers son fichier dans backend/routes.
+// Exemple: /api/products va vers backend/routes/products.js.
 app.use('/api/auth', authLimiter, require('./routes/auth'));
 app.use('/api/products', require('./routes/products'));
 app.use('/api/categories', require('./routes/categories'));
@@ -340,6 +374,8 @@ app.use('/api/support', require('./routes/support'));
 app.use('/api/admin', require('./routes/admin'));
 app.use('/api/supplier-portal', require('./routes/supplier-portal'));
 
+// BLOC 14 - Gestion simple des erreurs de fichiers.
+// Si un fichier envoye est trop grand, le backend renvoie une erreur claire.
 app.use((err, req, res, next) => {
   if (err?.code === 'LIMIT_FILE_SIZE') {
     return res.status(400).json({ error: 'Fichier trop volumineux', request_id: req.requestId });
@@ -347,6 +383,8 @@ app.use((err, req, res, next) => {
   return next(err);
 });
 
+// BLOC 15 - Nettoyage optionnel au demarrage.
+// Cette fonction peut corriger/nettoyer certaines donnees si l'option est activee.
 async function runDomainCleanup() {
   if (!envFlag('DOMAIN_CLEANUP_ON_BOOT', false)) return;
 
@@ -358,6 +396,8 @@ async function runDomainCleanup() {
   }
 }
 
+// BLOC 16 - Reconstruction des alertes IA au demarrage.
+// Cette fonction recalcule les alertes IA pour que le tableau de bord soit a jour.
 async function runAiAlertsBoot() {
   const enable = String(process.env.AI_ALERTS_REBUILD_ON_BOOT || '').trim().toLowerCase();
   const isProd = String(process.env.NODE_ENV || '').toLowerCase() === 'production';
@@ -372,6 +412,8 @@ async function runAiAlertsBoot() {
   }
 }
 
+// BLOC 17 - Migration automatique des anciens produits.
+// Les anciens produits "pending" sont approuves pour rester coherents avec la nouvelle regle metier.
 async function runProductValidationRemovalMigration() {
   // 2026-05: new products created by magasinier are immediately usable (no responsable validation).
   // We also auto-approve any legacy "pending" products to avoid confusing states in the UI.
@@ -445,8 +487,12 @@ async function runProductValidationRemovalMigration() {
   }
 }
 
+// BLOC 18 - Port du serveur.
+// Si .env ne donne pas de port, le backend demarre sur 5000.
 const PORT = process.env.PORT || 5000;
 
+// BLOC 19 - Verification de la cle QR.
+// Cette fonction avertit dans les logs si la cle de signature QR est faible ou absente.
 async function logQrSecretStatus() {
   const qrSecretStatus = getQrSecretStatus();
   if (!qrSecretStatus.ok || qrSecretStatus.fallback) {
@@ -458,6 +504,8 @@ async function logQrSecretStatus() {
   }
 }
 
+// BLOC 20 - Taches apres demarrage.
+// Apres le lancement, le serveur lance les nettoyages, migrations, IA et rappels de commandes.
 async function runPostBootTasks() {
   try {
     await runDomainCleanup();
@@ -474,6 +522,9 @@ async function runPostBootTasks() {
   }
 }
 
+// BLOC 21 - Demarrage reel du backend.
+// Le serveur ecoute les requetes, attend MongoDB, initialise les mails,
+// verifie la securite QR puis lance les taches de fond.
 (async () => {
   app.listen(PORT, () => logger.info({ port: Number(PORT) }, 'API ready'));
 
@@ -500,4 +551,3 @@ async function runPostBootTasks() {
     logger.warn('[BOOT] Post-boot tasks skipped because MongoDB is not ready');
   }
 })();
-

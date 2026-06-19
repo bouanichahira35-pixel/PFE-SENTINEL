@@ -1,7 +1,13 @@
 .pilotage-page {
   padding: 1.2rem;
+  width: 100%;
   max-width: 1380px;
   margin: 0 auto;
+}
+
+.pilotage-page-validations {
+  max-width: none;
+  padding: 0;
 }
 
 .pilotage-top {
@@ -62,48 +68,6 @@
   cursor: not-allowed;
 }
 
-.pilotage-tabs {
-  display: flex;
-  gap: 0.45rem;
-  background: #f8fafc;
-  border: 1px solid #e2e8f0;
-  border-radius: 1rem;
-  padding: 0.35rem;
-  margin-bottom: 0.85rem;
-  flex-wrap: wrap;
-}
-
-.pilotage-tab {
-  border: 0;
-  background: transparent;
-  border-radius: 0.85rem;
-  padding: 0.55rem 0.75rem;
-  cursor: pointer;
-  display: inline-flex;
-  align-items: center;
-  gap: 0.45rem;
-  font-weight: 900;
-  color: #334155;
-}
-
-.pilotage-tab.active {
-  background: linear-gradient(135deg, #0f766e, #0284c7);
-  color: #ffffff;
-}
-
-.pilotage-tab-badge {
-  min-width: 1.35rem;
-  height: 1.35rem;
-  padding: 0 0.38rem;
-  border-radius: 999px;
-  background: #ffffff;
-  color: #0f766e;
-  display: inline-grid;
-  place-items: center;
-  font-size: 0.7rem;
-  font-weight: 1000;
-}
-
 .pilotage-card {
   background: #ffffff;
   border: 1px solid #e2e8f0;
@@ -135,6 +99,30 @@
   font-size: 0.78rem;
   color: #64748b;
   font-weight: 800;
+}
+
+.pilotage-card-titleblock {
+  display: flex;
+  flex-direction: column;
+  gap: 0.18rem;
+  min-width: 220px;
+}
+
+.pilotage-validations-card {
+  width: 100%;
+}
+
+.pilotage-validations-card .pilotage-card-head {
+  align-items: center;
+  padding-bottom: 0.75rem;
+  border-bottom: 1px solid #edf2f7;
+  margin-bottom: 0.85rem;
+}
+
+.pilotage-validations-card .pilotage-inline-actions {
+  margin-left: auto;
+  justify-content: flex-end;
+  flex-wrap: wrap;
 }
 
 .pilotage-filters {
@@ -388,6 +376,11 @@
   background: #fee2e2;
 }
 
+.pilotage-ai-kpi.health svg {
+  color: #7c3aed;
+  background: #ede9fe;
+}
+
 .pilotage-ai-kpi span {
   grid-area: label;
   font-size: 0.7rem;
@@ -411,6 +404,130 @@
 
 .pilotage-inline-actions.ai-filters {
   flex-wrap: wrap;
+}
+
+.pilotage-intelligence-grid {
+  display: grid;
+  grid-template-columns: 1.15fr 1fr 1fr;
+  gap: 0.7rem;
+}
+
+.pilotage-health-panel,
+.pilotage-smart-reorder,
+.pilotage-crisis-room {
+  border: 1px solid #e2e8f0;
+  border-radius: 1rem;
+  background: #ffffff;
+  padding: 0.85rem;
+  box-shadow: 0 10px 24px rgba(15, 23, 42, 0.05);
+  min-width: 0;
+}
+
+.pilotage-health-panel {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  gap: 0.85rem;
+}
+
+.pilotage-health-panel.critical {
+  border-color: rgba(220, 38, 38, 0.25);
+  background: linear-gradient(135deg, rgba(254, 242, 242, 0.9), #ffffff);
+}
+
+.pilotage-health-panel.tense {
+  border-color: rgba(217, 119, 6, 0.25);
+  background: linear-gradient(135deg, rgba(255, 251, 235, 0.9), #ffffff);
+}
+
+.pilotage-health-panel.watch {
+  border-color: rgba(2, 132, 199, 0.22);
+  background: linear-gradient(135deg, rgba(240, 249, 255, 0.9), #ffffff);
+}
+
+.pilotage-health-panel.excellent {
+  border-color: rgba(22, 163, 74, 0.22);
+  background: linear-gradient(135deg, rgba(240, 253, 244, 0.9), #ffffff);
+}
+
+.pilotage-health-score {
+  --score: 0%;
+  width: 5rem;
+  height: 5rem;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  background:
+    radial-gradient(circle at center, #ffffff 58%, transparent 60%),
+    conic-gradient(#16a34a var(--score), #e2e8f0 0);
+  color: #0f172a;
+  font-weight: 1000;
+  box-shadow: inset 0 0 0 1px rgba(15, 23, 42, 0.08);
+}
+
+.pilotage-health-score span {
+  font-size: 1.1rem;
+}
+
+.pilotage-health-copy h3,
+.pilotage-panel-head h3 {
+  margin: 0;
+  color: #0f172a;
+  font-size: 0.98rem;
+  line-height: 1.2;
+  font-weight: 1000;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.pilotage-health-copy p,
+.pilotage-smart-reorder p,
+.pilotage-crisis-room p {
+  margin: 0.45rem 0 0;
+  color: #475569;
+  line-height: 1.45;
+  font-weight: 780;
+  font-size: 0.84rem;
+}
+
+.pilotage-badges,
+.pilotage-panel-actions {
+  display: flex;
+  gap: 0.45rem;
+  flex-wrap: wrap;
+  margin-top: 0.65rem;
+}
+
+.pilotage-badges span {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.32rem;
+  border: 1px solid #e2e8f0;
+  background: #f8fafc;
+  border-radius: 999px;
+  padding: 0.28rem 0.55rem;
+  color: #334155;
+  font-size: 0.72rem;
+  font-weight: 950;
+}
+
+.pilotage-panel-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.6rem;
+}
+
+.pilotage-panel-head > span {
+  border: 1px solid #e2e8f0;
+  border-radius: 999px;
+  padding: 0.2rem 0.5rem;
+  background: #f8fafc;
+  color: #334155;
+  font-size: 0.72rem;
+  font-weight: 1000;
+  white-space: nowrap;
 }
 
 .pilotage-alert-grid {
@@ -573,6 +690,127 @@
   border-radius: inherit;
   background: linear-gradient(90deg, var(--risk), #0f766e);
   transition: width 0.45s ease;
+}
+
+.pilotage-root-cause {
+  margin-top: 0.75rem;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 0.5rem;
+  border: 1px solid rgba(15, 118, 110, 0.16);
+  border-radius: 0.9rem;
+  background: #f8fafc;
+  padding: 0.62rem;
+}
+
+.pilotage-root-cause > svg {
+  color: #0f766e;
+  margin-top: 0.1rem;
+}
+
+.pilotage-root-cause strong,
+.pilotage-root-cause span,
+.pilotage-root-cause small {
+  display: block;
+}
+
+.pilotage-root-cause strong {
+  color: #0f172a;
+  font-size: 0.82rem;
+  font-weight: 1000;
+}
+
+.pilotage-root-cause span {
+  margin-top: 0.18rem;
+  color: #334155;
+  font-size: 0.8rem;
+  line-height: 1.42;
+  font-weight: 780;
+}
+
+.pilotage-root-cause small {
+  margin-top: 0.22rem;
+  color: #64748b;
+  font-size: 0.7rem;
+  font-weight: 900;
+}
+
+.pilotage-playbook {
+  margin-top: 0.75rem;
+  border: 1px solid #e2e8f0;
+  border-radius: 0.9rem;
+  padding: 0.62rem;
+  background: #ffffff;
+}
+
+.pilotage-playbook-head {
+  display: flex;
+  align-items: center;
+  gap: 0.38rem;
+  flex-wrap: wrap;
+  color: #0f766e;
+  font-size: 0.78rem;
+  font-weight: 1000;
+}
+
+.pilotage-playbook-head span {
+  color: #64748b;
+  font-weight: 850;
+  overflow-wrap: anywhere;
+}
+
+.pilotage-playbook-options {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.45rem;
+  margin-top: 0.55rem;
+}
+
+.pilotage-playbook-options button {
+  border: 1px solid #e2e8f0;
+  border-radius: 0.8rem;
+  background: #f8fafc;
+  color: #0f172a;
+  padding: 0.55rem;
+  min-width: 0;
+  cursor: pointer;
+  text-align: left;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  grid-template-areas:
+    "icon option"
+    "icon title";
+  gap: 0.06rem 0.38rem;
+  transition: border-color 0.16s ease, background 0.16s ease, transform 0.16s ease;
+}
+
+.pilotage-playbook-options button:hover {
+  border-color: rgba(15, 118, 110, 0.28);
+  background: #ffffff;
+  transform: translateY(-1px);
+}
+
+.pilotage-playbook-options svg {
+  grid-area: icon;
+  margin-top: 0.1rem;
+  color: #0f766e;
+}
+
+.pilotage-playbook-options span {
+  grid-area: option;
+  color: #64748b;
+  font-size: 0.64rem;
+  font-weight: 1000;
+  text-transform: uppercase;
+}
+
+.pilotage-playbook-options strong {
+  grid-area: title;
+  color: #0f172a;
+  font-size: 0.76rem;
+  line-height: 1.25;
+  font-weight: 950;
+  overflow-wrap: anywhere;
 }
 
 .pilotage-alert-footer {
@@ -884,11 +1122,24 @@
   gap: 0.75rem;
 }
 
+.pilotage-validations-card .pilotage-pending-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(520px, 100%), 1fr));
+  align-items: stretch;
+  gap: 0.75rem;
+}
+
 .pilotage-pending-item {
   border: 1px solid #e2e8f0;
   border-radius: 1rem;
   background: linear-gradient(180deg, #ffffff 0%, #f8fbff 100%);
   padding: 0.75rem;
+}
+
+.pilotage-validations-card .pilotage-pending-item {
+  display: flex;
+  flex-direction: column;
+  min-height: 212px;
 }
 
 .pilotage-pending-top {
@@ -953,6 +1204,10 @@
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 0.6rem;
+}
+
+.pilotage-validations-card .pilotage-pending-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 
 .pilotage-pending-grid label {
@@ -1069,6 +1324,11 @@
   flex-wrap: wrap;
 }
 
+.pilotage-validations-card .pilotage-pending-actions {
+  margin-top: auto;
+  padding-top: 0.75rem;
+}
+
 @media (max-width: 1100px) {
   .pilotage-grid {
     grid-template-columns: 1fr;
@@ -1077,6 +1337,10 @@
   .pilotage-alert-grid,
   .pilotage-ai-kpis {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .pilotage-intelligence-grid {
+    grid-template-columns: 1fr;
   }
 }
 
@@ -1087,6 +1351,10 @@
 
   .pilotage-pending-grid {
     grid-template-columns: 1fr 1fr;
+  }
+
+  .pilotage-validations-card .pilotage-pending-list {
+    grid-template-columns: 1fr;
   }
 
   .pilotage-sim-row {
@@ -1108,13 +1376,25 @@
     padding: 1rem;
   }
 
+  .pilotage-page-validations {
+    padding: 0;
+  }
+
+  .pilotage-validations-card .pilotage-card-head,
+  .pilotage-validations-card .pilotage-inline-actions {
+    align-items: stretch;
+    justify-content: flex-start;
+    width: 100%;
+  }
+
   .pilotage-kpi {
     min-width: 140px;
   }
 
   .pilotage-alert-grid,
   .pilotage-ai-kpis,
-  .pilotage-alert-metrics {
+  .pilotage-alert-metrics,
+  .pilotage-playbook-options {
     grid-template-columns: 1fr;
   }
 
@@ -1125,6 +1405,15 @@
   .pilotage-ai-orbit {
     width: 2.8rem;
     height: 2.8rem;
+  }
+
+  .pilotage-health-panel {
+    grid-template-columns: 1fr;
+  }
+
+  .pilotage-health-score {
+    width: 4.4rem;
+    height: 4.4rem;
   }
 }
 

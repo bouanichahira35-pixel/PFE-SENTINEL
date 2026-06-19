@@ -1,4 +1,4 @@
-﻿const router = require('express').Router();
+const router = require('express').Router();
 
 const requireAuth = require('../middlewares/requireAuth');
 const requirePermission = require('../middlewares/requirePermission');
@@ -426,12 +426,12 @@ router.post(
 );
 
 // POST /api/users
-// Body: { username, email, telephone, role, password, demandeur_profile? }
+// Body: { username, email, telephone, role, password, demandeur_profile?, service_direction? }
 router.post(
   '/',
   requireRole('admin'),
   requireAnyPermission(PERMISSIONS.USER_CREATE, PERMISSIONS.USER_MANAGE),
-  strictBody(['username', 'email', 'telephone', 'role', 'password']),
+  strictBody(['username', 'email', 'telephone', 'role', 'password', 'demandeur_profile', 'service_direction']),
   async (req, res) => {
     try {
       const username = String(req.body?.username || '').trim();
@@ -546,6 +546,15 @@ router.patch(
 
       const before = user.role;
       if (before === role) return res.json({ message: 'Aucun changement', user: { id: user._id, role } });
+      if (String(req.user?.id) === String(user._id)) {
+        return res.status(400).json({ error: 'Impossible de modifier son propre role' });
+      }
+      if (before === 'admin') {
+        const adminCount = await User.countDocuments({ role: 'admin' });
+        if (adminCount <= 1) {
+          return res.status(400).json({ error: 'Impossible de retirer le dernier compte admin' });
+        }
+      }
 
       await User.updateOne({ _id: user._id }, { $set: { role } });
 
@@ -787,6 +796,83 @@ router.patch(
         reason: 'Erreur serveur durant la mise a jour du profil.',
         details: err.message,
       });
+    }
+  }
+);
+
+// DELETE /api/users/:id
+// Body: { reason } (admin uniquement). Supprime le compte apres audit et revocation des sessions.
+router.delete(
+  '/:id',
+  requireRole('admin'),
+  requireAnyPermission(PERMISSIONS.USER_MANAGE),
+  strictBody(['reason']),
+  async (req, res) => {
+    try {
+      const reason = String(req.body?.reason || '').trim();
+      if (reason.length < 5) return res.status(400).json({ error: 'reason obligatoire (min 5 caracteres)' });
+
+      const user = await User.findById(req.params.id).select('_id username email role status').lean();
+      if (!user?._id) return res.status(404).json({ error: 'Utilisateur introuvable' });
+
+      if (String(req.user?.id) === String(user._id)) {
+        return res.status(400).json({ error: 'Impossible de supprimer son propre compte' });
+      }
+
+      if (normalizeRole(user.role) === 'admin') {
+        const adminCount = await User.countDocuments({ role: 'admin' });
+        if (adminCount <= 1) {
+          return res.status(400).json({ error: 'Impossible de supprimer le dernier compte admin' });
+        }
+      }
+
+      await UserSession.updateMany(
+        { user: user._id, is_active: true },
+        {
+          $set: {
+            is_active: false,
+            logout_time: new Date(),
+            revoked_reason: 'user_deleted',
+          },
+        }
+      );
+      if (typeof requireAuth.invalidateUserSessionsCache === 'function') {
+        requireAuth.invalidateUserSessionsCache(user._id);
+      }
+
+      await Notification.deleteMany({ user: user._id });
+      await User.deleteOne({ _id: user._id });
+
+      await History.create({
+        action_type: 'user_delete',
+        user: req.user.id,
+        source: 'ui',
+        description: `Suppression utilisateur (${user.role})`,
+        status_before: user.status,
+        actor_role: req.user.role,
+        tags: ['user', 'delete', user.role],
+        context: {
+          target_user_id: String(user._id),
+          target_email: user.email,
+          target_username: user.username,
+          target_role: user.role,
+          reason,
+        },
+      });
+
+      await logSecurityEvent({
+        event_type: 'user_deleted',
+        user: req.user.id,
+        role: req.user.role,
+        ip_address: req.ip,
+        user_agent: req.headers['user-agent'] || '',
+        success: true,
+        details: `Deleted user ${user._id} role=${user.role} email=${user.email}. reason=${reason}`,
+      });
+
+      return res.json({ message: 'Utilisateur supprime', user: { id: user._id } });
+    } catch (err) {
+      return res.status(500).json({ error: 'Failed to delete user', details: err.message });
     }
   }
 );

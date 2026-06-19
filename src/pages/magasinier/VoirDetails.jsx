@@ -3,7 +3,7 @@ import { useLocation, useNavigate } from 'react-router-dom';
 import {
   Package, ArrowLeft, Tag, Layers, Hash, AlertTriangle,
   Paperclip, ArrowDownToLine, ArrowUpFromLine, CheckCircle,
-  Calendar, MapPin, FileText, ExternalLink, TrendingUp, TrendingDown,
+  MapPin, FileText, ExternalLink, TrendingUp, TrendingDown,
 } from 'lucide-react';
 import SidebarMag from '../../components/magasinier/SidebarMag';
 import HeaderPage from '../../components/shared/HeaderPage';

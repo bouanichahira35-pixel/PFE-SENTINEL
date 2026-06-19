@@ -14,7 +14,7 @@ import { get, post, uploadFile } from '../../services/api';
 import { asNonNegativeInt, isSafeText, sanitizeText } from '../../utils/formGuards';
 import './AjouterProduit.css';
 
-const unites = ['Unite', 'Ramette', 'Boite', 'Carton', 'Kg', 'Litre', 'Metre'];
+const unites = ['Unite', 'Ramette', 'Boite', 'Carton', 'Kg', 'Litre', 'Metre', 'Bidon', 'Bouteille', 'Paire', 'Kit'];
 
 const FAMILY_LABELS = {
   economat: 'Économat',
@@ -33,16 +33,57 @@ const FAMILY_COLORS = {
 };
 
 const categorySuggestions = {
-  'cable':'Informatique','hdmi':'Informatique','usb':'Informatique',
-  'souris':'Informatique','clavier':'Informatique','ecran':'Informatique',
-  'pc':'Informatique','ordinateur':'Informatique','imprimante':'Informatique',
-  'papier':'Fournitures','stylo':'Fournitures','cartouche':'Fournitures',
-  'encre':'Fournitures','classeur':'Fournitures','enveloppe':'Fournitures',
-  'chaise':'Mobilier','bureau':'Mobilier','armoire':'Mobilier','etagere':'Mobilier',
-  'acide':'Produit chimique','solvant':'Produit chimique','reactif':'Produit chimique',
-  'azote':'Gaz','argon':'Gaz','helium':'Gaz',
-  'lampe':'Electronique','ventilateur':'Electronique','projecteur':'Electronique',
-  'tournevis':'Outillage','marteau':'Outillage','pince':'Outillage',
+  papier: 'Bureautique',
+  stylo: 'Bureautique',
+  toner: 'Bureautique',
+  classeur: 'Bureautique',
+  casque: 'EPI',
+  lunettes: 'EPI',
+  gant: 'EPI',
+  chaussures: 'EPI',
+  masque: 'EPI',
+  extincteur: 'EPI',
+  roulement: 'Maintenance mecanique',
+  courroie: 'Maintenance mecanique',
+  boulon: 'Maintenance mecanique',
+  graisse: 'Maintenance mecanique',
+  huile: 'Maintenance mecanique',
+  transmetteur: 'Instrumentation',
+  manometre: 'Instrumentation',
+  sonde: 'Instrumentation',
+  thermometre: 'Instrumentation',
+  debitmetre: 'Instrumentation',
+  disjoncteur: 'Electricite',
+  contacteur: 'Electricite',
+  relais: 'Electricite',
+  cable: 'Electricite',
+  acide: 'Laboratoire',
+  isopropanol: 'Laboratoire',
+  reactif: 'Laboratoire',
+  pipette: 'Laboratoire',
+  flacon: 'Laboratoire',
+  azote: 'Gaz techniques',
+  argon: 'Gaz techniques',
+  oxygene: 'Gaz techniques',
+  detendeur: 'Gaz techniques',
+  bride: 'Tuyauterie',
+  joint: 'Tuyauterie',
+  vanne: 'Tuyauterie',
+  clapet: 'Tuyauterie',
+  filtre: 'Exploitation site',
+  absorbant: 'Exploitation site',
+  cadenas: 'Consignation et signalisation',
+  consignation: 'Consignation et signalisation',
+  panneau: 'Consignation et signalisation',
+  ssd: 'Consommables informatiques',
+  switch: 'Consommables informatiques',
+  souris: 'Consommables informatiques',
+  usb: 'Consommables informatiques',
+  detergent: 'Nettoyage industriel',
+  desinfectant: 'Nettoyage industriel',
+  chiffon: 'Nettoyage industriel',
+  pompe: 'Pompes et etancheite',
+  garniture: 'Pompes et etancheite',
 };
 
 /* ── Barre de progression compacte ── */

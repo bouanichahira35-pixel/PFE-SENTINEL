@@ -21,7 +21,10 @@ import { useToast } from '../../../components/shared/Toast';
 import { get, post } from '../../../services/api';
 import { listFournisseurs } from '../../../services/fournisseurService';
 import { recommendFournisseurs } from '../../../services/fournisseurRecommendationService';
-import { mockApprovisionnementProducts, mockApprovisionnementSuppliers } from '../../../data/mockApprovisionnement';
+import {
+  fallbackApprovisionnementProducts,
+  fallbackApprovisionnementSuppliers,
+} from '../../../data/catalogueFallback';
 
 import '../../../components/fournisseurs/fournisseurs.css';
 import '../FournisseursResp.css';
@@ -132,11 +135,11 @@ const NouvelleCommandeFournisseurPage = ({ userName, onLogout }) => {
       ]);
       const nextProducts = Array.isArray(productsRes) ? productsRes : (Array.isArray(productsRes?.items) ? productsRes.items : []);
       const nextSuppliers = Array.isArray(suppliersRes?.items) ? suppliersRes.items : [];
-      setProducts(nextProducts.length ? nextProducts : mockApprovisionnementProducts);
-      setSuppliers(nextSuppliers.length ? nextSuppliers : mockApprovisionnementSuppliers);
+      setProducts(nextProducts.length ? nextProducts : fallbackApprovisionnementProducts);
+      setSuppliers(nextSuppliers.length ? nextSuppliers : fallbackApprovisionnementSuppliers);
     } catch {
-      setProducts(mockApprovisionnementProducts);
-      setSuppliers(mockApprovisionnementSuppliers);
+      setProducts(fallbackApprovisionnementProducts);
+      setSuppliers(fallbackApprovisionnementSuppliers);
     } finally {
       setLoading(false);
     }

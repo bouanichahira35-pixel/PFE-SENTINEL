@@ -9,6 +9,7 @@ const INVENTORY_STATUSES = [
   'A_RECOMPTER',
   'VALIDE',
   'REJETE',
+  'ANNULE',
 ];
 
 const inventorySchema = new mongoose.Schema(
@@ -37,8 +38,10 @@ const inventorySchema = new mongoose.Schema(
     notifications_activees: { type: Boolean, default: true },
     commentaire: { type: String, default: '', trim: true },
 
-    // When GLOBAL + bloquer_mouvements = true, stock movements should be blocked while status is active.
+    // Stock movement lock can be global or limited to the inventory product perimeter.
     movement_blocked: { type: Boolean, default: false, index: true },
+    movement_block_scope: { type: String, enum: ['none', 'global', 'products'], default: 'none', index: true },
+    movement_blocked_product_ids: { type: [{ type: mongoose.Schema.Types.ObjectId, ref: 'Product' }], default: [], index: true },
 
     // Workflow timestamps / audit
     submitted_at: { type: Date, default: null, index: true },
@@ -46,6 +49,8 @@ const inventorySchema = new mongoose.Schema(
     validated_by: { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null, index: true },
     rejected_at: { type: Date, default: null, index: true },
     rejected_by: { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null, index: true },
+    cancelled_at: { type: Date, default: null, index: true },
+    cancelled_by: { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null, index: true },
 
     // Recount flow
     recount_requested_at: { type: Date, default: null },
@@ -54,6 +59,7 @@ const inventorySchema = new mongoose.Schema(
 
     // Reject flow
     motif_rejet: { type: String, default: '', trim: true },
+    motif_annulation: { type: String, default: '', trim: true },
   },
   { timestamps: true }
 );

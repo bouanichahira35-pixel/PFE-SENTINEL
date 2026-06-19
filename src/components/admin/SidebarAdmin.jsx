@@ -14,7 +14,6 @@ import {
   LogOut,
 } from 'lucide-react';
 import logoETAP from '../../assets/logoETAP.png';
-import useProtectedFileUrl from '../../hooks/useProtectedFileUrl';
 import { useUiLanguage } from '../../utils/uiLanguage';
 import './SidebarAdmin.css';
 
@@ -26,8 +25,6 @@ const SidebarAdmin = ({ collapsed, onToggle, onLogout, userName }) => {
     localStorage.getItem('userName') ||
     userName ||
     'Utilisateur';
-  const profileImage = sessionStorage.getItem('imageProfile') || localStorage.getItem('imageProfile') || '';
-  const avatarUrl = useProtectedFileUrl(profileImage);
 
   const labels = {
     fr: {
@@ -117,7 +114,6 @@ const SidebarAdmin = ({ collapsed, onToggle, onLogout, userName }) => {
             <div className="sidebar-logo-ident">
               <span className="sidebar-user-name">{sessionUserName}</span>
             </div>
-            {avatarUrl && <img src={avatarUrl} alt="Profil" className="sidebar-user-avatar" />}
             <button onClick={onToggle} className="sidebar-toggle-btn" type="button">
               <ChevronLeft size={20} />
             </button>

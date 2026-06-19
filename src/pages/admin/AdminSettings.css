@@ -1,563 +1,342 @@
-/* ═══════════════════════════════════════════════════
-   AdminSessions.css
-   ✅ Tous les styles originaux conservés
-   ✅ Nouveaux styles ajoutés en bas sans modifier l'existant
-═══════════════════════════════════════════════════ */
-
-/* ── STYLES ORIGINAUX (non modifiés) ── */
-
-.admin-sessions-table {
-  width: 100%;
-  overflow: auto;
-  border: 1px solid #e2e8f0;
-  border-radius: 12px;
-  background: #fff;
+.admin-settings-page {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  padding-top: 24px;
 }
 
-.admin-sessions-table table {
-  width: 100%;
-  border-collapse: collapse;
-  min-width: 980px;
-}
-
-.admin-sessions-table th,
-.admin-sessions-table td {
-  padding: 10px 12px;
-  border-bottom: 1px solid #eef2f7;
-  text-align: left;
-  vertical-align: top;
-}
-
-.admin-sessions-table th {
-  font-size: 12px;
-  color: #334155;
-  font-weight: 900;
-  background: #f8fafc;
-  position: sticky;
-  top: 0;
-  z-index: 1;
-}
-
-.admin-sessions-table .cell-main {
-  font-weight: 950;
-  color: #0f172a;
-}
-
-.admin-sessions-table .cell-sub {
-  font-size: 12px;
-  color: #64748b;
-  margin-top: 2px;
-}
-
-.admin-sessions-table .muted {
-  color: #475569;
-  font-size: 13px;
-}
-
-.admin-sessions-table .empty {
-  text-align: center;
-  padding: 18px 12px;
-  color: #64748b;
-  font-weight: 800;
-}
-
-.admin-session-modal-backdrop {
-  position: fixed;
-  inset: 0;
-  z-index: 430;
-  display: grid;
-  place-items: center;
-  padding: 12px;
-  background: rgba(15, 23, 42, 0.45);
-}
-
-.admin-session-modal {
-  width: min(520px, 100%);
-  overflow: hidden;
-  border: 1px solid #e7ebf3;
-  border-radius: 14px;
-  background: #ffffff;
-  box-shadow: 0 18px 40px rgba(15, 23, 42, 0.18);
-}
-
-.admin-session-modal-head {
+.admin-settings-hero {
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
-  gap: 12px;
-  padding: 14px 16px;
-  border-bottom: 1px solid #e7ebf3;
+  gap: 18px;
+  padding: 20px;
+  border: 1px solid #dbe3ef;
+  border-radius: 8px;
+  background: #ffffff;
 }
 
-.admin-session-modal-head strong {
-  display: block;
+.admin-settings-eyebrow {
+  margin: 0 0 6px;
+  color: #2563eb;
+  font-size: 11px;
+  font-weight: 900;
+  letter-spacing: 0;
+  text-transform: uppercase;
+}
+
+.admin-settings-hero h1 {
+  margin: 0;
   color: #0f172a;
-  font-weight: 950;
+  font-size: 22px;
+  font-weight: 900;
+  letter-spacing: 0;
 }
 
-.admin-session-modal-head span {
-  display: block;
-  margin-top: 3px;
-  color: #64748b;
-  font-size: 12px;
-  font-weight: 800;
+.admin-settings-hero p {
+  max-width: 720px;
+  margin: 8px 0 0;
+  color: #475569;
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 1.5;
 }
 
-.admin-session-icon-btn {
+.admin-settings-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.admin-settings-btn {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 34px;
-  height: 34px;
-  border: 1px solid #e7ebf3;
-  border-radius: 10px;
+  gap: 8px;
+  min-height: 36px;
+  padding: 8px 12px;
+  border: 1px solid #dbe3ef;
+  border-radius: 8px;
   background: #ffffff;
-  color: #475569;
+  color: #0f172a;
+  font-size: 13px;
+  font-weight: 900;
   cursor: pointer;
-  transition: background 0.15s;
+  transition: background 0.15s, border-color 0.15s, box-shadow 0.15s;
 }
 
-.admin-session-icon-btn:hover {
+.admin-settings-btn:hover {
+  border-color: #bfdbfe;
   background: #f8fafc;
 }
 
-.admin-session-icon-btn:disabled {
+.admin-settings-btn.primary {
+  border-color: #2563eb;
+  background: #2563eb;
+  color: #ffffff;
+}
+
+.admin-settings-btn.primary:hover {
+  background: #1d4ed8;
+}
+
+.admin-settings-btn.inline {
+  width: fit-content;
+}
+
+.admin-settings-btn:disabled {
   cursor: not-allowed;
   opacity: 0.65;
 }
 
-.admin-session-modal-body {
+.admin-settings-summary {
   display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 12px;
-  padding: 16px;
 }
 
-.admin-session-modal-body p {
-  margin: 0;
-  color: #475569;
-  font-size: 13px;
-  font-weight: 800;
-}
-
-.admin-session-reason-label {
+.admin-settings-status {
   display: grid;
-  gap: 7px;
-  color: #0f172a;
+  gap: 4px;
+  min-height: 74px;
+  padding: 14px 16px;
+  border: 1px solid #dbe3ef;
+  border-radius: 8px;
+  background: #ffffff;
+}
+
+.admin-settings-status span {
+  color: #64748b;
   font-size: 12px;
+  font-weight: 900;
+}
+
+.admin-settings-status strong {
+  color: #0f172a;
+  font-size: 15px;
   font-weight: 950;
 }
 
-.admin-session-reason-label textarea {
+.admin-settings-status.ok {
+  border-left: 4px solid #059669;
+}
+
+.admin-settings-status.warn {
+  border-left: 4px solid #d97706;
+}
+
+.admin-settings-status.danger {
+  border-left: 4px solid #dc2626;
+}
+
+.admin-settings-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.admin-settings-card {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  min-width: 0;
+  padding: 18px;
+  border: 1px solid #dbe3ef;
+  border-radius: 8px;
+  background: #ffffff;
+}
+
+.admin-settings-card.compact {
+  align-self: start;
+}
+
+.admin-settings-card.wide {
+  grid-column: 1 / -1;
+}
+
+.admin-settings-card-head {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid #edf2f7;
+}
+
+.admin-settings-card-head svg {
+  flex: 0 0 auto;
+  margin-top: 2px;
+  color: #2563eb;
+}
+
+.admin-settings-card-head h2 {
+  margin: 0;
+  color: #0f172a;
+  font-size: 16px;
+  font-weight: 950;
+  letter-spacing: 0;
+}
+
+.admin-settings-card-head p {
+  margin: 4px 0 0;
+  color: #64748b;
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1.45;
+}
+
+.admin-settings-form-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.admin-settings-card.compact .admin-settings-form-grid {
+  grid-template-columns: 1fr;
+}
+
+.admin-settings-field {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+}
+
+.admin-settings-field span {
+  color: #334155;
+  font-size: 12px;
+  font-weight: 900;
+}
+
+.admin-settings-field input {
   width: 100%;
-  min-height: 108px;
-  resize: vertical;
-  border: 1px solid #e7ebf3;
-  border-radius: 12px;
-  padding: 10px 12px;
+  min-width: 0;
+  height: 38px;
+  padding: 8px 10px;
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
+  background: #ffffff;
   color: #0f172a;
   font: inherit;
   font-size: 13px;
-  font-weight: 800;
-  line-height: 1.45;
+  font-weight: 750;
   transition: border-color 0.15s, box-shadow 0.15s;
 }
 
-.admin-session-reason-label textarea:focus {
+.admin-settings-field input:focus {
   outline: none;
   border-color: #2563eb;
   box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.12);
 }
 
-.admin-session-reason-count {
-  color: #64748b;
-  font-size: 12px;
-  font-weight: 800;
-  text-align: right;
-}
-
-.admin-session-modal-actions {
-  display: flex;
-  justify-content: flex-end;
-  gap: 10px;
-  padding: 14px 16px;
-  border-top: 1px solid #e7ebf3;
-}
-
-/* ══════════════════════════════════════════════
-   NOUVEAUX STYLES — ajoutés sans toucher l'existant
-══════════════════════════════════════════════ */
-
-/* ── Spin animation pour le bouton Actualiser ── */
-@keyframes sess-spin {
-  to { transform: rotate(360deg); }
-}
-.sess-spin {
-  animation: sess-spin 0.7s linear infinite;
-}
-
-/* ── KPI CARDS ── */
-.sess-kpi-row {
-  display: grid;
-  grid-template-columns: repeat(4, 1fr);
-  gap: 12px;
-  margin-bottom: 16px;
-}
-
-.sess-kpi-card {
-  display: flex;
-  align-items: center;
-  gap: 14px;
-  background: #ffffff;
-  border: 1px solid #e2e8f0;
-  border-radius: 12px;
-  padding: 14px 16px;
-  transition: box-shadow 0.15s;
-}
-
-.sess-kpi-card:hover {
-  box-shadow: 0 2px 12px rgba(15, 23, 42, 0.07);
-}
-
-.sess-kpi-card--warn {
-  border-color: #fde68a;
-  background: #fffbeb;
-}
-
-.sess-kpi-icon {
-  width: 40px;
-  height: 40px;
-  border-radius: 10px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  flex-shrink: 0;
-}
-
-.sess-kpi-icon--blue   { background: #eff6ff; color: #2563eb; }
-.sess-kpi-icon--green  { background: #ecfdf5; color: #059669; }
-.sess-kpi-icon--amber  { background: #fffbeb; color: #d97706; }
-.sess-kpi-icon--slate  { background: #f8fafc; color: #64748b; }
-.sess-kpi-icon--purple { background: #f5f3ff; color: #7c3aed; }
-
-.sess-kpi-value {
-  font-size: 24px;
-  font-weight: 800;
-  color: #0f172a;
-  line-height: 1;
-}
-
-.sess-kpi-value--amber { color: #d97706; }
-
-.sess-kpi-label {
-  font-size: 12px;
-  color: #64748b;
-  margin-top: 3px;
-  font-weight: 600;
-}
-
-/* ── Filtre rôle dans la toolbar ── */
-.sess-role-filter {
-  display: flex;
-  gap: 4px;
-  align-items: center;
-  flex-wrap: wrap;
-}
-
-.sess-role-filter-btn {
-  padding: 5px 12px;
-  border-radius: 7px;
-  border: 1px solid #e2e8f0;
-  background: #f8fafc;
-  color: #475569;
-  font-size: 12px;
-  font-weight: 700;
-  cursor: pointer;
-  transition: all 0.15s;
-}
-
-.sess-role-filter-btn:hover {
+.admin-settings-field input:disabled {
   background: #f1f5f9;
-  border-color: #cbd5e1;
+  color: #94a3b8;
 }
 
-.sess-role-filter-btn.active {
-  background: #0f172a;
-  color: #ffffff;
-  border-color: #0f172a;
-}
-
-/* ── Tag filtre utilisateur ── */
-.sess-user-filter-tag {
+.admin-settings-toggle {
   display: flex;
   align-items: center;
-  gap: 5px;
-  padding: 5px 10px;
-  border-radius: 7px;
-  background: #eff6ff;
-  color: #2563eb;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: 54px;
+  padding: 12px;
+  border: 1px solid #edf2f7;
+  border-radius: 8px;
+  background: #f8fafc;
+}
+
+.admin-settings-toggle.separated {
+  margin-top: 2px;
+}
+
+.admin-settings-toggle span {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.admin-settings-toggle strong {
+  color: #0f172a;
+  font-size: 13px;
+  font-weight: 950;
+}
+
+.admin-settings-toggle small {
+  color: #64748b;
   font-size: 12px;
   font-weight: 700;
-  border: 1px solid #bfdbfe;
+  line-height: 1.35;
 }
 
-/* ── Compteur dans le titre de la card ── */
-.sess-table-count {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  margin-left: 8px;
-  padding: 1px 8px;
-  border-radius: 20px;
-  background: #e2e8f0;
-  color: #475569;
-  font-size: 11px;
-  font-weight: 800;
+.admin-settings-toggle input[type='checkbox'] {
+  width: 18px;
+  height: 18px;
+  flex: 0 0 auto;
+  accent-color: #2563eb;
 }
 
-/* ── Badge de rôle coloré ── */
-.sess-role-badge {
-  display: inline-block;
-  padding: 2px 9px;
-  border-radius: 20px;
-  font-size: 11.5px;
-  font-weight: 700;
-  border: 1px solid transparent;
+.admin-settings-toggle input:disabled {
+  cursor: not-allowed;
 }
 
-.sess-role-admin       { background: #f5f3ff; color: #6d28d9; border-color: #ddd6fe; }
-.sess-role-responsable { background: #eff6ff; color: #1d4ed8; border-color: #bfdbfe; }
-.sess-role-magasinier  { background: #fffbeb; color: #b45309; border-color: #fde68a; }
-.sess-role-demandeur   { background: #f8fafc; color: #475569; border-color: #e2e8f0; }
-
-/* ── Badge statut session ── */
-.sess-status-badge {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  padding: 2px 9px;
-  border-radius: 20px;
-  font-size: 11.5px;
-  font-weight: 700;
-  border: 1px solid transparent;
-}
-
-.sess-status-active   { background: #ecfdf5; color: #059669; border-color: #a7f3d0; }
-.sess-status-expiring { background: #fffbeb; color: #d97706; border-color: #fde68a; }
-.sess-status-expired  { background: #fef2f2; color: #dc2626; border-color: #fecaca; }
-
-/* ── Ligne qui expire bientôt ── */
-.sess-row-expiring {
-  background: #fffbeb !important;
-}
-
-.sess-row-expiring:hover {
-  background: #fef9c3 !important;
-}
-
-/* ── IP avec icône ── */
-.sess-ip-wrap {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-}
-
-.sess-ip-icon {
-  color: #94a3b8;
-  flex-shrink: 0;
-}
-
-/* ── Login time avec icône ── */
-.sess-time-wrap {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-}
-
-.sess-time-icon {
-  color: #94a3b8;
-  flex-shrink: 0;
-}
-
-/* ── Expiration avec avertissement ── */
-.sess-expires-warn {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  color: #d97706;
-  font-weight: 700;
-}
-
-/* ── User-Agent avec icône ── */
-.sess-ua-cell {
-  display: flex;
-  align-items: center;
-  gap: 5px;
-}
-
-.sess-ua-icon {
-  color: #94a3b8;
-  flex-shrink: 0;
-}
-
-/* ── Empty state amélioré ── */
-.sess-empty-state {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 8px;
-  padding: 24px 0;
-}
-
-.sess-empty-icon {
-  color: #cbd5e1;
-}
-
-.sess-empty-state p {
-  color: #64748b;
-  font-size: 13px;
-  font-weight: 700;
-  margin: 0;
-}
-
-/* ── Modal améliorée ── */
-.sess-modal-head-content {
-  display: flex;
-  align-items: flex-start;
-  gap: 12px;
-}
-
-.sess-modal-icon {
-  width: 38px;
-  height: 38px;
-  border-radius: 10px;
-  background: #fef2f2;
-  color: #dc2626;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  flex-shrink: 0;
-}
-
-/* ── Grille infos session dans la modal ── */
-.sess-modal-info-grid {
+.admin-settings-toggle-grid {
   display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 8px;
-  padding: 12px;
-  background: #f8fafc;
-  border: 1px solid #e2e8f0;
-  border-radius: 10px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
 }
 
-.sess-modal-info-item {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
+.admin-settings-toggle-grid.single {
+  grid-template-columns: 1fr;
 }
 
-.sess-modal-info-label {
-  font-size: 10.5px;
-  color: #94a3b8;
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-}
-
-.sess-modal-info-value {
-  font-size: 12.5px;
-  color: #0f172a;
-  font-weight: 800;
-}
-
-/* ── Avertissement dans la modal ── */
-.sess-modal-warning {
+.admin-settings-warning {
   display: flex;
   align-items: flex-start;
   gap: 8px;
   padding: 10px 12px;
-  background: #fef2f2;
-  border: 1px solid #fecaca;
-  border-radius: 10px;
-  color: #dc2626;
-  font-size: 12.5px;
-  font-weight: 700;
+  border: 1px solid #bfdbfe;
+  border-radius: 8px;
+  background: #eff6ff;
+  color: #1e40af;
+  font-size: 12px;
+  font-weight: 800;
+  line-height: 1.45;
 }
 
-.sess-modal-warning p {
-  color: #dc2626 !important;
-  font-size: 12.5px !important;
-  margin: 0;
+.admin-settings-warning svg {
+  flex: 0 0 auto;
+  margin-top: 1px;
 }
 
-/* ── Feedback validation textarea ── */
-.sess-textarea-error {
-  border-color: #f87171 !important;
-  box-shadow: 0 0 0 3px rgba(239, 68, 68, 0.1) !important;
-}
-
-.sess-required {
-  color: #ef4444;
-  margin-left: 2px;
-}
-
-.sess-hint {
-  color: #94a3b8;
-  font-weight: 600;
-  font-size: 11px;
-  margin-left: 4px;
-}
-
-/* ── Footer reason ── */
-.sess-reason-footer {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.sess-reason-error {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  color: #dc2626;
-  font-size: 11.5px;
-  font-weight: 700;
-}
-
-/* ── Responsive ── */
-@media (max-width: 1024px) {
-  .sess-kpi-row {
-    grid-template-columns: repeat(2, 1fr);
+@media (max-width: 1100px) {
+  .admin-settings-grid,
+  .admin-settings-summary {
+    grid-template-columns: 1fr;
   }
 }
 
-@media (max-width: 768px) {
-  .admin-sessions-table table {
-    min-width: 760px;
+@media (max-width: 760px) {
+  .admin-settings-page {
+    padding: 16px;
   }
 
-  .admin-sessions-table th,
-  .admin-sessions-table td {
-    padding: 9px 10px;
-    font-size: 12px;
+  .admin-settings-hero {
+    flex-direction: column;
+    padding: 16px;
   }
 
-  .admin-session-modal-actions {
-    flex-direction: column-reverse;
-  }
-
-  .admin-session-modal-actions .admin-btn {
+  .admin-settings-actions,
+  .admin-settings-btn {
     width: 100%;
   }
 
-  .sess-kpi-row {
-    grid-template-columns: 1fr 1fr;
-  }
-
-  .sess-modal-info-grid {
+  .admin-settings-form-grid,
+  .admin-settings-toggle-grid {
     grid-template-columns: 1fr;
   }
 
-  .sess-role-filter {
-    display: none;
+  .admin-settings-card {
+    padding: 14px;
   }
 }

@@ -1,3 +1,5 @@
+// BLOC 1 - Routeur des produits.
+// Ce fichier gere le catalogue produits: liste, recherche, creation, modification et archivage.
 const router = require('express').Router();
 const Product = require('../models/Product');
 const Category = require('../models/Category');
@@ -28,6 +30,8 @@ const {
   isSafeText,
 } = require('../utils/validation');
 
+// BLOC 2 - Fonctions metier des produits.
+// Elles calculent le statut stock, normalisent la famille et preparent les categories.
 function computeStatus(quantity, seuil) {
   const q = Number(quantity || 0);
   const s = Number(seuil || 0);
@@ -177,12 +181,15 @@ function sanitizeFdsAttachment(value, errors) {
   return { file_name: fileName, file_url: fileUrl };
 }
 
+// BLOC 3 - Liste des produits.
+// GET /api/products renvoie les produits visibles selon le role, la famille, la categorie et le cycle de vie.
 router.get('/', requireAuth, async (req, res) => { 
   try { 
     const filter = {}; 
     const isDemandeur = req.user?.role === 'demandeur';
     const demandeurProfile = String(req.user?.demandeur_profile || 'bureautique');
-    const includeArchived = String(req.query?.include_archived || '') === '1' && !isDemandeur;
+    const archivedOnly = String(req.query?.archived_only || '') === '1' && !isDemandeur;
+    const includeArchived = (String(req.query?.include_archived || '') === '1' || archivedOnly) && !isDemandeur;
  
     if (req.query.family) { 
       const family = normalizeFamily(req.query.family); 
@@ -193,7 +200,9 @@ router.get('/', requireAuth, async (req, res) => {
       filter.validation_status = req.query.validation_status; 
     }
 
-    if (!includeArchived) {
+    if (archivedOnly) {
+      filter.lifecycle_status = 'archived';
+    } else if (!includeArchived) {
       filter.lifecycle_status = 'active';
     }
   
@@ -239,6 +248,8 @@ router.get('/', requireAuth, async (req, res) => {
 
 // GET /api/products/lookup?code=PRD-2026-0001
 // Lightweight product lookup for scanning/saisie terrain (magasinier forms).
+// BLOC 4 - Recherche rapide produit.
+// GET /api/products/lookup sert surtout au scan QR ou a la saisie terrain.
 router.get('/lookup', requireAuth, async (req, res) => {
   try {
     const isDemandeur = req.user?.role === 'demandeur';
@@ -249,7 +260,8 @@ router.get('/lookup', requireAuth, async (req, res) => {
       return res.status(400).json({ error: 'code invalide' });
     }
 
-    const includeArchived = String(req.query?.include_archived || '') === '1' && !isDemandeur;
+    const archivedOnly = String(req.query?.archived_only || '') === '1' && !isDemandeur;
+    const includeArchived = (String(req.query?.include_archived || '') === '1' || archivedOnly) && !isDemandeur;
 
     const normalized = isValidProductCode(raw) ? normalizeProductCode(raw) : null;
     const or = [];
@@ -259,7 +271,8 @@ router.get('/lookup', requireAuth, async (req, res) => {
     or.push({ external_product_id: raw });
 
     const filter = { $or: or };
-    if (!includeArchived) filter.lifecycle_status = 'active';
+    if (archivedOnly) filter.lifecycle_status = 'archived';
+    else if (!includeArchived) filter.lifecycle_status = 'active';
     if (isDemandeur) filter.lifecycle_status = 'active';
 
     const product = await Product.findOne(filter)
@@ -284,12 +297,15 @@ function escapeRegex(value) {
 
 // GET /api/products/catalog?q=...&category=...&status=ok|sous_seuil|rupture&page=1&limit=20
 // Paginated, lightweight catalogue endpoint (UI friendly).
+// BLOC 5 - Catalogue simplifie.
+// GET /api/products/catalog donne une version plus legere pour les listes et selections.
 router.get('/catalog', requireAuth, async (req, res) => {
   try {
     const filterBase = {};
     const isDemandeur = req.user?.role === 'demandeur';
     const demandeurProfile = String(req.user?.demandeur_profile || 'bureautique');
-    const includeArchived = String(req.query?.include_archived || '') === '1' && !isDemandeur;
+    const archivedOnly = String(req.query?.archived_only || '') === '1' && !isDemandeur;
+    const includeArchived = (String(req.query?.include_archived || '') === '1' || archivedOnly) && !isDemandeur;
 
     if (req.query.family) {
       const family = normalizeFamily(req.query.family);
@@ -300,7 +316,9 @@ router.get('/catalog', requireAuth, async (req, res) => {
       filterBase.validation_status = req.query.validation_status;
     }
 
-    if (!includeArchived) {
+    if (archivedOnly) {
+      filterBase.lifecycle_status = 'archived';
+    } else if (!includeArchived) {
       filterBase.lifecycle_status = 'active';
     }
 
@@ -427,6 +445,8 @@ router.get('/catalog', requireAuth, async (req, res) => {
 // GET /api/products/inactive?days=60
 // Produits "inactifs" = rupture de stock OU absence de demandes sur une fenêtre récente.
 // Utilisé côté Responsable pour piloter les produits à archiver / corriger.
+// BLOC 6 - Produits inactifs ou archives.
+// Cette route aide le responsable a voir les produits qui ne sont plus actifs.
 router.get('/inactive', requireAuth, async (req, res) => {
   try {
     const days = Math.max(1, Math.min(365, Math.floor(asNonNegativeNumber(req.query?.days) || 60)));
@@ -481,6 +501,8 @@ router.get('/inactive', requireAuth, async (req, res) => {
   }
 });
 
+// BLOC 7 - Verification QR.
+// Cette route verifie si un QR code est deja utilise avant de creer un produit.
 router.get('/qr-check', requireAuth, async (req, res) => {
   try {
     const value = asOptionalString(req.query?.value);
@@ -505,6 +527,8 @@ router.get('/qr-check', requireAuth, async (req, res) => {
   }
 });
 
+// BLOC 8 - Verification du nom.
+// Cette route evite de creer deux produits avec le meme nom.
 router.get('/name-check', requireAuth, async (req, res) => {
   try {
     const value = asOptionalString(req.query?.value);
@@ -534,6 +558,8 @@ router.get('/name-check', requireAuth, async (req, res) => {
   }
 });
 
+// BLOC 9 - Creation produit.
+// POST /api/products valide les donnees, cree le produit et notifie les responsables si besoin.
 router.post(
   '/',
   requireAuth,
@@ -709,6 +735,8 @@ router.post(
   }
 });
 
+// BLOC 10 - Modification produit.
+// PUT /api/products/:id met a jour un produit existant avec controles de securite et metier.
 router.put( 
   '/:id', 
   requireAuth, 
@@ -943,6 +971,8 @@ router.put(
 // POST /api/products/bulk/category
 // Body: { product_ids: string[], category_id?: string, action: "set"|"clear" }
 // Used by Responsable to classify products in bulk.
+// BLOC 11 - Validation ou decision produit.
+// Cette route garde une compatibilite avec les anciens flux de validation produit.
 router.post(
   '/bulk/category',
   requireAuth,
@@ -1026,6 +1056,8 @@ router.post(
 // DELETE /api/products/:id
 // Suppression definitive (responsable uniquement).
 // Autorise seulement si le produit n'a pas de mouvements / demandes / commandes.
+// BLOC 12 - Suppression logique ou archivage.
+// DELETE /api/products/:id evite souvent la suppression physique pour garder l'historique.
 router.delete(
   '/:id',
   requireAuth,
@@ -1084,6 +1116,8 @@ router.delete(
 
 // POST /api/products/:id/archive
 // Archivage industriel (recommande): bloque l'usage du produit sans supprimer l'historique.
+// BLOC 13 - Archivage produit.
+// Cette route retire un produit du catalogue actif sans supprimer son historique.
 router.post(
   '/:id/archive',
   requireAuth,

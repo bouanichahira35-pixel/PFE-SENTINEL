@@ -99,14 +99,6 @@
   max-width: 140px;
 }
 
-.sidebar-mag .sidebar-user-avatar {
-  width: 28px;
-  height: 28px;
-  border-radius: 50%;
-  object-fit: cover;
-  border: 1px solid var(--color-border);
-}
-
 .sidebar-mag .sidebar-toggle-btn {
   background: none;
   border: none;

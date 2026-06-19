@@ -1,9 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   AlertTriangle,
-  ArrowRight,
   BarChart3,
-  Bot,
   CalendarDays,
   CheckCircle2,
   ChevronRight,
@@ -15,6 +13,7 @@ import {
   ShoppingCart,
   TrendingDown,
   TrendingUp,
+  Zap,
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import SidebarResp from '../../components/responsable/SidebarResp';
@@ -31,7 +30,13 @@ const PERIODS = [
   { key: 'today',  label: 'Auj.',  days: 1  },
   { key: '7d',     label: '7 j',   days: 7  },
   { key: '30d',    label: '30 j',  days: 30 },
-  { key: 'custom', label: 'Perso.', days: 90 },
+  { key: 'custom', label: 'Perso.', days: null },
+];
+
+const AVAILABILITY_TARGET = 85;
+const TOP_CONSUMED_FALLBACKS = [
+  { days: 30, label: '30 jours' },
+  { days: 90, label: '3 mois' },
 ];
 
 /* ─── Familles produit ──────────────────────────── */
@@ -43,18 +48,16 @@ const FAMILY_LABELS = {
   consommable_informatique: 'Informatique',
 };
 
-/* ─── Raccourcis navigation ─────────────────────── */
-const SHORTCUTS = [
-  { key: 'requests',  label: 'Demandes',          description: 'Valider ou rejeter',    route: '/responsable/pilotage',                   icon: ClipboardList, tone: 'danger' },
-  { key: 'critical',  label: 'Produits critiques', description: 'Stock sous seuil',      route: '/responsable/produits?filter=critiques',   icon: AlertTriangle,  tone: 'warn'   },
-  { key: 'order',     label: 'Nouvelle commande',  description: 'Approvisionnement',     route: '/responsable/commandes/nouvelle',          icon: ShoppingCart,   tone: 'green'  },
-  { key: 'inventory', label: 'Inventaires',        description: 'Missions à valider',    route: '/responsable/inventaires/a-valider',       icon: FileText,       tone: 'blue'   },
-  { key: 'chemical',  label: 'Registre chimique',  description: 'FDS et conformité',     route: '/responsable/registre-chimique',           icon: FlaskConical,   tone: 'violet' },
-  { key: 'assistant', label: 'Assistant IA',       description: 'Aide à la décision',    route: '/responsable/chatbot',                     icon: Bot,            tone: 'cyan'   },
-];
+const RECOMMENDATION_TYPES = {
+  restock: { icon: '📦', label: 'Réappro', color: 'danger' },
+  optimize: { icon: '⚙️', label: 'Optimisation', color: 'blue' },
+  archive: { icon: '🗂️', label: 'Archivage', color: 'warn' },
+  investigate: { icon: '🔍', label: 'Enquête', color: 'info' },
+};
 
 /* ─── Graphique ─────────────────────────────────── */
 const CW = 420, CH = 110, CP = 18;
+const DAY_MS = 86_400_000;
 
 /* ─── Utilitaires ───────────────────────────────── */
 const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, v));
@@ -67,13 +70,49 @@ function mean(arr = []) {
 function buildRange(days) {
   const d = Math.max(1, Number(days || 30));
   const to = new Date();
-  return { from: new Date(to - d * 86_400_000), to, days: d };
+  const from = new Date(to);
+  from.setDate(from.getDate() - (d - 1));
+  return { from: startOfDay(from), to: endOfDay(to), days: d };
 }
 
 function buildPrevRange(r) {
   const span = Math.max(86_400_000, r.to - r.from);
-  return { from: new Date(r.from - span), to: new Date(r.from) };
+  return { from: new Date(r.from.getTime() - span), to: new Date(r.from.getTime() - 1) };
 }
+
+function startOfDay(v) {
+  const d = new Date(v);
+  d.setHours(0, 0, 0, 0);
+  return d;
+}
+
+function endOfDay(v) {
+  const d = new Date(v);
+  d.setHours(23, 59, 59, 999);
+  return d;
+}
+
+function parseDateInput(v) {
+  const m = String(v || '').match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (!m) return null;
+  const d = new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]));
+  return Number.isNaN(d.getTime()) ? null : d;
+}
+
+function buildCustomRange(fromRaw, toRaw) {
+  const fallback = buildRange(30);
+  const fromDate = parseDateInput(fromRaw) || fallback.from;
+  const toDate = parseDateInput(toRaw) || fallback.to;
+  const from = startOfDay(fromDate <= toDate ? fromDate : toDate);
+  const to = endOfDay(fromDate <= toDate ? toDate : fromDate);
+  const days = Math.max(1, Math.round((to - from) / DAY_MS) + 1);
+  return { from, to, days };
+}
+
+const isoInput = (v) => {
+  const d = new Date(v);
+  return Number.isNaN(d.getTime()) ? '' : d.toISOString().slice(0, 10);
+};
 
 const isoDay = (v) => {
   if (!v) return '';
@@ -87,6 +126,11 @@ const fmtDay = (v) => {
   return Number.isNaN(d.getTime())
     ? String(v).slice(5)
     : d.toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit' });
+};
+
+const fmtShortRange = (r) => {
+  if (!r?.from || !r?.to) return '-';
+  return `${fmtDay(r.from)} - ${fmtDay(r.to)}`;
 };
 
 const fmtDateTime = (v) => {
@@ -106,6 +150,30 @@ const pctSafe = (n, d) => {
 };
 
 const productId = (v) => String(v?._id || v?.id || v?.product_id || v?.product || '');
+
+function completeTrendRows(rows, range) {
+  const byDay = new Map();
+  (Array.isArray(rows) ? rows : []).forEach((row) => {
+    const day = isoDay(row?.day);
+    if (!day) return;
+    byDay.set(day, {
+      day,
+      entry: Number(row.entry || 0),
+      exit: Number(row.exit || 0),
+      request: Number(row.request || 0),
+    });
+  });
+
+  const out = [];
+  const cursor = startOfDay(range.from);
+  const last = startOfDay(range.to);
+  while (cursor <= last) {
+    const day = isoInput(cursor);
+    out.push(byDay.get(day) || { day, entry: 0, exit: 0, request: 0 });
+    cursor.setDate(cursor.getDate() + 1);
+  }
+  return out;
+}
 
 const bizCat = (p) =>
   FAMILY_LABELS[p?.family] || p?.category_proposal || p?.category?.name || 'Métier';
@@ -192,6 +260,8 @@ export default function DashboardResp({ userName, onLogout }) {
   /* UI */
   const [collapsed, setCollapsed] = useState(() => typeof window !== 'undefined' && window.innerWidth <= 768);
   const [periodKey, setPeriodKey] = useState('7d');
+  const [customFrom, setCustomFrom] = useState(() => isoInput(buildRange(30).from));
+  const [customTo, setCustomTo] = useState(() => isoInput(new Date()));
 
   /* Données */
   const [products,    setProducts]    = useState([]);
@@ -200,38 +270,62 @@ export default function DashboardResp({ userName, onLogout }) {
   const [topConsumed, setTopConsumed] = useState([]);
   const [prevTop,     setPrevTop]     = useState([]);
   const [forecast,    setForecast]    = useState([]);
-  const [pending,     setPending]     = useState(0);
+  const [pendingTotal,setPendingTotal]= useState(0);
+  const [inventoryToValidate, setInventoryToValidate] = useState(0);
   const [chem,        setChem]        = useState({ total: 0, missingFds: 0 });
+  const [aiAlerts,    setAiAlerts]    = useState([]);
   const [loading,     setLoading]     = useState(false);
   const [updatedAt,   setUpdatedAt]   = useState(null);
+  const [topConsumedRange, setTopConsumedRange] = useState(null);
+  const [topConsumedLabel, setTopConsumedLabel] = useState('Sur la période');
+  
+  const [recommendations, setRecommendations] = useState([]);
 
   const period = PERIODS.find((p) => p.key === periodKey) ?? PERIODS[1];
+  const selectedRange = useMemo(
+    () => (periodKey === 'custom' ? buildCustomRange(customFrom, customTo) : buildRange(period.days)),
+    [customFrom, customTo, period.days, periodKey],
+  );
+  const periodLabel = periodKey === 'custom' ? fmtShortRange(selectedRange) : period.label;
+
+  const loadOptionalSignals = useCallback(async () => {
+    const now = new Date();
+    const [fcRes, chemRes] = await Promise.all([
+      post('/ai/predict/stockout', { horizon_days: 7 }).catch(() => ({ predictions: [] })),
+      get(`/reports/chemical-register?year=${now.getFullYear()}&month=${now.getMonth() + 1}`).catch(() => ({ rows: [] })),
+    ]);
+
+    setForecast(Array.isArray(fcRes?.predictions) ? fcRes.predictions : []);
+
+    const chemRows = Array.isArray(chemRes?.rows) ? chemRes.rows : [];
+    const sigs = chemRows.map((row) => computeChemicalRegisterSignals(row));
+    setChem({ total: chemRows.length, missingFds: sigs.filter((s) => s.missingFds).length });
+  }, []);
 
   /* Chargement */
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const r  = buildRange(period.days);
+      const r  = selectedRange;
       const pr = buildPrevRange(r);
-      const now = new Date();
+      const fetchInsights = (range) =>
+        get(`/history/insights?${encRange(range)}`).catch(() => ({ daily_trend: [], top_consumed_products: [] }));
 
-      const [prodRes, ins, prevIns, fcRes, reqRes, chemRes] = await Promise.all([
+      const [prodRes, ins, prevIns, reqRes, aiAlertRes, invRes] = await Promise.all([
         get('/products'),
-        get(`/history/insights?${encRange(r)}`).catch(() => ({ daily_trend: [], top_consumed_products: [] })),
-        get(`/history/insights?${encRange(pr)}`).catch(() => ({ daily_trend: [], top_consumed_products: [] })),
-        post('/ai/predict/stockout', { horizon_days: 7 }).catch(() => ({ predictions: [] })),
+        fetchInsights(r),
+        fetchInsights(pr),
         get('/requests?status=pending').catch(() => []),
-        get(`/reports/chemical-register?year=${now.getFullYear()}&month=${now.getMonth() + 1}`).catch(() => ({ rows: [] })),
+        get('/ai/alerts').catch(() => []),
+        get('/inventory/responsable/to-validate').catch(() => ({ items: [] })),
       ]);
 
       const prods = Array.isArray(prodRes) ? prodRes : [];
       setProducts(prods);
-      setForecast(Array.isArray(fcRes?.predictions) ? fcRes.predictions : []);
-      setPending(Array.isArray(reqRes) ? reqRes.length : 0);
-
-      const chemRows = Array.isArray(chemRes?.rows) ? chemRes.rows : [];
-      const sigs = chemRows.map((row) => computeChemicalRegisterSignals(row));
-      setChem({ total: chemRows.length, missingFds: sigs.filter((s) => s.missingFds).length });
+      const pendingRows = Array.isArray(reqRes) ? reqRes : [];
+      setPendingTotal(pendingRows.length);
+      setAiAlerts(Array.isArray(aiAlertRes) ? aiAlertRes : []);
+      setInventoryToValidate(Array.isArray(invRes?.items) ? invRes.items.length : 0);
 
       const normTrend = (rows) => {
         const map = new Map();
@@ -251,15 +345,41 @@ export default function DashboardResp({ userName, onLogout }) {
 
       setTrend(normTrend(ins?.daily_trend));
       setPrevTrend(normTrend(prevIns?.daily_trend));
-      setTopConsumed(Array.isArray(ins?.top_consumed_products) ? ins.top_consumed_products : []);
-      setPrevTop(Array.isArray(prevIns?.top_consumed_products) ? prevIns.top_consumed_products : []);
+
+      let prevTopInsights = prevIns;
+      let topRange = r;
+      let topLabel = periodKey === 'custom' ? 'Période sélectionnée' : period.label;
+      let topList = Array.isArray(ins?.top_consumed_products) ? ins.top_consumed_products : [];
+
+      if (topList.length === 0 && Number(r.days || 0) <= 7) {
+        for (const fallback of TOP_CONSUMED_FALLBACKS) {
+          const fallbackRange = buildRange(fallback.days);
+          const fallbackInsights = await fetchInsights(fallbackRange);
+          const fallbackRows = Array.isArray(fallbackInsights?.top_consumed_products)
+            ? fallbackInsights.top_consumed_products
+            : [];
+          if (fallbackRows.length > 0 || fallback.days === TOP_CONSUMED_FALLBACKS.at(-1).days) {
+            prevTopInsights = await fetchInsights(buildPrevRange(fallbackRange));
+            topRange = fallbackRange;
+            topLabel = `${fallback.label} auto`;
+            topList = fallbackRows;
+            break;
+          }
+        }
+      }
+
+      setTopConsumed(topList);
+      setPrevTop(Array.isArray(prevTopInsights?.top_consumed_products) ? prevTopInsights.top_consumed_products : []);
+      setTopConsumedRange(topRange);
+      setTopConsumedLabel(topLabel);
       setUpdatedAt(new Date().toISOString());
+      void loadOptionalSignals();
     } catch (err) {
       toast.error(err.message || 'Erreur de chargement');
     } finally {
       setLoading(false);
     }
-  }, [period.days, toast]);
+  }, [loadOptionalSignals, period.label, periodKey, selectedRange, toast]);
 
   useEffect(() => { load(); }, [load]);
   useEffect(() => {
@@ -282,7 +402,8 @@ export default function DashboardResp({ userName, onLogout }) {
   }, [products]);
 
   const avail     = clamp(pctSafe(stats.ok, stats.total), 0, 100);
-  const availTone = avail >= 85 ? 'green' : avail >= 70 ? 'orange' : 'red';
+  const availTone = avail >= AVAILABILITY_TARGET ? 'green' : 'red';
+  const availabilityGap = Math.round(avail - AVAILABILITY_TARGET);
 
   const fallbackRisk = useMemo(() => products.map((row) => {
     const stock = Number(row.quantity_current || 0);
@@ -300,31 +421,26 @@ export default function DashboardResp({ userName, onLogout }) {
 
   const topRisk    = riskSource[0] ?? null;
   const avgRisk    = Math.round(mean(riskSource.slice(0, 5).map((r) => Number(r.risk_probability || 0))));
-  const famCount   = useMemo(() => new Set(products.map((p) => bizCat(p)).filter(Boolean)).size, [products]);
-
-  const shortcutStatus = useMemo(() => ({
-    requests:  pending > 0         ? `${pending} en attente`            : 'Aucune attente',
-    critical:  stats.critical > 0  ? `${stats.critical} à surveiller`   : 'Stock stable',
-    order:     topRisk             ? `${topRisk.code_product || 'Produit'} prioritaire` : 'Commande assistée',
-    inventory: 'Contrôle physique',
-    chemical:  chem.missingFds > 0 ? `${chem.missingFds} FDS manquantes` : 'Conforme',
-    assistant: avgRisk > 0         ? `Risque moyen ${avgRisk}%`          : 'Aide décision',
-  }), [avgRisk, chem.missingFds, pending, stats.critical, topRisk]);
+  const periodTrendRows = useMemo(() => completeTrendRows(trend, selectedRange), [selectedRange, trend]);
+  const prevReqTotal = prevTrend.reduce((s, r) => s + Number(r.request || 0), 0);
+  const currReqTotal = periodTrendRows.reduce((s, r) => s + Number(r.request || 0), 0);
+  const reqDeltaJ7   = currReqTotal - prevReqTotal;
 
   /* Graphique demandes */
-  const reqSeries = useMemo(() => trend.slice(-7).map((r) => ({ label: fmtDay(r.day), value: Number(r.request || 0) })), [trend]);
+  const reqSeries = useMemo(() => periodTrendRows.map((r) => ({ label: fmtDay(r.day), value: Number(r.request || 0) })), [periodTrendRows]);
+  const reqAxisLabels = useMemo(() => {
+    if (reqSeries.length <= 7) return reqSeries.map((s, i) => ({ ...s, key: `${s.label}-${i}` }));
+    const step = Math.max(1, Math.ceil((reqSeries.length - 1) / 5));
+    return reqSeries
+      .map((s, i) => ({ ...s, key: `${s.label}-${i}`, index: i }))
+      .filter((s) => s.index === 0 || s.index === reqSeries.length - 1 || s.index % step === 0);
+  }, [reqSeries]);
   const reqVals   = reqSeries.map((s) => s.value);
   const reqMax    = Math.max(1, ...reqVals);
   const reqPts    = toPoints(reqVals, 0, reqMax);
   const reqDeltaPct = useMemo(() => {
-    const cur = mean(reqVals.slice(-3));
-    const prv = mean(reqVals.slice(-6, -3));
-    return prv ? ((cur - prv) / prv) * 100 : 0;
-  }, [reqVals]);
-
-  const prevReqTotal = prevTrend.reduce((s, r) => s + Number(r.request || 0), 0);
-  const currReqTotal = trend.reduce((s, r) => s + Number(r.request || 0), 0);
-  const reqDeltaJ7   = currReqTotal - prevReqTotal;
+    return prevReqTotal ? ((currReqTotal - prevReqTotal) / prevReqTotal) * 100 : (currReqTotal ? 100 : 0);
+  }, [currReqTotal, prevReqTotal]);
 
   const estCrit = useCallback((daysAgo) => products.filter((p) => {
     const fc = riskSource.find((r) => String(r.product_id) === productId(p));
@@ -332,11 +448,51 @@ export default function DashboardResp({ userName, onLogout }) {
     return (Number(p.quantity_current || 0) + daily * daysAgo) <= Number(p.seuil_minimum || 0);
   }).length, [products, riskSource]);
 
-  const priorityCards = useMemo(() => [
-    { key: 'requests', icon: ClipboardList, tone: 'urgent', value: pending,       label: pending > 1 ? 'demandes à valider' : 'demande à valider',          onClick: () => navigate('/responsable/pilotage'),                   deltaJ1: pending - Number(trend.at(-1)?.request || 0), deltaJ7: reqDeltaJ7 },
-    { key: 'critical',  icon: AlertTriangle, tone: 'warn',   value: stats.critical, label: stats.critical > 1 ? 'produits critiques' : 'produit critique',     onClick: () => navigate('/responsable/produits?filter=critiques'), deltaJ1: stats.critical - estCrit(1), deltaJ7: stats.critical - estCrit(7) },
-    { key: 'chemical',  icon: FlaskConical,  tone: 'info',   value: chem.missingFds,label: chem.missingFds > 1 ? 'FDS manquantes' : 'FDS manquante',           onClick: () => navigate('/responsable/registre-chimique'),         deltaJ1: 0, deltaJ7: 0 },
-  ], [chem.missingFds, estCrit, navigate, pending, reqDeltaJ7, stats.critical, trend]);
+  const workflowCards = useMemo(() => [
+    {
+      key: 'requests',
+      icon: ClipboardList,
+      tone: 'urgent',
+      value: pendingTotal,
+      label: 'Demandes en attente de validation',
+      onClick: () => navigate('/responsable/pilotage'),
+      deltaJ1: pendingTotal - Number(periodTrendRows.at(-1)?.request || 0),
+      deltaJ7: reqDeltaJ7,
+    },
+    {
+      key: 'inventory',
+      icon: FileText,
+      tone: 'info',
+      value: inventoryToValidate,
+      label: "Missions d'inventaire à valider",
+      onClick: () => navigate('/responsable/inventaires/a-valider'),
+      deltaJ1: 0,
+      deltaJ7: 0,
+    },
+  ], [inventoryToValidate, navigate, pendingTotal, periodTrendRows, reqDeltaJ7]);
+
+  const stockHealthCards = useMemo(() => [
+    {
+      key: 'critical',
+      icon: AlertTriangle,
+      tone: 'warn',
+      value: stats.critical,
+      label: stats.critical > 1 ? 'Produits critiques' : 'Produit critique',
+      onClick: () => navigate('/responsable/produits?filter=critiques'),
+      deltaJ1: stats.critical - estCrit(1),
+      deltaJ7: stats.critical - estCrit(7),
+    },
+    {
+      key: 'chemical',
+      icon: FlaskConical,
+      tone: 'info',
+      value: chem.missingFds,
+      label: chem.missingFds > 1 ? 'FDS manquantes' : 'FDS manquante',
+      onClick: () => navigate('/responsable/registre-chimique'),
+      deltaJ1: 0,
+      deltaJ7: 0,
+    },
+  ], [chem.missingFds, estCrit, navigate, stats.critical]);
 
   /* Courbe stock / seuil */
   const stockCurve = useMemo(() => {
@@ -344,7 +500,7 @@ export default function DashboardResp({ userName, onLogout }) {
     const cur  = Number(topRisk.current_stock || 0);
     const thr  = Number(topRisk.seuil_minimum || 0);
     const burn = Math.max(0.2, Number(topRisk.expected_need || 0) / Math.max(1, Number(topRisk.horizon_days || 7)), thr * 0.08);
-    const rows = trend.slice(-7);
+    const rows = periodTrendRows.slice(-7);
     const past = [];
     let runStock = cur;
     for (let i = rows.length - 1; i >= 0; i--) {
@@ -367,7 +523,7 @@ export default function DashboardResp({ userName, onLogout }) {
       crossing  = { x: pts[pi].x + (pts[ci].x - pts[pi].x) * rr, y: thrY, label: offsets[ci] === 0 ? 'J+0' : `J+${Math.max(0, offsets[ci] - (rr < 1 ? 1 : 0) + rr).toFixed(rr % 1 ? 1 : 0)}` };
     }
     return { vals, pts, thr, thrY, crossing };
-  }, [topRisk, trend]);
+  }, [periodTrendRows, topRisk]);
 
   /* Top consommés */
   const topRows = useMemo(() => {
@@ -385,13 +541,84 @@ export default function DashboardResp({ userName, onLogout }) {
 
   const criticalNow = Boolean(stockCurve && stockCurve.vals[7] <= stockCurve.thr);
   const alertName   = topRisk?.product_name || topRisk?.code_product || 'Produit critique';
+  const criticalActionCount = criticalNow ? 1 : 0;
+  const aiAlertSummary = useMemo(() => {
+    const rows = Array.isArray(aiAlerts) ? aiAlerts : [];
+    const active = rows.filter((a) => String(a?.status || 'new').toLowerCase() !== 'reviewed');
+    const highRows = active.filter((a) => String(a?.risk_level || '').toLowerCase() === 'high');
+    const ruptureRows = active.filter((a) => String(a?.alert_type || '').toLowerCase() === 'rupture');
+    const criticalRuptures = active.filter((a) =>
+      String(a?.risk_level || '').toLowerCase() === 'high'
+      && String(a?.alert_type || '').toLowerCase() === 'rupture'
+    );
+    const focusRows = criticalRuptures.length ? criticalRuptures : active.slice(0, 10);
+    const latest = focusRows[0] || rows[0] || null;
+    const product = latest?.product?.name || latest?.product?.code_product || 'Aucun signal actif';
+    return {
+      total: rows.length,
+      active: active.length,
+      high: highRows.length,
+      rupture: ruptureRows.length,
+      criticalRuptures: criticalRuptures.length,
+      focus: focusRows.length,
+      focusMode: criticalRuptures.length ? 'ruptures critiques' : 'top 10 priorités',
+      product,
+    };
+  }, [aiAlerts]);
 
   const openConso = useCallback((q) => {
-    const r = buildRange(period.days);
-    const p = new URLSearchParams({ from: isoDay(r.from), to: isoDay(r.to) });
+    const range = topConsumedRange || selectedRange;
+    const p = new URLSearchParams({ from: isoDay(range.from), to: isoDay(range.to) });
     if (q) p.set('q', String(q).trim());
     navigate(`/responsable/consommation?${p}`);
-  }, [navigate, period.days]);
+  }, [navigate, selectedRange, topConsumedRange]);
+
+  const generateRecommendations = useCallback(() => {
+    const recs = [];
+
+    if (topRisk && Number(topRisk.risk_probability || 0) > 50) {
+      recs.push({
+        id: 'rec-1',
+        type: 'restock',
+        product: topRisk.product_name || topRisk.code_product || 'Produit',
+        quantity: Math.ceil(Number(topRisk.seuil_minimum || 0) * 1.5),
+        urgency: Number(topRisk.risk_probability || 0) > 80 ? 'URGENT' : 'NORMAL',
+        action: () => navigate('/responsable/commandes/nouvelle'),
+      });
+    }
+
+    if (stats.critical > 2) {
+      recs.push({
+        id: 'rec-2',
+        type: 'optimize',
+        detail: `Optimiser FIFO/FEFO pour ${stats.critical} produits critiques`,
+        gain: '15-20%',
+        action: () => navigate('/responsable/produits?filter=critiques'),
+      });
+    }
+
+    const unused = products.filter((p) => {
+      const lastMove = p.last_movement_date;
+      if (!lastMove) return true;
+      const days = (new Date() - new Date(lastMove)) / DAY_MS;
+      return days > 180;
+    });
+
+    if (unused.length > 0) {
+      recs.push({
+        id: 'rec-3',
+        type: 'archive',
+        count: unused.length,
+        action: () => navigate('/responsable/produits?filter=inutilises'),
+      });
+    }
+
+    return recs;
+  }, [navigate, products, stats.critical, topRisk]);
+
+  useEffect(() => {
+    setRecommendations(generateRecommendations());
+  }, [generateRecommendations]);
 
   /* ─── Rendu ─────────────────────────────────── */
   return (
@@ -415,11 +642,14 @@ export default function DashboardResp({ userName, onLogout }) {
 
             <div className="resp-dash-page">
 
-              {/* ── En-tête ── */}
-              <section className="resp-dash-topbar">
-                <div className="resp-dash-title">
-                  <h2>Tableau de bord</h2>
-                  <p>Mis à jour {fmtDateTime(updatedAt)}</p>
+              {/* Filtres du dashboard */}
+              <section className="resp-dash-topbar" aria-label="Filtres du tableau de bord">
+                <div className="resp-period-summary">
+                  <CalendarDays size={16} />
+                  <span>
+                    <small>Activite analysee</small>
+                    <strong>{periodLabel}</strong>
+                  </span>
                 </div>
                 <div className="resp-dash-actions">
                   <nav className="resp-period-selector" aria-label="Période">
@@ -434,39 +664,18 @@ export default function DashboardResp({ userName, onLogout }) {
                     Actualiser
                   </button>
                 </div>
-              </section>
-
-              {/* ── Synthèse rapide ── */}
-              <section className="resp-summary-row" aria-label="Synthèse">
-                {[
-                  { label: 'Produits',    value: stats.total,              color: 'blue'   },
-                  { label: 'Familles',    value: famCount,                 color: 'violet' },
-                  { label: 'Risque top 5',value: `${avgRisk || 0}%`,       color: 'warn'   },
-                  { label: 'Disponibilité',value: `${Math.round(avail)}%`, color: 'green'  },
-                ].map((m) => (
-                  <div key={m.label} className={`resp-summary-pill ${m.color}`}>
-                    <strong>{m.value}</strong>
-                    <span>{m.label}</span>
+                {periodKey === 'custom' && (
+                  <div className="resp-custom-range" aria-label="Plage personnalisee">
+                    <label>
+                      Du
+                      <input type="date" value={customFrom} onChange={(e) => setCustomFrom(e.target.value)} />
+                    </label>
+                    <label>
+                      Au
+                      <input type="date" value={customTo} onChange={(e) => setCustomTo(e.target.value)} />
+                    </label>
                   </div>
-                ))}
-              </section>
-
-              {/* ── Raccourcis ── */}
-              <section className="resp-shortcut-panel" aria-label="Accès rapide">
-                {SHORTCUTS.map((action) => {
-                  const Icon = action.icon;
-                  return (
-                    <button type="button" key={action.key} className={`resp-shortcut-card ${action.tone}`} onClick={() => navigate(action.route)}>
-                      <span className="resp-shortcut-icon"><Icon size={18} /></span>
-                      <span className="resp-shortcut-copy">
-                        <strong>{action.label}</strong>
-                        <small>{action.description}</small>
-                        <em>{shortcutStatus[action.key]}</em>
-                      </span>
-                      <ArrowRight size={14} className="resp-shortcut-arrow" />
-                    </button>
-                  );
-                })}
+                )}
               </section>
 
               {/* ── Alerte critique ── */}
@@ -478,29 +687,141 @@ export default function DashboardResp({ userName, onLogout }) {
                     <span>{alertName} est sous le seuil. Réapprovisionnement urgent requis.</span>
                   </div>
                   <button type="button" className="resp-alert-action" onClick={() => navigate('/responsable/commandes/nouvelle')}>
-                    Agir <ChevronRight size={13} />
+                    Agir maintenant ({criticalActionCount}) <ChevronRight size={13} />
                   </button>
                 </section>
               )}
 
-              {/* ── Priorités du jour ── */}
-              <section className="resp-priorities" aria-label="Priorités">
-                {priorityCards.map((card) => {
-                  const Icon = card.icon;
-                  return (
-                    <button type="button" className={`resp-priority-card ${card.tone}`} key={card.key} onClick={card.onClick}>
-                      <span className="resp-priority-icon"><Icon size={22} /></span>
-                      <span className="resp-priority-copy">
-                        <strong><AnimNum value={card.value} /></strong>
-                        <span>{card.label}</span>
+              {/* ── Synthèse rapide ── */}
+              <section className="resp-summary-row focused" aria-label="Synthèse directive">
+                {[
+                  { label: 'Concentration du risque', value: `${avgRisk || 0}%`, color: 'warn', hint: 'Top 5 produits à sécuriser' },
+                  {
+                    label: 'Disponibilité',
+                    value: `${Math.round(avail)}%`,
+                    color: availTone === 'green' ? 'green' : 'danger',
+                    hint: availabilityGap < 0 ? `${availabilityGap}% sous l'objectif` : 'Objectif atteint',
+                  },
+                ].map((m) => (
+                  <div key={m.label} className={`resp-summary-pill ${m.color}`}>
+                    <strong>{m.value}</strong>
+                    <span>{m.label}</span>
+                    <small>{m.hint}</small>
+                  </div>
+                ))}
+              </section>
+
+              <section className="resp-action-lanes" aria-label="Actions responsable">
+                {[
+                  { title: 'Ligne A', subtitle: 'Flux - à valider', cards: workflowCards },
+                  { title: 'Ligne B', subtitle: 'Santé du stock', cards: stockHealthCards },
+                ].map((lane) => (
+                  <div className="resp-action-lane" key={lane.title}>
+                    <div className="resp-action-lane-head">
+                      <span>{lane.title}</span>
+                      <strong>{lane.subtitle}</strong>
+                    </div>
+                    <div className="resp-priorities compact">
+                      {lane.cards.map((card) => {
+                        const Icon = card.icon;
+                        return (
+                          <button type="button" className={`resp-priority-card ${card.tone}`} key={card.key} onClick={card.onClick}>
+                            <span className="resp-priority-icon"><Icon size={22} /></span>
+                            <span className="resp-priority-copy">
+                              <strong><AnimNum value={card.value} /></strong>
+                              <span>{card.label}</span>
+                            </span>
+                            <span className="resp-priority-trends">
+                              <TrendBadge value={card.deltaJ1} label="vs J-1" />
+                              <TrendBadge value={card.deltaJ7} label="vs J-7" />
+                            </span>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                ))}
+              </section>
+
+              {/* ── Section IA & Recommandations ── */}
+              <section className="resp-ia-section elevated">
+                <div className="resp-ia-container">
+
+                  <article className="resp-ai-alerts-panel">
+                    <div className="resp-card-header">
+                      <h3><ShieldAlert size={15} /> Alertes IA prioritaires</h3>
+                      <span className={`resp-badge ${aiAlertSummary.focus > 0 ? 'danger' : 'green'}`}>
+                        {aiAlertSummary.focus > 0 ? `${aiAlertSummary.focus} prioritaires` : 'À jour'}
                       </span>
-                      <span className="resp-priority-trends">
-                        <TrendBadge value={card.deltaJ1} label="vs J-1" />
-                        <TrendBadge value={card.deltaJ7} label="vs J-7" />
-                      </span>
+                    </div>
+
+                    <div className="resp-ai-alerts-grid focused">
+                      <div>
+                        <span>Rupture critique</span>
+                        <strong className={aiAlertSummary.criticalRuptures > 0 ? 'danger' : 'ok'}>{aiAlertSummary.criticalRuptures}</strong>
+                      </div>
+                      <div>
+                        <span>Critiques</span>
+                        <strong className={aiAlertSummary.high > 0 ? 'danger' : 'ok'}>{aiAlertSummary.high}</strong>
+                      </div>
+                      <div>
+                        <span>Vue</span>
+                        <strong className="resp-ai-mode">{aiAlertSummary.focusMode}</strong>
+                      </div>
+                    </div>
+
+                    <p className="resp-ai-alerts-note">
+                      {aiAlertSummary.focus > 0
+                        ? `Dernier signal prioritaire: ${aiAlertSummary.product}`
+                        : 'Aucune rupture critique active à traiter pour le moment.'}
+                    </p>
+
+                    <button
+                      type="button"
+                      className="resp-ai-alerts-action"
+                      onClick={() => navigate('/responsable/pilotage?tab=alertes')}
+                    >
+                      Ouvrir les priorités IA <ChevronRight size={14} />
                     </button>
-                  );
-                })}
+                  </article>
+
+                  <article className="resp-recommendations-panel">
+                    <div className="resp-card-header">
+                      <h3><Zap size={15} /> Recommandations IA</h3>
+                      <span className="resp-badge blue">{recommendations.length} actions</span>
+                    </div>
+
+                    {recommendations.length > 0 ? (
+                      <div className="resp-recommendations-list">
+                        {recommendations.map((rec) => {
+                          const type = RECOMMENDATION_TYPES[rec.type];
+                          return (
+                            <button
+                              key={rec.id}
+                              type="button"
+                              className={`resp-recommendation-item ${type.color}`}
+                              onClick={rec.action}
+                            >
+                              <span className="resp-rec-icon">{type.icon}</span>
+                              <span className="resp-rec-content">
+                                <strong>{type.label}</strong>
+                                {rec.product && <small>{rec.product} - {rec.quantity} unités</small>}
+                                {rec.detail && <small>{rec.detail}</small>}
+                                {rec.count && <small>{rec.count} éléments concernés</small>}
+                              </span>
+                              {rec.urgency && <span className={`resp-rec-urgency ${rec.urgency.toLowerCase()}`}>{rec.urgency}</span>}
+                              {rec.gain && <span className="resp-rec-gain">+{rec.gain}</span>}
+                              <ChevronRight size={12} className="resp-rec-arrow" />
+                            </button>
+                          );
+                        })}
+                      </div>
+                    ) : (
+                      <div className="resp-empty-state compact">Aucune recommandation pour le moment.</div>
+                    )}
+                  </article>
+
+                </div>
               </section>
 
               {/* ── Graphiques ── */}
@@ -512,7 +833,7 @@ export default function DashboardResp({ userName, onLogout }) {
                     <h3><BarChart3 size={15} /> Évolution des demandes</h3>
                     <span className="resp-badge blue">Sur la période</span>
                   </div>
-                  {reqPts.length > 1 ? (
+                  {reqPts.length > 0 ? (
                     <>
                       <div className="resp-chart-area">
                         <svg viewBox={`0 0 ${CW} ${CH}`} preserveAspectRatio="none" className="resp-chart-svg">
@@ -529,8 +850,8 @@ export default function DashboardResp({ userName, onLogout }) {
                             <circle key={s.label} cx={reqPts[i].x} cy={reqPts[i].y} r="3" className="resp-point accent" />
                           ))}
                         </svg>
-                        <div className="resp-x-labels">
-                          {reqSeries.map((s) => <span key={s.label}>{s.label}</span>)}
+                        <div className="resp-x-labels" style={{ gridTemplateColumns: `repeat(${Math.max(1, reqAxisLabels.length)}, minmax(0, 1fr))` }}>
+                          {reqAxisLabels.map((s) => <span key={s.key}>{s.label}</span>)}
                         </div>
                       </div>
                       <p className="resp-card-note">
@@ -604,7 +925,7 @@ export default function DashboardResp({ userName, onLogout }) {
                 <article className="resp-card">
                   <div className="resp-card-header">
                     <h3><ShoppingCart size={15} /> Top produits consommés</h3>
-                    <span className="resp-badge violet">Top 5</span>
+                    <span className="resp-badge violet">Top 5 - {topConsumedLabel}</span>
                   </div>
                   <div className="resp-products-list">
                     {topRows.length ? topRows.map((row) => (
@@ -623,7 +944,7 @@ export default function DashboardResp({ userName, onLogout }) {
                         </span>
                       </button>
                     )) : (
-                      <div className="resp-empty-state compact">Pas de données de consommation sur la période.</div>
+                      <div className="resp-empty-state compact">Aucune consommation exploitable sur 7 jours, 30 jours ou 3 mois.</div>
                     )}
                   </div>
                 </article>
@@ -634,7 +955,7 @@ export default function DashboardResp({ userName, onLogout }) {
                   <article className="resp-card">
                     <div className="resp-card-header">
                       <h3><CheckCircle2 size={15} /> Disponibilité stock</h3>
-                      <span className={`resp-badge ${availTone}`}>
+                      <span className={`resp-badge ${availTone === 'green' ? 'green' : 'danger'}`}>
                         {availTone === 'green' ? 'Bon niveau' : availTone === 'orange' ? 'Attention' : 'Critique'}
                       </span>
                     </div>
@@ -654,7 +975,9 @@ export default function DashboardResp({ userName, onLogout }) {
                         <div><span className="ok">● OK</span><strong>{stats.ok}</strong></div>
                         <div><span className="danger">● Critiques</span><strong>{stats.critical}</strong></div>
                         <div><span>Total</span><strong>{stats.total}</strong></div>
-                        <p className={availTone}>Objectif &gt; 85%</p>
+                        <p className={availTone}>
+                          Objectif &gt; {AVAILABILITY_TARGET}% · {availabilityGap < 0 ? `${availabilityGap}% sous l'objectif` : 'objectif atteint'}
+                        </p>
                       </div>
                     </div>
                   </article>
@@ -664,21 +987,30 @@ export default function DashboardResp({ userName, onLogout }) {
                     <div className="resp-card-header">
                       <h3><FlaskConical size={15} /> Registre chimique</h3>
                       {chem.missingFds > 0
-                        ? <span className="resp-badge danger">{chem.missingFds} FDS manquantes</span>
-                        : <span className="resp-badge green">Conforme</span>}
+                        ? <span className="resp-badge danger">{chem.missingFds} FDS</span>
+                        : <span className="resp-badge green">✓ Conforme</span>}
                     </div>
                     <div className="resp-register-list">
-                      <div><span>Produits enregistrés</span><strong>{chem.total}</strong></div>
-                      <div><span>FDS manquantes</span><strong className="danger">{chem.missingFds}</strong></div>
+                      <div><span>Produits</span><strong>{chem.total}</strong></div>
+                      <div><span>FDS manquantes</span><strong className={chem.missingFds > 0 ? 'danger' : 'ok'}>{chem.missingFds}</strong></div>
                       <div>
                         <span>Conformité</span>
-                        <strong className={chem.missingFds > 0 ? 'danger' : 'ok'}>
+                        <strong className={chem.missingFds === 0 ? 'ok' : 'danger'}>
                           {chem.total ? Math.round(((chem.total - chem.missingFds) / chem.total) * 100) : 0}%
                         </strong>
                       </div>
                     </div>
-                    <button type="button" className="resp-register-action" onClick={() => navigate('/responsable/registre-chimique')}>
-                      Compléter les FDS <ChevronRight size={13} />
+                    <div className="resp-register-progress">
+                      <div className="resp-progress-bar">
+                        <div className="resp-progress-fill" style={{width: `${chem.total ? Math.round(((chem.total - chem.missingFds) / chem.total) * 100) : 0}%`}}></div>
+                      </div>
+                    </div>
+                    <button 
+                      type="button" 
+                      className={`resp-register-action ${chem.missingFds > 0 ? 'urgent' : ''}`}
+                      onClick={() => navigate('/responsable/registre-chimique')}
+                    >
+                      {chem.missingFds > 0 ? '⚠️ Compléter maintenant' : '✓ Consulter'} <ChevronRight size={13} />
                     </button>
                   </article>
 

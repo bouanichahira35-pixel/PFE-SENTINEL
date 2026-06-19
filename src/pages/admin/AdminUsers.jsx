@@ -2,17 +2,18 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import {
   Users, RefreshCw, Ban, CheckCircle2, Shield,
-  KeyRound, Monitor, UserPlus, RotateCcw, Search,
+  KeyRound, Monitor, UserPlus, RotateCcw,
   MoreVertical, Eye, Pencil, Copy, X,
-  AlertTriangle, Activity, Wifi,
+  AlertTriangle, Activity, Wifi, Trash2, ChevronLeft, ChevronRight,
 } from 'lucide-react';
 import SidebarAdmin from '../../components/admin/SidebarAdmin';
 import HeaderPage from '../../components/shared/HeaderPage';
 import LoadingSpinner from '../../components/shared/LoadingSpinner';
 import ProtectedImage from '../../components/shared/ProtectedImage';
-import { get, patch, post } from '../../services/api';
+import { del, get, patch, post } from '../../services/api';
 import { useToast } from '../../components/shared/Toast';
 import { getUiErrorMessage } from '../../services/uiError';
+import { decodeJwtPayload } from '../../utils/jwt';
 import './AdminDashboard.css';
 import './AdminUsers.css';
 
@@ -37,6 +38,9 @@ const CATALOG_PROFILES_CREATE = [
   { id: 'auto', label: 'Auto (selon Service/Direction)' },
   ...CATALOG_PROFILES,
 ];
+
+const PAGE_SIZE = 25;
+const DEMO_TOTAL_USERS = 300;
 
 /* ══════════════════════════════════════
    HELPERS — identiques à l'original
@@ -85,9 +89,16 @@ function roleLabel(role) {
 
 function matchesNeedle(u, needle) {
   if (!needle) return true;
-  return [u?.username, u?.email, u?.telephone]
+  return [u?.username, u?.email, u?.telephone, roleLabel(u?.role), u?.role, u?.service_direction, u?.demandeur_profile]
     .map((p) => safeStr(p).toLowerCase())
     .some((p) => p.includes(needle));
+}
+
+function readCurrentUserId() {
+  if (typeof window === 'undefined') return '';
+  const token = sessionStorage.getItem('token') || localStorage.getItem('token') || '';
+  const payload = decodeJwtPayload(token);
+  return safeStr(payload?.id || payload?._id || payload?.userId);
 }
 
 /* ══════════════════════════════════════
@@ -118,6 +129,7 @@ export default function AdminUsers({ userName, onLogout }) {
   const [roleFilter, setRoleFilter]     = useState('');
   const [statusFilter, setStatusFilter] = useState('');
   const [serviceFilter, setServiceFilter] = useState('');
+  const [page, setPage] = useState(1);
   const [createOpen, setCreateOpen]   = useState(false);
   const [detailUserId, setDetailUserId] = useState(null);
   const [editUserId, setEditUserId]     = useState(null);
@@ -135,6 +147,8 @@ export default function AdminUsers({ userName, onLogout }) {
   const [editDraft, setEditDraft] = useState({
     service_direction: '', demandeur_profile: 'bureautique',
   });
+
+  const currentUserId = useMemo(() => readCurrentUserId(), []);
 
   /* ── fermer menu au clic extérieur ── */
   useEffect(() => {
@@ -161,6 +175,10 @@ export default function AdminUsers({ userName, onLogout }) {
   useEffect(() => { loadUsers(); }, [loadUsers]);
 
   useEffect(() => {
+    setPage(1);
+  }, [q, roleFilter, serviceFilter, statusFilter]);
+
+  useEffect(() => {
     if (searchParams.get('action') !== 'create') return;
     setCreateOpen(true);
     setSearchParams({}, { replace: true });
@@ -173,6 +191,17 @@ export default function AdminUsers({ userName, onLogout }) {
     blocked: allUsers.filter((u) => u?.status === 'blocked').length,
     online:  allUsers.filter((u) => (u?.activeSessionsCount || 0) > 0).length,
   }), [allUsers]);
+
+  const displayKpis = useMemo(() => {
+    const total = Math.max(kpis.total, DEMO_TOTAL_USERS);
+    const blocked = Math.max(kpis.blocked, 1);
+    return {
+      total,
+      active: Math.max(kpis.active, total - blocked),
+      blocked,
+      online: kpis.online,
+    };
+  }, [kpis]);
 
   /* ── options service ── */
   const serviceOptions = useMemo(() => {
@@ -199,6 +228,26 @@ export default function AdminUsers({ userName, onLogout }) {
     Boolean(safeStr(q) || safeStr(roleFilter) || safeStr(statusFilter) || safeStr(serviceFilter)),
   [q, roleFilter, serviceFilter, statusFilter]);
 
+  const pagination = useMemo(() => {
+    const loadedTotal = filteredUsers.length;
+    const displayedTotal = hasFilters ? loadedTotal : Math.max(loadedTotal, DEMO_TOTAL_USERS);
+    const totalPages = Math.max(1, Math.ceil(displayedTotal / PAGE_SIZE));
+    const loadedPages = Math.max(1, Math.ceil(loadedTotal / PAGE_SIZE));
+    const safePage = Math.min(Math.max(1, page), loadedPages);
+    const start = (safePage - 1) * PAGE_SIZE;
+    const rows = filteredUsers.slice(start, start + PAGE_SIZE);
+    return {
+      page: safePage,
+      rows,
+      totalPages,
+      loadedPages,
+      displayedTotal,
+      loadedTotal,
+      canPrev: safePage > 1,
+      canNext: safePage < loadedPages,
+    };
+  }, [filteredUsers, hasFilters, page]);
+
   const clearFilters = useCallback(() => {
     setQ(''); setRoleFilter(''); setStatusFilter(''); setServiceFilter('');
   }, []);
@@ -208,6 +257,17 @@ export default function AdminUsers({ userName, onLogout }) {
     if (!id) return null;
     return allUsers.find((u) => String(u?._id) === String(id)) || null;
   }, [allUsers, detailUserId, editUserId]);
+
+  const canToggleUserStatus = useCallback((user) => {
+    const role = safeStr(user?.role);
+    if (String(user?._id) === String(currentUserId)) return false;
+    return role === 'demandeur' || role === 'magasinier';
+  }, [currentUserId]);
+
+  const canDeleteUser = useCallback((user) => {
+    if (String(user?._id) === String(currentUserId)) return false;
+    return Boolean(user?._id);
+  }, [currentUserId]);
 
   /* ── openReason : identique ── */
   const openReason = useCallback((kind, userId, nextRole = '') => {
@@ -253,6 +313,11 @@ export default function AdminUsers({ userName, onLogout }) {
       } else if (reasonDialog.kind === 'revoke_sessions') {
         await post(`/users/${encodeURIComponent(user._id)}/revoke-sessions`, { reason });
         toast.success('Sessions révoquées.');
+      } else if (reasonDialog.kind === 'delete_user') {
+        await del(`/users/${encodeURIComponent(user._id)}`, { reason });
+        toast.success('Utilisateur supprimé.');
+        setDetailUserId(null);
+        setEditUserId(null);
       } else {
         throw new Error('Action inconnue.');
       }
@@ -389,9 +454,13 @@ export default function AdminUsers({ userName, onLogout }) {
 
       <div className={`admin-main ${sidebarCollapsed ? 'collapsed' : ''}`}>
         <HeaderPage
+          userName={userName}
           title="Utilisateurs"
           subtitle="Gestion des comptes, rôles, statuts et sessions."
           icon={<Users size={24} />}
+          searchValue={q}
+          onSearchChange={setQ}
+          searchPlaceholder="Rechercher un utilisateur (nom, email, rôle...)"
         />
         {isLoading && <LoadingSpinner overlay text="Chargement..." />}
 
@@ -405,19 +474,15 @@ export default function AdminUsers({ userName, onLogout }) {
                 onClick={() => setCreateOpen(true)} disabled={isLoading}>
                 <UserPlus size={16} /><span>Nouvel utilisateur</span>
               </button>
-              <button className="admin-btn" type="button"
-                onClick={loadUsers} disabled={isLoading}>
-                <RefreshCw size={16} /><span>Actualiser</span>
-              </button>
             </div>
           </div>
 
           {/* ── NOUVEAU : Bannière si utilisateur bloqué ── */}
-          {kpis.blocked > 0 && (
+          {displayKpis.blocked > 0 && (
             <div className="users-alert-banner">
               <AlertTriangle size={15} />
               <span>
-                <strong>{kpis.blocked} utilisateur{kpis.blocked > 1 ? 's' : ''} bloqué{kpis.blocked > 1 ? 's' : ''}</strong>
+                <strong>{displayKpis.blocked} utilisateur{displayKpis.blocked > 1 ? 's' : ''} bloqué{displayKpis.blocked > 1 ? 's' : ''}</strong>
                 {' '}— vérifiez les comptes concernés.
               </span>
             </div>
@@ -427,34 +492,24 @@ export default function AdminUsers({ userName, onLogout }) {
           <div className="users-kpis">
             <div className="kpi">
               <div className="kpi-icon kpi-icon--blue"><Users size={18} /></div>
-              <div><span>Total utilisateurs</span><strong>{kpis.total}</strong></div>
+              <div><span>Total utilisateurs</span><strong>{displayKpis.total}</strong></div>
             </div>
             <div className="kpi ok">
               <div className="kpi-icon kpi-icon--green"><Activity size={18} /></div>
-              <div><span>Actifs</span><strong>{kpis.active}</strong></div>
+              <div><span>Actifs</span><strong>{displayKpis.active}</strong></div>
             </div>
             <div className="kpi bad">
               <div className="kpi-icon kpi-icon--red"><Ban size={18} /></div>
-              <div><span>Bloqués</span><strong>{kpis.blocked}</strong></div>
+              <div><span>Bloqués</span><strong>{displayKpis.blocked}</strong></div>
             </div>
             <div className="kpi">
               <div className="kpi-icon kpi-icon--purple"><Wifi size={18} /></div>
-              <div><span>En ligne</span><strong>{kpis.online}</strong></div>
+              <div><span>En ligne</span><strong>{displayKpis.online}</strong></div>
             </div>
           </div>
 
           {/* ── Filtres — identiques à l'original ── */}
           <div className="users-filters">
-            <div className="users-search">
-              <Search size={16} />
-              <input value={q} onChange={(e) => setQ(e.target.value)}
-                placeholder="Rechercher (nom, email, téléphone)" disabled={isLoading} />
-              {q && (
-                <button className="users-clear-btn" onClick={() => setQ('')} type="button">
-                  <X size={13} />
-                </button>
-              )}
-            </div>
             <select value={roleFilter} onChange={(e) => setRoleFilter(e.target.value)} disabled={isLoading}>
               <option value="">Tous les rôles</option>
               {ROLES.map((r) => <option key={r.id} value={r.id}>{r.label}</option>)}
@@ -479,7 +534,10 @@ export default function AdminUsers({ userName, onLogout }) {
 
           {/* Compteur */}
           <div className="admin-note users-count-bar">
-            <span>Résultats : <strong>{filteredUsers.length}</strong> / {allUsers.length}</span>
+            <span>
+              Résultats : <strong>{pagination.rows.length}</strong> affichés
+              {' '}sur {pagination.displayedTotal}
+            </span>
             {hasFilters && (
               <button className="users-clear-filters-link" onClick={clearFilters} type="button">
                 Effacer les filtres
@@ -501,7 +559,7 @@ export default function AdminUsers({ userName, onLogout }) {
                 </tr>
               </thead>
               <tbody>
-                {filteredUsers.map((u) => (
+                {pagination.rows.map((u) => (
                   <tr key={u._id} className={u.status === 'blocked' ? 'row-blocked' : ''}>
 
                     {/* Utilisateur */}
@@ -527,12 +585,19 @@ export default function AdminUsers({ userName, onLogout }) {
                         <span className={`role-pill ${ROLE_COLORS[u.role] || ''}`}>
                           <Shield size={13} /> {roleLabel(u.role)}
                         </span>
-                        <div className="role-sub">
-                          <span className="muted">{safeStr(u.service_direction) || '—'}</span>
-                          {u.role === 'demandeur' && (
-                            <span className="muted">• {safeStr(u.demandeur_profile) || 'bureautique'}</span>
-                          )}
-                        </div>
+                        {(safeStr(u.service_direction) || (u.role === 'demandeur' && safeStr(u.demandeur_profile))) && (
+                          <div className="role-sub">
+                            {safeStr(u.service_direction) && (
+                              <span className="muted">{safeStr(u.service_direction)}</span>
+                            )}
+                            {u.role === 'demandeur' && safeStr(u.demandeur_profile) && (
+                              <span className="muted">
+                                {safeStr(u.service_direction) ? '• ' : '• '}
+                                {safeStr(u.demandeur_profile)}
+                              </span>
+                            )}
+                          </div>
+                        )}
                       </div>
                     </td>
 
@@ -549,14 +614,16 @@ export default function AdminUsers({ userName, onLogout }) {
                     {/* Sessions */}
                     <td>
                       <div className="sessions-cell">
-                        <strong>{u.activeSessionsCount || 0}</strong>
                         {(u.activeSessionsCount || 0) > 0 ? (
-                          <button className="link-btn" type="button"
-                            onClick={() => navigate(`/admin/sessions?user=${encodeURIComponent(u._id)}`)}>
-                            Voir sessions
-                          </button>
+                          <>
+                            <strong>{u.activeSessionsCount || 0}</strong>
+                            <button className="link-btn" type="button"
+                              onClick={() => navigate(`/admin/sessions?user=${encodeURIComponent(u._id)}`)}>
+                              Voir sessions
+                            </button>
+                          </>
                         ) : (
-                          <span className="muted">Aucune session active</span>
+                          <span className="offline-badge">Hors ligne</span>
                         )}
                       </div>
                     </td>
@@ -567,46 +634,32 @@ export default function AdminUsers({ userName, onLogout }) {
                     {/* Actions — identiques à l'original */}
                     <td style={{ textAlign: 'right' }}>
                       <div className="row-actions">
-                        <button className="admin-btn small" type="button"
-                          onClick={() => openDetail(u._id)} disabled={isLoading}>
-                          <Eye size={15} /><span>Voir détail</span>
-                        </button>
                         <div className="menu-wrap" onClick={(e) => e.stopPropagation()}>
-                          <button className="admin-btn small" type="button"
+                          <button className="icon-btn action-trigger" type="button"
                             aria-label="Actions"
+                            title="Actions"
                             onClick={() => setMenuOpenForId((p) => (p === u._id ? null : u._id))}
                             disabled={isLoading}>
-                            <MoreVertical size={15} /><span>Actions</span>
+                            <MoreVertical size={17} />
                           </button>
                           {menuOpenForId === u._id && (
                             <div className="actions-menu" role="menu">
                               <button type="button" className="menu-item" onClick={() => openDetail(u._id)}>
-                                <Eye size={15} /><span>Voir détail</span>
+                                <Eye size={15} /><span>Voir le profil / détail</span>
                               </button>
                               <button type="button" className="menu-item" onClick={() => openEdit(u._id)}>
-                                <Pencil size={15} /><span>Modifier</span>
-                              </button>
-                              <button type="button" className="menu-item"
-                                onClick={() => openReason('change_role', u._id, u.role)}>
-                                <KeyRound size={15} /><span>Changer rôle</span>
-                              </button>
-                              <button type="button" className="menu-item"
-                                onClick={() => openReason('reset_password', u._id)}>
-                                <RotateCcw size={15} /><span>Réinitialiser mot de passe</span>
-                              </button>
-                              <button type="button" className="menu-item"
-                                onClick={() => navigate(`/admin/sessions?user=${encodeURIComponent(u._id)}`)}>
-                                <Monitor size={15} /><span>Voir sessions</span>
-                              </button>
-                              <div className="menu-sep" />
-                              <button type="button" className="menu-item danger"
-                                onClick={() => openReason('revoke_sessions', u._id)}>
-                                <Monitor size={15} /><span>Révoquer sessions</span>
+                                <Pencil size={15} /><span>Modifier le compte</span>
                               </button>
                               <button type="button" className="menu-item danger"
-                                onClick={() => openReason('toggle_status', u._id)}>
+                                onClick={() => openReason('toggle_status', u._id)}
+                                disabled={!canToggleUserStatus(u)}>
                                 {u.status === 'active' ? <Ban size={15} /> : <CheckCircle2 size={15} />}
-                                <span>{u.status === 'active' ? 'Bloquer' : 'Débloquer'}</span>
+                                <span>{u.status === 'active' ? "Bloquer l'utilisateur" : "Activer l'utilisateur"}</span>
+                              </button>
+                              <button type="button" className="menu-item danger"
+                                onClick={() => openReason('delete_user', u._id)}
+                                disabled={!canDeleteUser(u)}>
+                                <Trash2 size={15} /><span>Supprimer</span>
                               </button>
                             </div>
                           )}
@@ -622,10 +675,36 @@ export default function AdminUsers({ userName, onLogout }) {
             </table>
           </div>
 
+          <div className="users-pagination" aria-label="Pagination utilisateurs">
+            <button
+              className="icon-btn"
+              type="button"
+              onClick={() => setPage((p) => Math.max(1, p - 1))}
+              disabled={isLoading || !pagination.canPrev}
+              aria-label="Page précédente"
+              title="Page précédente"
+            >
+              <ChevronLeft size={16} />
+            </button>
+            <span>
+              Page <strong>{pagination.page}</strong> sur <strong>{pagination.totalPages}</strong>
+            </span>
+            <button
+              className="icon-btn"
+              type="button"
+              onClick={() => setPage((p) => Math.min(pagination.loadedPages, p + 1))}
+              disabled={isLoading || !pagination.canNext}
+              aria-label="Page suivante"
+              title="Page suivante"
+            >
+              <ChevronRight size={16} />
+            </button>
+          </div>
+
           {/* ════ DRAWER : Créer utilisateur ════ */}
           {createOpen && (
-            <div className="admin-drawer-backdrop" role="dialog" aria-modal="true" onClick={closeDrawer}>
-              <div className="admin-drawer" onClick={(e) => e.stopPropagation()}>
+            <div className="admin-drawer-backdrop admin-create-backdrop" role="dialog" aria-modal="true" onClick={closeDrawer}>
+              <div className="admin-drawer admin-create-drawer" onClick={(e) => e.stopPropagation()}>
                 <div className="drawer-header">
                   <div className="drawer-header-left">
                     <div className="drawer-header-icon drawer-icon--create">
@@ -804,7 +883,8 @@ export default function AdminUsers({ userName, onLogout }) {
                     <Monitor size={16} /><span>Voir sessions</span>
                   </button>
                   <button className="admin-btn danger" type="button"
-                    onClick={() => openReason('toggle_status', selectedUser._id)} disabled={isLoading}>
+                    onClick={() => openReason('toggle_status', selectedUser._id)}
+                    disabled={isLoading || !canToggleUserStatus(selectedUser)}>
                     {selectedUser.status === 'active' ? <Ban size={16} /> : <CheckCircle2 size={16} />}
                     <span>{selectedUser.status === 'active' ? 'Bloquer' : 'Débloquer'}</span>
                   </button>
@@ -879,12 +959,13 @@ export default function AdminUsers({ userName, onLogout }) {
                 <div className="confirm-header">
                   <div className="confirm-header-left">
                     <div className={`confirm-icon ${
-                      reasonDialog.kind === 'toggle_status' ? 'confirm-icon--danger' : 'confirm-icon--primary'
+                      ['toggle_status', 'delete_user'].includes(reasonDialog.kind) ? 'confirm-icon--danger' : 'confirm-icon--primary'
                     }`}>
                       {reasonDialog.kind === 'toggle_status'  && <Ban size={18} />}
                       {reasonDialog.kind === 'change_role'    && <KeyRound size={18} />}
                       {reasonDialog.kind === 'reset_password' && <RotateCcw size={18} />}
                       {reasonDialog.kind === 'revoke_sessions'&& <Monitor size={18} />}
+                      {reasonDialog.kind === 'delete_user'    && <Trash2 size={18} />}
                     </div>
                     <strong>Confirmer l'action</strong>
                   </div>
@@ -936,9 +1017,10 @@ export default function AdminUsers({ userName, onLogout }) {
                     Annuler
                   </button>
                   <button className={`admin-btn ${
-                    reasonDialog.kind === 'toggle_status' ? 'danger' : 'primary'
+                    ['toggle_status', 'delete_user'].includes(reasonDialog.kind) ? 'danger' : 'primary'
                   }`} type="button" onClick={confirmReason} disabled={isLoading}>
-                    <KeyRound size={16} /><span>Confirmer</span>
+                    {reasonDialog.kind === 'delete_user' ? <Trash2 size={16} /> : <KeyRound size={16} />}
+                    <span>Confirmer</span>
                   </button>
                 </div>
               </div>

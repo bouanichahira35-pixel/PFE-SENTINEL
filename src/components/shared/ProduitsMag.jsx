@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { mockProducts, categories, getProductStatus } from '../data/mockData';
+import { catalogueProducts, catalogueCategories, getProductStatus } from '../../data/catalogueFallback';
 import './ProduitsMag.css';
 
 const ProduitsMag = ({ searchQuery, onEntreeStock, onSortieStock, onVoirDetails }) => {
@@ -8,7 +8,7 @@ const ProduitsMag = ({ searchQuery, onEntreeStock, onSortieStock, onVoirDetails 
   const [selectedCategory, setSelectedCategory] = useState('all');
   const [selectedFilter, setSelectedFilter] = useState('all');
 
-  const filteredProducts = mockProducts.filter((product) => {
+  const filteredProducts = catalogueProducts.filter((product) => {
     const matchesSearch = 
       product.nom.toLowerCase().includes(searchQuery.toLowerCase()) ||
       product.code.toLowerCase().includes(searchQuery.toLowerCase());
@@ -26,10 +26,10 @@ const ProduitsMag = ({ searchQuery, onEntreeStock, onSortieStock, onVoirDetails 
   });
 
   const counts = {
-    all: mockProducts.length,
-    disponible: mockProducts.filter(p => getProductStatus(p.quantite, p.seuilMin) === 'disponible').length,
-    sousSeuil: mockProducts.filter(p => getProductStatus(p.quantite, p.seuilMin) === 'sous-seuil').length,
-    rupture: mockProducts.filter(p => getProductStatus(p.quantite, p.seuilMin) === 'rupture').length,
+    all: catalogueProducts.length,
+    disponible: catalogueProducts.filter(p => getProductStatus(p.quantite, p.seuilMin) === 'disponible').length,
+    sousSeuil: catalogueProducts.filter(p => getProductStatus(p.quantite, p.seuilMin) === 'sous-seuil').length,
+    rupture: catalogueProducts.filter(p => getProductStatus(p.quantite, p.seuilMin) === 'rupture').length,
   };
 
   const getStatusBadge = (product) => {
@@ -95,7 +95,7 @@ const ProduitsMag = ({ searchQuery, onEntreeStock, onSortieStock, onVoirDetails 
           className="category-select"
         >
           <option value="all">Toutes les catégories</option>
-          {categories.map((cat) => (
+          {catalogueCategories.map((cat) => (
             <option key={cat} value={cat}>{cat}</option>
           ))}
         </select>

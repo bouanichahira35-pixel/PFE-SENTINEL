@@ -7,6 +7,7 @@ import ProtectedPage from '../../components/shared/ProtectedPage';
 import LoadingSpinner from '../../components/shared/LoadingSpinner';
 import { useToast } from '../../components/shared/Toast';
 import { get, post } from '../../services/api';
+import { getUiErrorMessage } from '../../services/uiError';
 import './LancerInventaireResp.css';
 
 function toDateInputValue(date) {
@@ -21,6 +22,27 @@ function toDateInputValue(date) {
   } catch {
     return '';
   }
+}
+
+function getLaunchInventoryErrorMessage(err) {
+  const data = err?.data && typeof err.data === 'object' ? err.data : {};
+  const code = String(data.code || '');
+  const error = String(data.error || err?.message || '');
+
+  if (Number(err?.status) === 409 && (code === 'ACTIVE_INVENTORY_EXISTS' || error.includes('Inventaire deja actif'))) {
+    const existing = data.existing_inventory && typeof data.existing_inventory === 'object' ? data.existing_inventory : {};
+    const refFromDetails = String(data.details || '').match(/INV-\d{4}-\d+/)?.[0] || '';
+    const reference = String(existing.reference || refFromDetails || '').trim();
+    const status = String(existing.status || '').trim();
+    const suffix = reference ? ` (${reference}${status ? ` - ${status}` : ''})` : '';
+    return `Inventaire deja en cours pour ce perimetre${suffix}. Ouvrez la liste des inventaires pour le suivre ou le cloturer avant de relancer.`;
+  }
+
+  if (Number(err?.status) === 409 && (code === 'NO_PRODUCTS_FOR_INVENTORY' || error.includes('Aucun article concerne'))) {
+    return 'Aucun article actif ne correspond a ce perimetre. Choisissez un seul filtre valide: produit, famille ou categorie.';
+  }
+
+  return getUiErrorMessage(err, "Erreur lancement inventaire");
 }
 
 const LancerInventaireResp = ({ userName, onLogout }) => {
@@ -91,9 +113,42 @@ const LancerInventaireResp = ({ userName, onLogout }) => {
     }
   }, [typeInventaire]);
 
+  useEffect(() => {
+    if (familleId && !(options.familles || []).some((f) => String(f?.value || '') === String(familleId))) {
+      setFamilleId('');
+    }
+    if (categorieId && !(options.categories || []).some((c) => String(c?._id || '') === String(categorieId))) {
+      setCategorieId('');
+    }
+  }, [categorieId, familleId, options.categories, options.familles]);
+
   const productDisabled = typeInventaire === 'GLOBAL';
   const familleDisabled = typeInventaire === 'GLOBAL';
   const categorieDisabled = typeInventaire === 'GLOBAL';
+
+  const handleProductQueryChange = (value) => {
+    setProductQuery(value);
+    if (String(value || '').trim()) {
+      setFamilleId('');
+      setCategorieId('');
+    }
+  };
+
+  const handleFamilleChange = (value) => {
+    setFamilleId(value);
+    if (value) {
+      setProductQuery('');
+      setCategorieId('');
+    }
+  };
+
+  const handleCategorieChange = (value) => {
+    setCategorieId(value);
+    if (value) {
+      setProductQuery('');
+      setFamilleId('');
+    }
+  };
 
   const productOptions = useMemo(() => {
     const items = Array.isArray(options.products) ? options.products : [];
@@ -102,6 +157,38 @@ const LancerInventaireResp = ({ userName, onLogout }) => {
       searchLabel: `${p?.code_product || ''} - ${p?.name || ''}`.trim(),
     }));
   }, [options.products]);
+
+  const productCounts = useMemo(() => {
+    const family = new Map();
+    const category = new Map();
+    for (const product of productOptions) {
+      const familyKey = String(product?.family || '').trim();
+      const categoryKey = String(product?.category?._id || product?.category || '').trim();
+      if (familyKey) family.set(familyKey, Number(family.get(familyKey) || 0) + 1);
+      if (categoryKey) category.set(categoryKey, Number(category.get(categoryKey) || 0) + 1);
+    }
+    return { family, category };
+  }, [productOptions]);
+
+  const availableFamilles = useMemo(
+    () => (options.familles || [])
+      .map((f) => ({
+        ...f,
+        article_count: Number(f?.article_count || productCounts.family.get(String(f?.value || '')) || 0),
+      }))
+      .filter((f) => Number(f.article_count || 0) > 0),
+    [options.familles, productCounts]
+  );
+
+  const availableCategories = useMemo(
+    () => (options.categories || [])
+      .map((c) => ({
+        ...c,
+        article_count: Number(c?.article_count || productCounts.category.get(String(c?._id || '')) || 0),
+      }))
+      .filter((c) => Number(c.article_count || 0) > 0),
+    [options.categories, productCounts]
+  );
 
   const selectedProduct = useMemo(() => {
     const q = String(productQuery || '').trim().toLowerCase();
@@ -114,6 +201,25 @@ const LancerInventaireResp = ({ userName, onLogout }) => {
       return q === id || q === code || q === name || q === label;
     }) || null;
   }, [productOptions, productQuery]);
+
+  const selectedFamilyOption = useMemo(
+    () => availableFamilles.find((f) => String(f?.value || '') === String(familleId)) || null,
+    [availableFamilles, familleId]
+  );
+
+  const selectedCategoryOption = useMemo(
+    () => availableCategories.find((c) => String(c?._id || '') === String(categorieId)) || null,
+    [availableCategories, categorieId]
+  );
+
+  useEffect(() => {
+    if (familleId && !availableFamilles.some((f) => String(f?.value || '') === String(familleId))) {
+      setFamilleId('');
+    }
+    if (categorieId && !availableCategories.some((c) => String(c?._id || '') === String(categorieId))) {
+      setCategorieId('');
+    }
+  }, [availableCategories, availableFamilles, categorieId, familleId]);
 
   const magasinierChoices = useMemo(() => {
     const items = Array.isArray(options.magasiniers) ? options.magasiniers : [];
@@ -134,13 +240,12 @@ const LancerInventaireResp = ({ userName, onLogout }) => {
     ));
   }, [magasinierQuery, options.magasiniers]);
 
-  const selectedMagasiniersLabel = useMemo(() => {
+  const selectedMagasiniers = useMemo(() => {
     const selected = new Set((Array.isArray(magasinierIds) ? magasinierIds : []).map((id) => String(id)));
-    const names = (Array.isArray(options.magasiniers) ? options.magasiniers : [])
+    return (Array.isArray(options.magasiniers) ? options.magasiniers : [])
       .filter((u) => selected.has(String(u?._id || '')))
       .map((u) => String(u?.username || '').trim())
       .filter(Boolean);
-    return names.length ? names.join(', ') : '-';
   }, [magasinierIds, options.magasiniers]);
 
   const selectedPerimeterLabel = useMemo(() => {
@@ -149,12 +254,11 @@ const LancerInventaireResp = ({ userName, onLogout }) => {
     const typedProduct = String(productQuery || '').trim();
     if (selectedProduct) parts.push(`Produit: ${selectedProduct.code_product}`);
     else if (typedProduct) parts.push(`Produit: ${typedProduct}`);
-    const family = (options.familles || []).find((f) => String(f?.value || '') === String(familleId));
-    if (family) parts.push(`Famille: ${family.label}`);
-    const category = (options.categories || []).find((c) => String(c?._id || '') === String(categorieId));
+    if (selectedFamilyOption) parts.push(`Famille: ${selectedFamilyOption.label}`);
+    const category = selectedCategoryOption;
     if (category) parts.push(`Catégorie: ${category.name}`);
     return parts.length ? parts.join(' | ') : '-';
-  }, [categorieId, familleId, options.categories, options.familles, productQuery, selectedProduct, typeInventaire]);
+  }, [productQuery, selectedCategoryOption, selectedFamilyOption, selectedProduct, typeInventaire]);
 
   const toggleMagasinier = (id, checked) => {
     const key = String(id || '');
@@ -175,6 +279,25 @@ const LancerInventaireResp = ({ userName, onLogout }) => {
 
     if (typeInventaire === 'TOURNANT' && !String(productQuery || '').trim() && !familleId && !categorieId) {
       errs.push('Pour TOURNANT, choisir au moins un produit, une famille ou une catégorie');
+    }
+
+    if (typeInventaire === 'TOURNANT') {
+      const perimeterCount = [
+        String(productQuery || '').trim(),
+        familleId,
+        categorieId,
+      ].filter(Boolean).length;
+      if (perimeterCount > 1) {
+        errs.push('Pour TOURNANT, choisir un seul perimetre: produit, famille ou categorie.');
+      }
+    }
+
+    if (typeInventaire === 'TOURNANT' && familleId && !selectedFamilyOption) {
+      errs.push('Cette famille ne contient aucun article actif a inventorier.');
+    }
+
+    if (typeInventaire === 'TOURNANT' && categorieId && !selectedCategoryOption) {
+      errs.push('Cette categorie ne contient aucun article actif a inventorier.');
     }
 
     if (typeInventaire === 'GLOBAL' && (String(productQuery || '').trim() || familleId || categorieId)) {
@@ -214,7 +337,10 @@ const LancerInventaireResp = ({ userName, onLogout }) => {
       toast.success(`${ref} lancé (${linesCount} ligne(s))`);
       navigate('/responsable/inventaires', { replace: true });
     } catch (err) {
-      toast.error(err.message || "Erreur lancement inventaire");
+      const isDuplicateInventory = Number(err?.status) === 409 && String(err?.data?.code || '') === 'ACTIVE_INVENTORY_EXISTS';
+      const message = getLaunchInventoryErrorMessage(err);
+      if (isDuplicateInventory) toast.warning(message, 8000);
+      else toast.error(message);
     } finally {
       setIsLoading(false);
     }
@@ -299,7 +425,7 @@ const LancerInventaireResp = ({ userName, onLogout }) => {
                         type="text"
                         list="inventory-product-options"
                         value={productQuery}
-                        onChange={(e) => setProductQuery(e.target.value)}
+                        onChange={(e) => handleProductQueryChange(e.target.value)}
                         disabled={productDisabled}
                         placeholder={productDisabled ? 'Désactivé (GLOBAL)' : 'Écrire un code/nom produit ou choisir...'}
                       />
@@ -320,11 +446,11 @@ const LancerInventaireResp = ({ userName, onLogout }) => {
                     </div>
                     <div>
                       <label>Famille (optionnel)</label>
-                      <select value={familleId} onChange={(e) => setFamilleId(e.target.value)} disabled={familleDisabled}>
+                      <select value={familleId} onChange={(e) => handleFamilleChange(e.target.value)} disabled={familleDisabled}>
                         <option value="">{familleDisabled ? 'Désactivé (GLOBAL)' : 'Choisir une famille'}</option>
-                        {options.familles.map((f) => (
+                        {availableFamilles.map((f) => (
                           <option key={f.value} value={f.value}>
-                            {f.label}
+                            {f.label} ({Number(f.article_count || 0)} article(s))
                           </option>
                         ))}
                       </select>
@@ -334,11 +460,11 @@ const LancerInventaireResp = ({ userName, onLogout }) => {
                   <div className="inv-launch-row two">
                     <div>
                       <label>Catégorie (optionnel)</label>
-                      <select value={categorieId} onChange={(e) => setCategorieId(e.target.value)} disabled={categorieDisabled}>
+                      <select value={categorieId} onChange={(e) => handleCategorieChange(e.target.value)} disabled={categorieDisabled}>
                         <option value="">{categorieDisabled ? 'Désactivé (GLOBAL)' : 'Choisir une catégorie'}</option>
-                        {options.categories.map((c) => (
+                        {availableCategories.map((c) => (
                           <option key={c._id} value={c._id}>
-                            {c.name}
+                            {c.name} ({Number(c.article_count || 0)} article(s))
                           </option>
                         ))}
                       </select>
@@ -475,7 +601,23 @@ const LancerInventaireResp = ({ userName, onLogout }) => {
                 </div>
                 <div className="inv-launch-kv">
                   <div className="k"><span>Assignation</span></div>
-                  <div className="v">{magasinierIds.length} magasinier(s): {selectedMagasiniersLabel}</div>
+                  <div className="v">
+                    <div className="inv-launch-assignment-summary">
+                      <strong>{magasinierIds.length} magasinier(s)</strong>
+                      {selectedMagasiniers.length ? (
+                        <div className="inv-launch-assignment-list">
+                          {selectedMagasiniers.slice(0, 4).map((name) => (
+                            <span className="inv-launch-assignment-chip" key={name}>{name}</span>
+                          ))}
+                          {selectedMagasiniers.length > 4 ? (
+                            <span className="inv-launch-assignment-more">+{selectedMagasiniers.length - 4}</span>
+                          ) : null}
+                        </div>
+                      ) : (
+                        <span className="inv-launch-assignment-empty">Aucun magasinier selectionne</span>
+                      )}
+                    </div>
+                  </div>
                 </div>
                 <div className="inv-launch-side-note">
                   Statut initial après lancement: <span className="inv-status-badge a_faire">A_FAIRE</span>

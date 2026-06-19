@@ -29,6 +29,7 @@
   box-shadow: var(--sb-shadow);
   transition: width 0.25s ease;
   overflow: hidden;
+  position: -webkit-sticky;
   position: sticky;
   top: 0;
   z-index: 40;
@@ -36,6 +37,19 @@
 
 .sidebar-resp.collapsed {
   width: var(--sb-w-col);
+}
+
+[data-theme="dark"] .sidebar-resp {
+  --sb-accent: var(--color-accent);
+  --sb-accent-bg: rgba(52, 211, 153, 0.14);
+  --sb-accent-bd: rgba(52, 211, 153, 0.32);
+  --sb-text: var(--color-text-primary);
+  --sb-text2: var(--color-text-secondary);
+  --sb-text3: var(--color-text-muted);
+  --sb-bg: var(--color-bg-primary);
+  --sb-bg2: var(--color-bg-secondary);
+  --sb-border: var(--color-border);
+  --sb-shadow: 2px 0 18px rgba(0, 0, 0, 0.28);
 }
 
 /* ─── En-tête ─────────────────────────────────── */
@@ -69,31 +83,8 @@
 .sb-user-info {
   display: flex;
   align-items: center;
-  gap: 8px;
   min-width: 0;
   flex: 1;
-}
-
-.sb-avatar {
-  width: 30px;
-  height: 30px;
-  border-radius: 50%;
-  object-fit: cover;
-  border: 1px solid var(--sb-border);
-  flex-shrink: 0;
-}
-
-.sb-avatar-placeholder {
-  width: 30px;
-  height: 30px;
-  border-radius: 50%;
-  background: var(--sb-bg2);
-  border: 1px solid var(--sb-border);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  color: var(--sb-text3);
-  flex-shrink: 0;
 }
 
 .sb-username {

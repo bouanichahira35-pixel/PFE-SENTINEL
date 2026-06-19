@@ -1,9 +1,9 @@
 import { Search, RefreshCw, Moon, Sun } from 'lucide-react';
-import { useState } from 'react';
+import useTheme from '../../hooks/useTheme';
 import './HeaderMag.css';
 
 const HeaderMag = ({ magasinierName, searchValue, onSearchChange, onRefresh }) => {
-  const [isDarkMode, setIsDarkMode] = useState(false);
+  const { isDarkMode, toggleTheme } = useTheme();
 
   const initials = magasinierName
     .split(' ')
@@ -11,11 +11,6 @@ const HeaderMag = ({ magasinierName, searchValue, onSearchChange, onRefresh }) =
     .join('')
     .toUpperCase()
     .slice(0, 2);
-
-  const toggleDarkMode = () => {
-    setIsDarkMode(!isDarkMode);
-    document.documentElement.classList.toggle('dark');
-  };
 
   return (
     <header className="header-mag">
@@ -34,7 +29,7 @@ const HeaderMag = ({ magasinierName, searchValue, onSearchChange, onRefresh }) =
         <button className="header-action-btn" onClick={onRefresh} title="Actualiser">
           <RefreshCw size={20} />
         </button>
-        <button className="header-action-btn" onClick={toggleDarkMode} title="Thème">
+        <button className="header-action-btn" onClick={toggleTheme} title="Thème">
           {isDarkMode ? <Sun size={20} /> : <Moon size={20} />}
         </button>
         <div className="header-user">

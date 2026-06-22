@@ -1,3 +1,9 @@
+/*
+ * BLOC 1 - Role du fichier.
+ * Ce fichier affiche une page de l'espace administrateur pour AdminRbac.
+ * Point de vigilance: garder les props, appels API et classes CSS synchronises avec les ecrans existants.
+ */
+
 .rp-grid {
   display: grid;
   grid-template-columns: 200px 260px 1fr;
@@ -202,6 +208,16 @@
   padding: 10px;
   overflow: auto;
   flex: 1;
+}
+
+.rp-sections-compact {
+  max-height: 260px;
+  flex: none;
+}
+
+.rp-user-override {
+  border-top: 1px solid #e7ebf3;
+  background: #f8fafc;
 }
 
 .rp-section {

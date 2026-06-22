@@ -1,3 +1,7 @@
+// BLOC 1 - Role du fichier.
+// Ce fichier affiche une page du module commandes fournisseurs pour CommandeFournisseurDetailsPage.
+// Point de vigilance: garder les props, appels API et classes CSS synchronises avec les ecrans existants.
+
 import { useEffect, useMemo, useState } from 'react';
 import { ShoppingCart } from 'lucide-react';
 import { useNavigate, useParams } from 'react-router-dom';

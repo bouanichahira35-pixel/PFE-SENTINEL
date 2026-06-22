@@ -1,3 +1,7 @@
+// BLOC 1 - Role du fichier.
+// Ce fichier contient la logique metier reutilisable du domaine geminiService, appelee par les routes ou les jobs.
+// Point de vigilance: preserver les contrats appeles par plusieurs routes.
+
 const axios = require('axios');
 
 const GEMINI_BASE_URL = 'https://generativelanguage.googleapis.com/v1beta';

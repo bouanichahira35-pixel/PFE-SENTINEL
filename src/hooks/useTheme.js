@@ -1,3 +1,7 @@
+// BLOC 1 - Role du fichier.
+// Ce fichier fournit un hook React reutilisable pour useTheme.
+// Point de vigilance: modifier avec prudence car ce fichier peut etre importe par plusieurs modules.
+
 import { useState, useEffect, useCallback } from 'react';
 
 const useTheme = () => {

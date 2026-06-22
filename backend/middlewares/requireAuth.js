@@ -1,3 +1,7 @@
+// BLOC 1 - Role du fichier.
+// Ce fichier controle les requetes avant les routes pour le sujet requireAuth.
+// Point de vigilance: modifier avec prudence car ce fichier peut etre importe par plusieurs modules.
+
 const jwt = require('jsonwebtoken');
 const { normalizeRole, isTechnicalRole } = require('../constants/roles');
 const UserSession = require('../models/UserSession');

@@ -1,3 +1,7 @@
+// BLOC 1 - Role du fichier.
+// Ce fichier centralise des constantes backend pour stockRules.
+// Point de vigilance: modifier avec prudence car ce fichier peut etre importe par plusieurs modules.
+
 const STOCK_RULES_DEFAULT = Object.freeze({
   // General rules
   seuilAlerte: 10,

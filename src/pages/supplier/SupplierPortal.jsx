@@ -1,3 +1,7 @@
+// BLOC 1 - Role du fichier.
+// Ce fichier affiche une page du portail fournisseur pour SupplierPortal.
+// Point de vigilance: garder les props, appels API et classes CSS synchronises avec les ecrans existants.
+
 import { useEffect, useMemo, useState } from 'react';
 import { useLocation } from 'react-router-dom';
 import { get, post } from '../../services/api';

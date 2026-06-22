@@ -1,3 +1,7 @@
+# BLOC 1 - Role du fichier.
+# Ce fichier participe au pipeline IA Python pour 04_adaptive_threshold_model.
+# Point de vigilance: ne pas deplacer les donnees d'entrainement et garder les formats CSV/JSONL compatibles.
+
 from typing import Any, Dict, List
 
 from _common import as_float, clamp, dump_output, load_payload, parse_io_args, safe_div

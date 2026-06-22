@@ -1,22 +1,20 @@
+// BLOC 1 - Role du fichier.
+// Ce fichier affiche une page de l'espace responsable pour PilotageResp.
+// Point de vigilance: garder les props, appels API et classes CSS synchronises avec les ecrans existants.
+
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import {
   Activity,
-  AlertTriangle,
-  Bot,
   CheckCircle,
   Clock,
   Eye,
   ArrowLeftRight,
-  Gauge,
-  MessageSquare,
   Package,
   RefreshCw,
+  SlidersHorizontal,
   ShoppingCart,
   Sparkles,
-  Trophy,
-  Users,
-  Wrench,
   XCircle,
 } from 'lucide-react';
 import SidebarResp from '../../components/responsable/SidebarResp';
@@ -24,6 +22,7 @@ import HeaderPage from '../../components/shared/HeaderPage';
 import ProtectedPage from '../../components/shared/ProtectedPage';
 import LoadingSpinner from '../../components/shared/LoadingSpinner';
 import { useToast } from '../../components/shared/Toast';
+import { usePrompt } from '../../components/shared/ConfirmDialog';
 import { get, patch, post } from '../../services/api';
 import './PilotageResp.css';
 
@@ -52,7 +51,7 @@ function requestAgeDays(createdAtRaw, nowTs) {
 function waitLabel(createdAtRaw, nowTs) {
   const days = requestAgeDays(createdAtRaw, nowTs);
   if (days == null) return 'En attente (date inconnue)';
-  if (days < 1) return "Créée aujourd'hui";
+  if (days < 1) return "Creee aujourd'hui";
   const whole = Math.floor(days);
   return `En attente depuis ${whole} jour${whole > 1 ? 's' : ''}`;
 }
@@ -67,7 +66,7 @@ function priorityBadge(reqItem, nowTs) {
 function stockIndicator(reqItem) {
   const qty = Number(reqItem.quantite || 0);
   const current = Number(reqItem.stockCurrent);
-  if (!Number.isFinite(current)) return { label: 'Stock à vérifier', cls: 'unknown' };
+  if (!Number.isFinite(current)) return { label: 'Stock a verifier', cls: 'unknown' };
   if (current <= 0) return { label: 'Stock insuffisant', cls: 'bad' };
   if (current < qty) return { label: 'Stock insuffisant', cls: 'bad' };
   return { label: 'Stock disponible', cls: 'ok' };
@@ -75,9 +74,9 @@ function stockIndicator(reqItem) {
 
 function adviceLabel(reqItem, nowTs) {
   const badge = priorityBadge(reqItem, nowTs);
-  if (badge.cls === 'late' || badge.cls === 'urgent') return 'Conseil : traiter cette demande en priorité';
+  if (badge.cls === 'late' || badge.cls === 'urgent') return 'Conseil : traiter cette demande en priorite';
   const stock = stockIndicator(reqItem);
-  if (stock.cls === 'unknown') return 'Conseil : vérifier le stock avant validation';
+  if (stock.cls === 'unknown') return 'Conseil : verifier le stock avant validation';
   if (stock.cls === 'bad') return 'Conseil : stock insuffisant';
   return 'Conseil : validation possible';
 }
@@ -90,23 +89,23 @@ function formatDateTime(value) {
 
 function alertAgeLabel(value, nowTs) {
   const ts = asTimestamp(value);
-  if (!ts) return 'Détection non datée';
+  if (!ts) return 'Detection non datee';
   const hours = Math.max(0, Math.floor((nowTs - ts) / MS_PER_HOUR));
-  if (hours < 1) return 'Détectée maintenant';
-  if (hours < 24) return `Détectée il y a ${hours} h`;
+  if (hours < 1) return 'Detectee maintenant';
+  if (hours < 24) return `Detectee il y a ${hours} h`;
   const days = Math.floor(hours / 24);
-  return `Détectée il y a ${days} jour${days > 1 ? 's' : ''}`;
+  return `Detectee il y a ${days} jour${days > 1 ? 's' : ''}`;
 }
 
 const ALERT_TYPE_LABELS = {
-  anomaly: 'Anomalie détectée',
+  anomaly: 'Anomalie detectee',
   rupture: 'Risque de rupture',
   surconsommation: 'Surconsommation',
 };
 
 const RISK_LABELS = {
   high: 'Critique',
-  medium: 'À surveiller',
+  medium: 'A surveiller',
   low: 'Faible',
 };
 
@@ -129,40 +128,6 @@ function recommendedQty(alertItem) {
   return Math.max(10, Math.ceil(target - current));
 }
 
-function alertDecisionId(alertItem) {
-  return `ai-alert-${alertItem?.id || alertItem?.productId || alertItem?.productCode || 'unknown'}`;
-}
-
-function rootCauseHint(alertItem) {
-  const text = `${alertItem?.productName || ''} ${alertItem?.productCode || ''} ${alertItem?.message || ''}`.toLowerCase();
-  if (alertItem?.type === 'surconsommation' && /(filtre|carburant|fuel|injection|generatrice|groupe)/.test(text)) {
-    return {
-      title: 'Cause probable: maintenance equipement',
-      detail: 'Verifier generatrice #4, temperature moteur et defaut injection avant de commander en masse.',
-      source: 'Signal IA + famille technique; capteur IoT a confirmer.',
-    };
-  }
-  if (alertItem?.type === 'surconsommation') {
-    return {
-      title: 'Cause probable: usage terrain atypique',
-      detail: 'Comparer les sorties recentes avec les OT maintenance et les demandes par direction.',
-      source: 'Signal consommation + historique stock.',
-    };
-  }
-  if (alertItem?.type === 'rupture') {
-    return {
-      title: 'Cause probable: couverture insuffisante',
-      detail: 'Le stock est sous la cible de securite; securiser une commande ou un transfert interne.',
-      source: 'Seuil minimum + stock courant.',
-    };
-  }
-  return {
-    title: 'Cause probable: anomalie operationnelle',
-    detail: 'Controler la derniere sortie, le beneficiaire et le lot avant de cloturer cette alerte.',
-    source: 'Detection IA explicable.',
-  };
-}
-
 function healthFromAlerts(alerts) {
   const active = alerts.filter((a) => a.status !== 'reviewed');
   const high = active.filter((a) => a.risk === 'high').length;
@@ -179,6 +144,98 @@ function healthFromAlerts(alerts) {
     critical: 'Crise active',
   }[level];
   return { score, level, label, active: active.length, reviewed };
+}
+
+function formatUnits(value) {
+  const n = Number(value);
+  if (!Number.isFinite(n)) return '-';
+  return `${Math.round(n)} u.`;
+}
+
+function diagnosticForAlert(alertItem, copilotSignal) {
+  const current = alertItem?.currentStock ?? '-';
+  const daysCover = Number(copilotSignal?.days_cover_estimate);
+  const riskPct = Number(copilotSignal?.risk_probability);
+  const anomalyScore = Number(copilotSignal?.anomaly_score);
+
+  if (alertItem?.type === 'rupture') {
+    const label = alertItem.risk === 'high' || Number(alertItem.currentStock || 0) <= 0
+      ? 'Rupture critique'
+      : 'Risque de rupture';
+    const detail = Number.isFinite(daysCover) && daysCover <= 7
+      ? `couverture ${Math.max(0, Math.round(daysCover))} j`
+      : `stock ${current}`;
+    return { label, detail, tone: alertItem.risk === 'high' ? 'critical' : 'warning' };
+  }
+
+  if (alertItem?.type === 'surconsommation') {
+    const detail = Number.isFinite(riskPct) ? `risque ${Math.round(riskPct)}%` : 'consommation anormale';
+    return { label: 'Surconsommation detectee', detail, tone: 'warning' };
+  }
+
+  const detail = Number.isFinite(anomalyScore) ? `score anomalie ${Math.round(anomalyScore)}%` : 'ecart a verifier';
+  return {
+    label: alertItem?.risk === 'high' ? 'Ecart suspect critique' : 'Ecart inventaire suspect',
+    detail,
+    tone: alertItem?.risk === 'high' ? 'critical' : 'info',
+  };
+}
+
+function adaptiveThresholdLabel(alertItem, copilotSignal) {
+  const recommended = Number(copilotSignal?.recommended_threshold);
+  const minimum = Number(alertItem?.minStock);
+  if (Number.isFinite(recommended) && recommended > 0 && Math.abs(recommended - minimum) >= 1) {
+    return `Seuil conseille: ${formatUnits(recommended)}`;
+  }
+  if (Number.isFinite(minimum)) return `Fixe: min ${formatUnits(minimum)}`;
+  return 'Seuil dynamique';
+}
+
+function actionLabelForAlert(alertItem, copilotStep) {
+  if (copilotStep?.action) return String(copilotStep.action);
+  if (alertItem?.type === 'surconsommation') return 'Verifier fuite / audit';
+  if (alertItem?.type === 'anomaly') return 'Inventaire tournant';
+  return `Commander ${formatUnits(recommendedQty(alertItem))}`;
+}
+
+function riskFromAiScore(value) {
+  const n = Number(value);
+  if (!Number.isFinite(n)) return 'low';
+  if (n >= 70) return 'high';
+  if (n >= 40) return 'medium';
+  return 'low';
+}
+
+function mapCopilotRiskAlert(row, index) {
+  const currentStock = Number(row?.current_stock ?? row?.stock_anchor ?? 0);
+  const minStock = Number(row?.seuil_minimum ?? row?.recommended_threshold ?? 0);
+  const risk = riskFromAiScore(row?.risk_probability);
+  const anomaly = Number(row?.anomaly_score || 0);
+  const daysCover = Number(row?.days_cover_estimate);
+  const type = anomaly >= 55 && risk !== 'high'
+    ? 'anomaly'
+    : Number.isFinite(daysCover) && daysCover > 7 && risk === 'medium'
+      ? 'surconsommation'
+      : 'rupture';
+
+  return {
+    id: `ai-risk-${row?.product_id || row?.code_product || index}`,
+    productId: row?.product_id || null,
+    type,
+    typeLabel: ALERT_TYPE_LABELS[type] || 'Alerte IA',
+    risk,
+    riskLabel: RISK_LABELS[risk],
+    message: row?.explanation || row?.why || 'Signal calcule depuis les donnees stock et consommation.',
+    status: 'new',
+    detectedAt: row?.generated_at || new Date().toISOString(),
+    detectedAtLabel: formatDateTime(row?.generated_at || new Date().toISOString()),
+    productName: row?.product_name || row?.name || 'Produit',
+    productCode: row?.code_product || row?.product_code || '-',
+    productStatus: currentStock <= 0 ? 'rupture' : currentStock <= minStock ? 'sous seuil' : 'a surveiller',
+    family: row?.family || '-',
+    currentStock: Number.isFinite(currentStock) ? currentStock : null,
+    minStock: Number.isFinite(minStock) ? minStock : null,
+  };
 }
 
 const mapRequest = (r) => ({
@@ -217,7 +274,7 @@ const mapAiAlert = (a) => {
     typeLabel: ALERT_TYPE_LABELS[String(a?.alert_type || '').toLowerCase()] || 'Alerte IA',
     risk,
     riskLabel: RISK_LABELS[risk],
-    message: a?.message || 'Signal IA à examiner.',
+    message: a?.message || 'Signal IA a examiner.',
     status: String(a?.status || 'new').toLowerCase(),
     detectedAt: a?.detected_at || a?.createdAt,
     detectedAtLabel: formatDateTime(a?.detected_at || a?.createdAt),
@@ -232,6 +289,7 @@ const mapAiAlert = (a) => {
 
 const PilotageResp = ({ userName, onLogout }) => {
   const toast = useToast();
+  const promptAction = usePrompt();
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const activeTab = searchParams.get('tab') === 'alertes' ? 'alertes' : 'validations';
@@ -258,7 +316,7 @@ const PilotageResp = ({ userName, onLogout }) => {
       const pendingReqs = await get('/requests?status=pending');
       setPendingRequests(Array.isArray(pendingReqs) ? pendingReqs : []);
     } catch (err) {
-      toast.error('Impossible de charger les demandes. Veuillez réessayer.');
+      toast.error('Impossible de charger les demandes. Veuillez reessayer.');
     } finally {
       setIsLoading(false);
     }
@@ -274,7 +332,7 @@ const PilotageResp = ({ userName, onLogout }) => {
       setAiAlerts(Array.isArray(rows) ? rows : []);
       setAiCopilot(copilotRes || null);
     } catch (err) {
-      toast.error('Impossible de charger les alertes IA. Veuillez réessayer.');
+      toast.error('Impossible de charger les alertes IA. Veuillez reessayer.');
     } finally {
       setIsLoading(false);
     }
@@ -330,10 +388,22 @@ const PilotageResp = ({ userName, onLogout }) => {
     return next;
   }, [mappedPendingRequests, urgentRequestsFirst, urgentRequestsOnly]);
 
-  const mappedAiAlerts = useMemo(
+  const persistedAiAlerts = useMemo(
     () => (Array.isArray(aiAlerts) ? aiAlerts : []).map(mapAiAlert),
     [aiAlerts]
   );
+
+  const copilotRiskAlerts = useMemo(() => (
+    Array.isArray(aiCopilot?.top_risk_products)
+      ? aiCopilot.top_risk_products.map(mapCopilotRiskAlert)
+      : []
+  ), [aiCopilot]);
+
+  const mappedAiAlerts = useMemo(() => (
+    persistedAiAlerts.some((a) => a.status !== 'reviewed') || !copilotRiskAlerts.length
+      ? persistedAiAlerts
+      : copilotRiskAlerts
+  ), [copilotRiskAlerts, persistedAiAlerts]);
 
   const alertKpis = useMemo(() => {
     const total = mappedAiAlerts.length;
@@ -347,33 +417,32 @@ const PilotageResp = ({ userName, onLogout }) => {
 
   const healthIndex = useMemo(() => healthFromAlerts(mappedAiAlerts), [mappedAiAlerts]);
 
-  const batchReordering = useMemo(() => {
-    const candidates = mappedAiAlerts
-      .filter((a) => a.status !== 'reviewed' && (a.type === 'rupture' || a.risk === 'high'))
-      .sort((a, b) => {
-        const riskRank = { high: 3, medium: 2, low: 1 };
-        const r = (riskRank[b.risk] || 0) - (riskRank[a.risk] || 0);
-        if (r !== 0) return r;
-        return recommendedQty(b) - recommendedQty(a);
-      });
+  const analyticSummary = useMemo(() => {
+    const copilotScore = Number(aiCopilot?.operational_intelligence?.global_score);
+    const globalScore = Number.isFinite(copilotScore) ? Math.round(copilotScore) : healthIndex.score;
+    const anomalyActive = mappedAiAlerts.filter((a) => a.status !== 'reviewed' && a.type === 'anomaly').length;
+    const ruptureActive = mappedAiAlerts.filter((a) => a.status !== 'reviewed' && a.type === 'rupture').length;
     return {
-      candidates,
-      first: candidates[0] || null,
-      totalQty: candidates.reduce((sum, item) => sum + recommendedQty(item), 0),
+      globalScore,
+      stockTone: globalScore >= 70 ? 'ok' : globalScore >= 45 ? 'warning' : 'critical',
+      stockLabel: globalScore >= 70 ? 'Stable' : globalScore >= 45 ? 'Sous surveillance' : 'Critique',
+      anomalyActive,
+      anomalyLabel: anomalyActive > 0 ? 'Actives' : 'Aucune',
+      ruptureActive,
     };
-  }, [mappedAiAlerts]);
-
-  const topCrisisAlert = useMemo(
-    () => mappedAiAlerts.find((a) => a.status !== 'reviewed' && a.risk === 'high') || mappedAiAlerts.find((a) => a.status !== 'reviewed') || null,
-    [mappedAiAlerts]
-  );
+  }, [aiCopilot, healthIndex.score, mappedAiAlerts]);
 
   const copilotByProduct = useMemo(() => {
     const map = new Map();
     const actionPlan = Array.isArray(aiCopilot?.action_plan) ? aiCopilot.action_plan : [];
+    const topRiskProducts = Array.isArray(aiCopilot?.top_risk_products) ? aiCopilot.top_risk_products : [];
+    topRiskProducts.forEach((signal) => {
+      const id = String(signal?.product_id || '').trim();
+      if (id) map.set(id, { signal });
+    });
     actionPlan.forEach((step) => {
       const id = String(step?.product_id || '').trim();
-      if (id) map.set(id, step);
+      if (id) map.set(id, { ...(map.get(id) || {}), step });
     });
     return map;
   }, [aiCopilot]);
@@ -392,7 +461,15 @@ const PilotageResp = ({ userName, onLogout }) => {
     const next = status === 'rejected' ? 'rejected' : 'validated';
     let note = null;
     if (next === 'rejected') {
-      const input = window.prompt('Motif du rejet (optionnel) :');
+      const input = await promptAction({
+        title: 'Rejeter la decision',
+        badge: 'Motif optionnel',
+        message: 'Ajoutez un motif si necessaire pour garder une trace claire.',
+        label: 'Motif du rejet',
+        confirmLabel: 'Rejeter',
+        variant: 'danger',
+        required: false,
+      });
       if (input === null) return;
       note = String(input || '').trim();
     }
@@ -402,32 +479,19 @@ const PilotageResp = ({ userName, onLogout }) => {
       await patch(`/requests/${id}/validate`, note ? { status: next, note } : { status: next });
       await loadRequests();
       toast.success(next === 'validated'
-        ? 'Demande validée et envoyée au magasinier.'
-        : 'Demande rejetée avec succès.');
+        ? 'Demande validee et envoyee au magasinier.'
+        : 'Demande rejetee avec succes.');
     } catch (err) {
       const msg = String(err?.message || '');
       if (next === 'validated' && msg.toLowerCase().includes('stock insuffisant')) {
-        toast.error('Stock insuffisant : vérification nécessaire avant validation.');
+        toast.error('Stock insuffisant : verification necessaire avant validation.');
       } else {
-        toast.error('Impossible de traiter cette demande. Veuillez réessayer.');
+        toast.error('Impossible de traiter cette demande. Veuillez reessayer.');
       }
     } finally {
       setIsSubmitting(false);
     }
-  }, [loadRequests, toast]);
-
-  const handleRefreshAiAlerts = useCallback(async () => {
-    setIsSubmitting(true);
-    try {
-      await post('/ai/alerts/refresh', { window_days: 90, max_products: 400, max_anomalies: 25 });
-      await loadAiAlerts();
-      toast.success('Alertes IA recalculées.');
-    } catch (err) {
-      toast.error('Impossible de recalculer les alertes IA pour le moment.');
-    } finally {
-      setIsSubmitting(false);
-    }
-  }, [loadAiAlerts, toast]);
+  }, [loadRequests, promptAction, toast]);
 
   const handleReviewAlert = useCallback(async (alertId, actionTaken = 'Revue responsable depuis le centre alertes IA') => {
     if (!alertId) return;
@@ -435,9 +499,9 @@ const PilotageResp = ({ userName, onLogout }) => {
     try {
       await patch(`/ai/alerts/${alertId}/review`, { action_taken: actionTaken });
       await loadAiAlerts();
-      toast.success('Alerte IA marquée comme revue.');
+      toast.success('Alerte IA marquee comme revue.');
     } catch (err) {
-      toast.error('Impossible de mettre à jour cette alerte IA.');
+      toast.error('Impossible de mettre a jour cette alerte IA.');
     } finally {
       setIsSubmitting(false);
     }
@@ -457,21 +521,12 @@ const PilotageResp = ({ userName, onLogout }) => {
     navigate(`/responsable/commandes/nouvelle?${params.toString()}`);
   }, [navigate, toast]);
 
-  const openCrisisRoom = useCallback((alertItem) => {
-    const params = new URLSearchParams({
-      source: 'alerte_ia',
-      product: alertItem?.productCode || alertItem?.productName || 'stock',
-      decision: alertDecisionId(alertItem),
-    });
-    navigate(`/responsable/chatbot?${params.toString()}`);
-  }, [navigate]);
-
   const openProductStock = useCallback((alertItem) => {
     navigate(`/responsable/produits?q=${encodeURIComponent(alertItem?.productCode || alertItem?.productName || '')}`);
   }, [navigate]);
 
   const nowTs = Date.now();
-  const pageTitle = activeTab === 'alertes' ? 'Alertes IA' : 'Demandes à traiter';
+  const pageTitle = activeTab === 'alertes' ? 'Alertes IA' : 'Demandes a traiter';
 
   return (
     <ProtectedPage userName={userName}>
@@ -500,105 +555,35 @@ const PilotageResp = ({ userName, onLogout }) => {
             <div className={`pilotage-page ${activeTab === 'validations' ? 'pilotage-page-validations' : 'pilotage-page-alertes'}`}>
               {activeTab === 'alertes' ? (
                 <section className="pilotage-ai-space">
-                  <div className="pilotage-ai-hero">
-                    <div className="pilotage-ai-orbit" aria-hidden="true">
-                      <Bot size={26} />
-                    </div>
-                    <div>
-                      <span className="pilotage-eyebrow">Surveillance intelligente</span>
-                      <h2>Alertes IA stock et consommation</h2>
-                      <p>
-                        Les signaux critiques sont priorisés par niveau de risque pour agir avant rupture,
-                        anomalie ou surconsommation.
-                      </p>
-                    </div>
-                    <button
-                      type="button"
-                      className="pilotage-refresh ai"
-                      onClick={handleRefreshAiAlerts}
-                      disabled={isLoading || isSubmitting}
-                      title="Recalculer les alertes IA"
-                    >
-                      <RefreshCw size={16} />
-                      <span>Recalculer</span>
-                    </button>
+                  <div className="pilotage-performance-grid">
+                    <article className={`pilotage-performance-card ${analyticSummary.stockTone}`}>
+                      <div>
+                        <span>Santé globale du stock</span>
+                        <strong>{analyticSummary.globalScore} / 100</strong>
+                        <small>Synthese operationnelle</small>
+                      </div>
+                      <em>{analyticSummary.stockLabel}</em>
+                    </article>
+                    <article className={analyticSummary.anomalyActive ? 'pilotage-performance-card warning' : 'pilotage-performance-card ok'}>
+                      <div>
+                        <span>Analyse des anomalies</span>
+                        <strong>{analyticSummary.anomalyLabel}</strong>
+                        <small>Controle automatique</small>
+                      </div>
+                      <em>{analyticSummary.anomalyActive} signal(aux)</em>
+                    </article>
+                    <article className={analyticSummary.ruptureActive ? 'pilotage-performance-card critical' : 'pilotage-performance-card ok'}>
+                      <div>
+                        <span>Articles en rupture</span>
+                        <strong>{analyticSummary.ruptureActive}</strong>
+                        <small>Surveillance stock</small>
+                      </div>
+                      <em>{analyticSummary.ruptureActive ? 'Alerte' : 'Stable'}</em>
+                    </article>
                   </div>
-
-                  <div className="pilotage-ai-kpis">
-                    <div className="pilotage-ai-kpi critical"><AlertTriangle size={18} /><span>Critiques</span><strong>{alertKpis.high}</strong></div>
-                    <div className="pilotage-ai-kpi"><Activity size={18} /><span>Nouvelles</span><strong>{alertKpis.newAlerts}</strong></div>
-                    <div className="pilotage-ai-kpi"><Package size={18} /><span>Ruptures</span><strong>{alertKpis.rupture}</strong></div>
-                    <div className="pilotage-ai-kpi health"><Gauge size={18} /><span>Stock Health Index</span><strong>{healthIndex.score}/100</strong></div>
-                  </div>
-
-                  <section className="pilotage-intelligence-grid">
-                    <div className={`pilotage-health-panel ${healthIndex.level}`}>
-                      <div className="pilotage-health-score" style={{ '--score': `${healthIndex.score}%` }}>
-                        <span>{healthIndex.score}</span>
-                      </div>
-                      <div className="pilotage-health-copy">
-                        <span className="pilotage-eyebrow">SHI dynamique</span>
-                        <h3>{healthIndex.label}</h3>
-                        <p>{healthIndex.active} alerte(s) active(s), {healthIndex.reviewed} revue(s). Objectif equipe: traiter les critiques en moins de 2h.</p>
-                        <div className="pilotage-badges">
-                          <span><Trophy size={14} /> Sprint critique</span>
-                          <span><CheckCircle size={14} /> Tracabilite revue</span>
-                        </div>
-                      </div>
-                    </div>
-
-                    <div className="pilotage-smart-reorder">
-                      <div className="pilotage-panel-head">
-                        <h3><ShoppingCart size={18} /> Micro-validation commandes</h3>
-                        <span>{batchReordering.candidates.length} candidat(s)</span>
-                      </div>
-                      <p>
-                        Lot propose: {batchReordering.totalQty} unite(s) sur les ruptures et risques critiques.
-                        Prix, delai et fournisseur seront recalcules dans le formulaire de commande.
-                      </p>
-                      <div className="pilotage-panel-actions">
-                        <button
-                          type="button"
-                          className="pilotage-btn primary"
-                          onClick={() => batchReordering.first && openOrderDraft(batchReordering.first)}
-                          disabled={!batchReordering.first}
-                        >
-                          <ShoppingCart size={15} /> Preparer premier lot
-                        </button>
-                        <button
-                          type="button"
-                          className="pilotage-btn ghost"
-                          onClick={() => navigate('/responsable/produits?filter=critiques')}
-                        >
-                          <Package size={15} /> Voir critiques
-                        </button>
-                      </div>
-                    </div>
-
-                    <div className="pilotage-crisis-room">
-                      <div className="pilotage-panel-head">
-                        <h3><Users size={18} /> Salle de crise IA</h3>
-                        <span>{topCrisisAlert ? topCrisisAlert.riskLabel : 'Stable'}</span>
-                      </div>
-                      {topCrisisAlert ? (
-                        <>
-                          <p>
-                            Triage propose pour {topCrisisAlert.productName}: responsable site, acheteur et magasinier.
-                            L'assistant prepare les faits, l'ordre du jour et le compte-rendu.
-                          </p>
-                          <button type="button" className="pilotage-btn ghost" onClick={() => openCrisisRoom(topCrisisAlert)}>
-                            <MessageSquare size={15} /> Ouvrir triage IA
-                          </button>
-                        </>
-                      ) : (
-                        <p>Aucune alerte active ne necessite de salle de crise.</p>
-                      )}
-                    </div>
-                  </section>
 
                   <section className="pilotage-card">
-                    <div className="pilotage-card-head ai-head">
-                      <h3><Sparkles size={18} /> Signaux IA à traiter</h3>
+<div className="pilotage-analytics-toolbar">
                       <div className="pilotage-inline-actions ai-filters">
                         <select value={alertRiskFilter} onChange={(e) => setAlertRiskFilter(e.target.value)} aria-label="Filtrer par risque">
                           <option value="all">Tous risques</option>
@@ -618,6 +603,7 @@ const PilotageResp = ({ userName, onLogout }) => {
                           <option value="all">Toutes</option>
                         </select>
                       </div>
+                      <span>{filteredAiAlerts.length} ligne(s) / {alertKpis.total} alerte(s)</span>
                     </div>
 
                     {!filteredAiAlerts.length ? (
@@ -627,111 +613,87 @@ const PilotageResp = ({ userName, onLogout }) => {
                         <div className="pilotage-empty-sub">Recalculez les signaux ou élargissez les filtres.</div>
                       </div>
                     ) : (
-                      <div className="pilotage-alert-grid">
-                        {filteredAiAlerts.map((alertItem, index) => {
-                          const ratio = alertItem.currentStock != null && alertItem.minStock
-                            ? Math.min(100, Math.max(0, Math.round((alertItem.currentStock / alertItem.minStock) * 100)))
-                            : null;
-                          const cause = rootCauseHint(alertItem);
-                          const qty = recommendedQty(alertItem);
-                          const copilotStep = alertItem.productId ? copilotByProduct.get(String(alertItem.productId)) : null;
-                          return (
-                            <article
-                              key={alertItem.id || `${alertItem.productCode}-${index}`}
-                              className={`pilotage-alert-card ${alertItem.risk} ${alertItem.status === 'reviewed' ? 'reviewed' : ''}`}
-                              style={{ '--delay': `${Math.min(index, 10) * 55}ms` }}
-                            >
-                              <div className="pilotage-alert-top">
-                                <span className={`pilotage-risk-dot ${alertItem.risk}`} />
-                                <div>
-                                  <strong>{alertItem.productName}</strong>
-                                  <span>{alertItem.productCode}</span>
-                                </div>
-                                <span className={`pilotage-risk-pill ${alertItem.risk}`}>{alertItem.riskLabel}</span>
-                              </div>
-
-                              <div className="pilotage-alert-type">
-                                <Sparkles size={16} />
-                                <span>{alertItem.typeLabel}</span>
-                              </div>
-
-                              <p>{alertItem.message}</p>
-
-                              <div className="pilotage-alert-metrics">
-                                <div><span>Stock actuel</span><strong>{alertItem.currentStock ?? '-'}</strong></div>
-                                <div><span>Seuil min.</span><strong>{alertItem.minStock ?? '-'}</strong></div>
-                                <div><span>Statut</span><strong>{alertItem.productStatus}</strong></div>
-                              </div>
-
-                              {ratio != null ? (
-                                <div className="pilotage-stock-track" aria-label={`Couverture stock ${ratio}%`}>
-                                  <span style={{ width: `${ratio}%` }} />
-                                </div>
-                              ) : null}
-
-                              <div className="pilotage-root-cause">
-                                <Wrench size={16} />
-                                <div>
-                                  <strong>{cause.title}</strong>
-                                  <span>{cause.detail}</span>
-                                  <small>{cause.source}</small>
-                                </div>
-                              </div>
-
-                              <div className="pilotage-playbook">
-                                <div className="pilotage-playbook-head">
-                                  <Sparkles size={15} />
-                                  <strong>GenAI Playbook</strong>
-                                  {copilotStep?.action ? <span>{copilotStep.action}</span> : null}
-                                </div>
-                                <div className="pilotage-playbook-options">
-                                  <button type="button" onClick={() => openProductStock(alertItem)}>
-                                    <ArrowLeftRight size={15} />
-                                    <span>Option A</span>
-                                    <strong>Verifier transfert interne {qty} u.</strong>
-                                  </button>
-                                  <button type="button" onClick={() => openOrderDraft(alertItem)}>
-                                    <ShoppingCart size={15} />
-                                    <span>Option B</span>
-                                    <strong>Commande fournisseur express</strong>
-                                  </button>
-                                  <button type="button" onClick={() => openCrisisRoom(alertItem)}>
-                                    <MessageSquare size={15} />
-                                    <span>Option C</span>
-                                    <strong>Triage collaboratif IA</strong>
-                                  </button>
-                                </div>
-                              </div>
-
-                              <div className="pilotage-alert-footer">
-                                <span><Clock size={14} /> {alertAgeLabel(alertItem.detectedAt, nowTs)}</span>
-                                <span>{alertItem.detectedAtLabel}</span>
-                              </div>
-
-                              <div className="pilotage-alert-actions">
-                                <button
-                                  type="button"
-                                  className="pilotage-btn ghost"
-                                  onClick={() => navigate(`/responsable/produits?q=${encodeURIComponent(alertItem.productCode || alertItem.productName)}`)}
+                      <div className="pilotage-analytics-table-wrap">
+                        <table className="pilotage-analytics-table">
+                          <thead>
+                            <tr>
+                              <th>Produit (ID)</th>
+                              <th>Diagnostic de l'IA</th>
+                              <th>Seuil adaptatif</th>
+                              <th>Plan d'action</th>
+                              <th>Actions immédiates</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {filteredAiAlerts.map((alertItem, index) => {
+                              const copilot = alertItem.productId ? copilotByProduct.get(String(alertItem.productId)) : null;
+                              const copilotStep = copilot?.step;
+                              const copilotSignal = copilot?.signal;
+                              const diagnostic = diagnosticForAlert(alertItem, copilotSignal);
+                              return (
+                                <tr
+                                  key={alertItem.id || `${alertItem.productCode}-${index}`}
+                                  className={alertItem.status === 'reviewed' ? 'reviewed' : ''}
                                 >
-                                  <Eye size={15} /> Voir produit
-                                </button>
-                                {alertItem.status !== 'reviewed' ? (
-                                  <button
-                                    type="button"
-                                    className="pilotage-btn primary"
-                                    onClick={() => handleReviewAlert(alertItem.id, `Revue responsable apres playbook IA: ${cause.title}`)}
-                                    disabled={isSubmitting}
-                                  >
-                                    <CheckCircle size={15} /> Marquer revue
-                                  </button>
-                                ) : (
-                                  <span className="pilotage-reviewed-badge"><CheckCircle size={15} /> Revue</span>
-                                )}
-                              </div>
-                            </article>
-                          );
-                        })}
+                                  <td>
+                                    <strong>{alertItem.productName}</strong>
+                                    <span>{alertItem.productCode}</span>
+                                    <small><Clock size={13} /> {alertAgeLabel(alertItem.detectedAt, nowTs)}</small>
+                                  </td>
+                                  <td>
+                                    <span className={`pilotage-diagnostic ${diagnostic.tone}`}>{diagnostic.label}</span>
+                                    <small>{diagnostic.detail} · {alertItem.message}</small>
+                                  </td>
+                                  <td>
+                                    <span className="pilotage-threshold">{adaptiveThresholdLabel(alertItem, copilotSignal)}</span>
+                                    <small>Seuil calcule automatiquement</small>
+                                  </td>
+                                  <td>
+                                    <strong className="pilotage-action-plan">{actionLabelForAlert(alertItem, copilotStep)}</strong>
+                                    <small>Action proposee par l'assistant</small>
+                                  </td>
+                                  <td>
+                                    <div className="pilotage-table-actions">
+                                      {alertItem.type === 'rupture' ? (
+                                        <button type="button" className="pilotage-mini-btn danger" onClick={() => openOrderDraft(alertItem)}>
+                                          <ShoppingCart size={14} /> Commande Express
+                                        </button>
+                                      ) : null}
+                                      {alertItem.type === 'surconsommation' ? (
+                                        <button type="button" className="pilotage-mini-btn warning" onClick={() => openProductStock(alertItem)}>
+                                          <Eye size={14} /> Audit
+                                        </button>
+                                      ) : null}
+                                      {alertItem.type === 'anomaly' ? (
+                                        <button type="button" className="pilotage-mini-btn warning" onClick={() => navigate('/responsable/inventaires')}>
+                                          <Activity size={14} /> Inventaire
+                                        </button>
+                                      ) : null}
+                                      <button type="button" className="pilotage-mini-btn ghost" onClick={() => openProductStock(alertItem)}>
+                                        <ArrowLeftRight size={14} /> Transfert
+                                      </button>
+                                      <button type="button" className="pilotage-mini-btn ghost" onClick={() => navigate('/responsable/regles-stock')}>
+                                        <SlidersHorizontal size={14} /> Ajuster Seuil
+                                      </button>
+                                      {alertItem.status !== 'reviewed' ? (
+                                        <button
+                                          type="button"
+                                          className="pilotage-mini-btn ok"
+                                          onClick={() => handleReviewAlert(alertItem.id, `Revue responsable: ${diagnostic.label}`)}
+                                          disabled={isSubmitting}
+                                        >
+                                          <CheckCircle size={14} /> Revue
+                                        </button>
+                                      ) : (
+                                        <span className="pilotage-reviewed-badge compact"><CheckCircle size={14} /> Revue</span>
+                                      )}
+                                    </div>
+                                  </td>
+                                </tr>
+                              );
+                            })}
+                          </tbody>
+                        </table>
                       </div>
                     )}
                   </section>
@@ -740,8 +702,8 @@ const PilotageResp = ({ userName, onLogout }) => {
                 <section className="pilotage-card pilotage-validations-card">
                   <div className="pilotage-card-head">
                     <div className="pilotage-card-titleblock">
-                      <h3><Package size={18} /> Demandes à valider</h3>
-                      <small>Flux : demandeur → responsable → magasinier</small>
+                      <h3><Package size={18} /> Demandes a valider</h3>
+                      <small>Flux : demandeur â†’ responsable â†’ magasinier</small>
                     </div>
                     <div className="pilotage-inline-actions">
                       <label className="pilotage-checkbox">
@@ -775,8 +737,8 @@ const PilotageResp = ({ userName, onLogout }) => {
 
                   {!filteredPendingRequests.length ? (
                     <div className="pilotage-empty-box">
-                      <div>Aucune demande à traiter pour le moment.</div>
-                      <div className="pilotage-empty-sub">Les nouvelles demandes apparaîtront ici dès leur création.</div>
+                      <div>Aucune demande a traiter pour le moment.</div>
+                      <div className="pilotage-empty-sub">Les nouvelles demandes apparaitront ici des leur creation.</div>
                     </div>
                   ) : (
                     <div className="pilotage-pending-list">
@@ -800,7 +762,7 @@ const PilotageResp = ({ userName, onLogout }) => {
 
                             <div className="pilotage-pending-grid">
                               <div><label>Code</label><span>{reqItem.codeProduit}</span></div>
-                              <div><label>Quantité</label><span>{reqItem.quantite}</span></div>
+                              <div><label>Quantite</label><span>{reqItem.quantite}</span></div>
                               <div><label>Demandeur</label><span>{reqItem.demandeur}</span></div>
                               <div><label>Direction</label><span>{reqItem.direction}</span></div>
                             </div>
@@ -812,7 +774,7 @@ const PilotageResp = ({ userName, onLogout }) => {
                             </div>
 
                             <div className="pilotage-impact">
-                              Après validation, la demande sera envoyée au magasinier pour préparation.
+                              Apres validation, la demande sera envoyee au magasinier pour preparation.
                             </div>
 
                             {reqItem.note ? <p className="pilotage-pending-desc">{reqItem.note}</p> : null}

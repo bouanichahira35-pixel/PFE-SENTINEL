@@ -1,3 +1,7 @@
+// BLOC 1 - Role du fichier.
+// Ce fichier regroupe des fonctions utilitaires frontend autour de uiLanguage.
+// Point de vigilance: modifier avec prudence car ce fichier peut etre importe par plusieurs modules.
+
 import { useEffect, useState } from 'react';
 
 const LANG_KEY = 'uiLanguage';

@@ -1,3 +1,7 @@
+// BLOC 1 - Role du fichier.
+// Ce fichier controle les requetes avant les routes pour le sujet perfMonitor.
+// Point de vigilance: modifier avec prudence car ce fichier peut etre importe par plusieurs modules.
+
 const { record } = require('../services/perfMonitorService');
 const { onIncident } = require('../services/adminIncidentService');
 

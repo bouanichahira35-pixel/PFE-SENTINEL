@@ -1,3 +1,7 @@
+// BLOC 1 - Role du fichier.
+// Ce fichier contient la logique metier reutilisable du domaine alertService, appelee par les routes ou les jobs.
+// Point de vigilance: preserver les contrats appeles par plusieurs routes.
+
 const User = require('../models/User');
 const Notification = require('../models/Notification');
 const AIAlert = require('../models/AIAlert');
@@ -8,9 +12,12 @@ const { enqueueMail } = require('./mailQueueService');
 const { getUserPreferences, canSendNotificationEmail } = require('./userPreferencesService');
 const { logSecurityEvent } = require('./securityAuditService');
 
-async function createNotificationsForStockTeams({ title, message, type = 'warning' }, session = null) {
+async function createNotificationsForStockTeams({ title, message, type = 'warning', eventType = '', targetRoles = ['responsable'] }, session = null) {
+  const roles = Array.isArray(targetRoles) && targetRoles.length
+    ? targetRoles.filter((role) => ['responsable', 'magasinier'].includes(String(role)))
+    : ['responsable'];
   const teams = await User.find({
-    role: { $in: ['responsable', 'magasinier'] },
+    role: { $in: roles },
     status: 'active',
   }).select('_id email role').session(session);
   if (!teams.length) return;
@@ -21,6 +28,7 @@ async function createNotificationsForStockTeams({ title, message, type = 'warnin
     message,
     type,
     is_read: false,
+    event_type: eventType,
   }));
   if (session) {
     await Notification.insertMany(docs, { session });
@@ -37,7 +45,7 @@ async function createNotificationsForStockTeams({ title, message, type = 'warnin
         const prefs = await getUserPreferences(teamUser._id);
         if (!canSendNotificationEmail(prefs, 'stock')) continue;
         await enqueueMail({
-          kind: 'stock_alert',
+          kind: eventType || 'stock_alert',
           role: teamUser.role,
           to: teamUser.email,
           subject: title,
@@ -72,7 +80,7 @@ async function evaluateProductAlerts(product, session = null) {
     const title = 'Alerte stock';
     const message = `${product.name} est ${statusLabel}. Quantite restante: ${qty}, seuil: ${seuil}.`;
 
-    await createNotificationsForStockTeams({ title, message, type: 'alert' }, session);
+    await createNotificationsForStockTeams({ title, message, type: 'alert', eventType: 'STOCK_ALERT' }, session);
 
     const alertDoc = {
       product: product._id,
@@ -98,7 +106,7 @@ async function evaluateProductAlerts(product, session = null) {
   if (expiringLots.length) {
     const title = 'Alerte peremption';
     const message = `${product.name}: ${expiringLots.length} lot(s) proches de la peremption.`;
-    await createNotificationsForStockTeams({ title, message, type: 'warning' }, session);
+    await createNotificationsForStockTeams({ title, message, type: 'warning', eventType: 'STOCK_EXPIRY_ALERT' }, session);
     const alertDoc = {
       product: product._id,
       alert_type: 'anomaly',
@@ -266,6 +274,8 @@ async function buildHistoryAnomalyAlerts({
           title: 'Anomalie de sortie detectee',
           message,
           type: riskLevel === 'high' ? 'alert' : 'warning',
+          eventType: 'STOCK_ANOMALY_DETECTED',
+          targetRoles: ['responsable'],
         }
       );
     }

@@ -1,3 +1,7 @@
+// BLOC 1 - Role du fichier.
+// Ce fichier organise les appels API ou la logique frontend partagee pour fournisseurAlertService.
+// Point de vigilance: modifier avec prudence car ce fichier peut etre importe par plusieurs modules.
+
 import { get, patch } from './api';
 
 export const ALERT_STATUS = Object.freeze({

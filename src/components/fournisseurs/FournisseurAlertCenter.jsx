@@ -1,3 +1,7 @@
+// BLOC 1 - Role du fichier.
+// Ce fichier fournit un composant React specialise pour FournisseurAlertCenter.
+// Point de vigilance: garder les props, appels API et classes CSS synchronises avec les ecrans existants.
+
 import { ShieldAlert } from 'lucide-react';
 import { ALERT_STATUS, alertActionRoute, alertPill } from '../../services/fournisseurAlertService';
 import './fournisseurs.css';

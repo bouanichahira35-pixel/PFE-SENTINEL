@@ -1,3 +1,7 @@
+// BLOC 1 - Role du fichier.
+// Ce fichier expose les endpoints REST du domaine admin et controle les regles d'acces cote API.
+// Point de vigilance: verifier l'authentification, les roles et les validations avant toute modification.
+
 const router = require('express').Router();
 const requireAuth = require('../middlewares/requireAuth');
 const User = require('../models/User');
@@ -92,6 +96,20 @@ function buildDailySeries(rows, days) {
 function scorePart(label, score, detail) {
   const n = Math.max(0, Math.min(100, Math.round(Number(score || 0))));
   return { label, score: n, detail };
+}
+
+const ADMIN_HISTORY_ACTIONS = [
+  'block',
+  'user_create',
+  'user_update',
+  'user_delete',
+  'ai_admin',
+];
+
+function toAuditTime(item) {
+  const raw = item?.audit_date || item?.date_event || item?.date_action || item?.createdAt;
+  const date = new Date(raw || 0);
+  return Number.isNaN(date.getTime()) ? 0 : date.getTime();
 }
 
 // Mini-console Support utilisateurs (tickets)
@@ -203,8 +221,8 @@ router.get('/overview', requireAuth, async (req, res) => {
 });
 
 // GET /api/admin/audit-history
-// Admin console audit feed. It deliberately uses admin role access instead of
-// the broader HISTORY_READ permission because this page is part of the admin shell.
+// Admin console audit feed. This is intentionally not the operational stock
+// history: admins need access, security, account and configuration evidence.
 router.get('/audit-history', requireAuth, async (req, res) => {
   try {
     if (!ensureAdmin(req, res)) return;
@@ -212,27 +230,60 @@ router.get('/audit-history', requireAuth, async (req, res) => {
     const page = Math.max(1, Number(req.query.page || 1));
     const limit = Math.min(500, Math.max(1, Number(req.query.limit || 200)));
     const skip = (page - 1) * limit;
+    const fetchLimit = Math.min(1000, skip + limit);
+    const source = String(req.query.source || '').trim().toLowerCase();
+    const actionType = String(req.query.action_type || req.query.event_type || '').trim();
 
-    const filter = {};
-    if (req.query.action_type) filter.action_type = req.query.action_type;
-    if (req.query.user) filter.user = req.query.user;
-    if (req.query.product) filter.product = req.query.product;
-    if (req.query.request) filter.request = req.query.request;
-    if (req.query.source) filter.source = req.query.source;
-    if (req.query.status_after) filter.status_after = req.query.status_after;
-    if (req.query.correlation_id) filter.correlation_id = req.query.correlation_id;
+    const securityFilter = {};
+    const historyFilter = { action_type: { $in: ADMIN_HISTORY_ACTIONS } };
+    if (req.query.user) {
+      securityFilter.user = req.query.user;
+      historyFilter.user = req.query.user;
+    }
+    if (actionType) {
+      securityFilter.event_type = actionType;
+      historyFilter.action_type = ADMIN_HISTORY_ACTIONS.includes(actionType) ? actionType : '__none__';
+    }
+    if (req.query.correlation_id) historyFilter.correlation_id = req.query.correlation_id;
 
-    const [items, total] = await Promise.all([
-      History.find(filter)
-        .sort({ date_action: -1 })
-        .skip(skip)
-        .limit(limit)
-        .populate('user', SAFE_USER_FIELDS)
-        .populate('product')
-        .populate('request')
-        .lean(),
-      History.countDocuments(filter),
+    const includeSecurity = source !== 'history';
+    const includeHistory = source !== 'security';
+
+    const [securityItems, securityTotal, historyItems, historyTotal] = await Promise.all([
+      includeSecurity
+        ? SecurityAudit.find(securityFilter)
+          .sort({ date_event: -1, createdAt: -1 })
+          .limit(fetchLimit)
+          .populate('user', SAFE_USER_FIELDS)
+          .lean()
+        : Promise.resolve([]),
+      includeSecurity ? SecurityAudit.countDocuments(securityFilter) : Promise.resolve(0),
+      includeHistory
+        ? History.find(historyFilter)
+          .sort({ date_action: -1, createdAt: -1 })
+          .limit(fetchLimit)
+          .populate('user', SAFE_USER_FIELDS)
+          .lean()
+        : Promise.resolve([]),
+      includeHistory ? History.countDocuments(historyFilter) : Promise.resolve(0),
     ]);
+
+    const merged = [
+      ...securityItems.map((item) => ({
+        ...item,
+        audit_source: 'security',
+        audit_date: item.date_event || item.createdAt,
+        action_type: item.event_type,
+      })),
+      ...historyItems.map((item) => ({
+        ...item,
+        audit_source: 'configuration',
+        audit_date: item.date_action || item.createdAt,
+      })),
+    ].sort((a, b) => toAuditTime(b) - toAuditTime(a));
+
+    const items = merged.slice(skip, skip + limit);
+    const total = Number(securityTotal || 0) + Number(historyTotal || 0);
 
     return res.json({
       ok: true,

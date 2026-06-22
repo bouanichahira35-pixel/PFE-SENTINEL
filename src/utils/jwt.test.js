@@ -1,3 +1,7 @@
+// BLOC 1 - Role du fichier.
+// Ce fichier regroupe des fonctions utilitaires frontend autour de jwt.test.
+// Point de vigilance: modifier avec prudence car ce fichier peut etre importe par plusieurs modules.
+
 import { decodeJwtPayload } from "./jwt";
 
 function base64UrlEncodeJson(value) {

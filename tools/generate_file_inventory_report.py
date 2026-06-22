@@ -1,3 +1,7 @@
+# BLOC 1 - Role du fichier.
+# Ce fichier sert d'outil local pour generate_file_inventory_report.
+# Point de vigilance: modifier avec prudence car ce fichier peut etre importe par plusieurs modules.
+
 from pathlib import Path
 from datetime import datetime
 from reportlab.lib import colors
@@ -167,6 +171,8 @@ def explain(path: str) -> str:
         return "Configuration Docker ou Nginx."
     if p.startswith("docs/"):
         return "Documentation ou artefact de rapport du projet."
+    if p.startswith("extra/"):
+        return "Archive de travail: reference, capture, PDF ou script temporaire hors runtime applicatif."
     if p.startswith("tools/"):
         return "Outil local pour developpement, generation ou service du build."
 
@@ -194,6 +200,8 @@ def section_for(path: str) -> str:
         return "Public"
     if path.startswith("docs/"):
         return "Documentation"
+    if path.startswith("extra/"):
+        return "Extra"
     if path.startswith("docker/"):
         return "Docker"
     if path.startswith("tools/"):
@@ -214,8 +222,8 @@ def cleanup_note(path: str) -> str:
         return "Candidat nettoyage: log temporaire, supprimable si non utilise pour diagnostic."
     if p.startswith("frontend/"):
         return "A verifier: possible doublon ancien du frontend principal. Ne pas supprimer sans validation."
-    if p in {"backend/tmp-list-users.js", "backend/tmp-list-products.js"}:
-        return "A verifier: script temporaire de diagnostic. Peut etre archive ou supprime apres confirmation."
+    if p in {"extra/tmp-list-users.js", "extra/tmp-list-products.js"}:
+        return "Archive: script temporaire de diagnostic MongoDB. Ne fait pas partie du backend runtime."
     if p.endswith(".md") and p.startswith("backend/docs/"):
         return "Documentation utile pour comprendre le backend. A garder."
     if p.startswith("docs/") and p.endswith(".zip"):

@@ -1,3 +1,7 @@
+// BLOC 1 - Role du fichier.
+// Ce fichier expose les endpoints REST du domaine history et controle les regles d'acces cote API.
+// Point de vigilance: verifier l'authentification, les roles et les validations avant toute modification.
+
 const router = require('express').Router();
 const zlib = require('zlib');
 const History = require('../models/History');

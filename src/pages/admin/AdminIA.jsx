@@ -1,3 +1,7 @@
+// BLOC 1 - Role du fichier.
+// Ce fichier affiche une page de l'espace administrateur pour AdminIA.
+// Point de vigilance: garder les props, appels API et classes CSS synchronises avec les ecrans existants.
+
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Bot, Save, RefreshCw, Sparkles, Wrench, Play, ListChecks, AlertTriangle } from 'lucide-react';
 import SidebarAdmin from '../../components/admin/SidebarAdmin';

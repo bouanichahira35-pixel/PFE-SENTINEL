@@ -1,3 +1,7 @@
+// BLOC 1 - Role du fichier.
+// Ce fichier fournit un composant React partage pour ProtectedImage.
+// Point de vigilance: garder les props, appels API et classes CSS synchronises avec les ecrans existants.
+
 import useProtectedFileUrl from '../../hooks/useProtectedFileUrl';
 
 const DEFAULT_STYLE = { background: 'linear-gradient(135deg, rgba(15,118,110,.08), rgba(14,165,233,.10))' };

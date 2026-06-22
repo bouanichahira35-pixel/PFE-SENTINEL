@@ -1,0 +1,79 @@
+/*
+ * BLOC 1 - Role du fichier.
+ * Ce fichier stylise le module SupportItTickets partage entre responsable, magasinier et demandeur.
+ * Point de vigilance: garder les styles scopes sous .support-it pour ne pas polluer les autres pages.
+ */
+
+.support-it {
+  color: var(--color-text-primary, #0f172a);
+}
+
+.support-it .users-list {
+  border: 1px solid var(--color-border, #e2e8f0);
+  border-radius: 12px;
+  background: var(--color-bg-primary, #fff);
+  padding: 12px;
+}
+
+.support-it .user-item {
+  display: flex;
+  gap: 12px;
+}
+
+.support-it .user-info {
+  min-width: 0;
+}
+
+.support-it .users-empty {
+  border: 1px dashed var(--color-border, #cbd5e1);
+  border-radius: 12px;
+  color: var(--color-text-secondary, #64748b);
+  padding: 14px;
+  font-weight: 800;
+}
+
+.support-it .btn-user {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 36px;
+  padding: 8px 12px;
+  border-radius: 8px;
+  border: 1px solid var(--color-border, #cbd5e1);
+  background: var(--color-bg-primary, #fff);
+  color: var(--color-text-primary, #0f172a);
+  cursor: pointer;
+  font-size: 0.82rem;
+  font-weight: 900;
+  line-height: 1.15;
+}
+
+.support-it .btn-user.secondary:hover {
+  background: var(--color-bg-secondary, #f8fafc);
+}
+
+.support-it .btn-user.success {
+  background: #10b981;
+  color: #fff;
+  border-color: #10b981;
+}
+
+.support-it .btn-user.success:hover {
+  background: #059669;
+}
+
+.support-it .btn-user:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+@media (max-width: 720px) {
+  .support-it .users-list {
+    padding: 10px;
+  }
+
+  .support-it .btn-user {
+    width: 100%;
+  }
+}

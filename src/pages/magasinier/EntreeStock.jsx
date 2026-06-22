@@ -1,3 +1,7 @@
+// BLOC 1 - Role du fichier.
+// Ce fichier affiche une page de l'espace magasinier pour EntreeStock.
+// Point de vigilance: garder les props, appels API et classes CSS synchronises avec les ecrans existants.
+
 import { useCallback, useMemo, useRef, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import {

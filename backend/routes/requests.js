@@ -1,3 +1,7 @@
+// BLOC 1 - Role du fichier.
+// Ce fichier expose les endpoints REST du domaine requests et controle les regles d'acces cote API.
+// Point de vigilance: verifier l'authentification, les roles et les validations avant toute modification.
+
 const router = require('express').Router();
 const Request = require('../models/Request');
 const Product = require('../models/Product');
@@ -66,7 +70,9 @@ async function notifyDemandeurOnStatusChange(requestDoc, actorUsername, actorRol
   const statusUpper = statusLabel(status);
   const productName = requestDoc.product?.name || 'Produit';
   const quantity = Number(requestDoc.quantity_requested || 0);
-  const subject = `Statut de votre demande: ${statusUpper}`;
+  const subject = status === 'served'
+    ? 'Votre demande est servie'
+    : `Statut de votre demande: ${statusUpper}`;
   const actor = actorUsername || (actorRole === 'responsable' ? 'le responsable' : 'le magasinier');
   const responseNote = String(requestDoc.note || '').trim();
   const dateValue = requestDoc.validated_at
@@ -82,7 +88,9 @@ async function notifyDemandeurOnStatusChange(requestDoc, actorUsername, actorRol
       ? `Decision responsable: ${statusUpper}`
       : `Traitement magasinier: ${statusUpper}`;
   const text = [
-    `Votre demande est maintenant: ${statusUpper}.`,
+    status === 'served'
+      ? 'Votre demande a ete servie par le magasinier. Vous pouvez confirmer la reception.'
+      : `Votre demande est maintenant: ${statusUpper}.`,
     `Produit: ${productName}`,
     `Quantite demandee: ${quantity}`,
     decisionLine,
@@ -111,6 +119,7 @@ async function notifyDemandeurOnStatusChange(requestDoc, actorUsername, actorRol
       message: text,
       type: status === 'rejected' ? 'warning' : 'info',
       is_read: false,
+      event_type: status === 'served' ? 'REQUEST_SERVED_FOR_DEMANDEUR' : `REQUEST_STATUS_${status.toUpperCase()}`,
     });
   } catch {
     // Keep request processing resilient even if notification persistence fails.
@@ -157,7 +166,7 @@ async function notifyDemandeurOnStatusChange(requestDoc, actorUsername, actorRol
 async function notifyStockTeamsOnNewRequest(requestDoc) {
   try {
     const teams = await User.find({
-      role: { $in: ['magasinier', 'responsable'] },
+      role: 'responsable',
       status: 'active',
     }).select('_id email username role').lean();
     if (!teams.length) return;
@@ -179,11 +188,12 @@ async function notifyStockTeamsOnNewRequest(requestDoc) {
         message: text,
         type: urgent ? 'alert' : 'info',
         is_read: false,
+        event_type: 'REQUEST_CREATED_FOR_RESPONSABLE',
       }))
     );
 
-    // Policy: demandeur does not receive email on request creation.
-    // Stock teams (magasinier/responsable) can receive email based on their preferences.
+    // Policy: demandeur and magasinier do not receive email on request creation.
+    // Responsable receives the request first because validation is required before preparation.
     const appUrl = process.env.APP_BASE_URL || process.env.FRONTEND_URL || '';
     for (const teamUser of teams) {
       if (!teamUser.email) continue;
@@ -196,11 +206,7 @@ async function notifyStockTeamsOnNewRequest(requestDoc) {
           if (!canSendNotificationEmail(prefs, 'demandes')) continue;
         }
 
-        const rolePath = teamUser.role === 'magasinier'
-          ? '/magasinier/demandes'
-          : teamUser.role === 'responsable'
-            ? '/responsable'
-            : `/${teamUser.role || ''}`;
+        const rolePath = '/responsable/pilotage';
         const targetUrl = appUrl ? `${appUrl}${rolePath}` : '';
         const teamText = [
           `Bonjour ${teamUser.username || ''},`,
@@ -233,6 +239,73 @@ async function notifyStockTeamsOnNewRequest(requestDoc) {
     }
   } catch {
     // Keep request creation resilient.
+  }
+}
+
+async function notifyMagasiniersOnRequestValidated(requestDoc) {
+  try {
+    if (normalizeRequestStatus(requestDoc?.status) !== 'validated') return;
+    const magasiniers = await User.find({ role: 'magasinier', status: 'active' })
+      .select('_id email username role')
+      .lean();
+    if (!magasiniers.length) return;
+
+    const productName = requestDoc?.product?.name || 'Produit';
+    const quantity = Number(requestDoc?.quantity_requested || 0);
+    const demandeur = requestDoc?.demandeur?.username || 'Demandeur';
+    const subject = 'Demande validee a preparer';
+    const text = [
+      `Produit: ${productName}`,
+      `Quantite: ${quantity}`,
+      `Demandeur: ${demandeur}`,
+      'La demande est validee par le responsable et attend la preparation.',
+    ].join('\n');
+
+    await Notification.insertMany(magasiniers.map((u) => ({
+      user: u._id,
+      title: subject,
+      message: text,
+      type: 'info',
+      is_read: false,
+      event_type: 'REQUEST_VALIDATED_FOR_MAGASINIER',
+    })));
+
+    const appUrl = process.env.APP_BASE_URL || process.env.FRONTEND_URL || '';
+    for (const magasinier of magasiniers) {
+      if (!magasinier.email) continue;
+      try {
+        const prefs = await getUserPreferences(magasinier._id);
+        if (!canSendNotificationEmail(prefs, 'demandes')) continue;
+        const targetUrl = appUrl ? `${appUrl}/magasinier/inbox` : '';
+        const mailText = [
+          `Bonjour ${magasinier.username || ''},`,
+          '',
+          text,
+          targetUrl ? `Ouvrir le centre de preparation: ${targetUrl}` : null,
+        ].filter(Boolean).join('\n');
+        await enqueueMail({
+          kind: 'request_validated_magasinier',
+          role: 'magasinier',
+          to: magasinier.email,
+          subject,
+          text: mailText,
+          html: `<p>${mailText.replace(/\n/g, '<br/>')}</p>`,
+          job_id: `request_validated_magasinier_${requestDoc?._id || Date.now()}_${magasinier._id}_${Date.now()}`,
+        });
+      } catch (err) {
+        await logSecurityEvent({
+          event_type: 'email_failed',
+          user: magasinier._id,
+          email: magasinier.email,
+          role: 'magasinier',
+          success: false,
+          details: `Request validated magasinier mail enqueue failed: ${err?.message || 'unknown_error'}`,
+          after: { request_id: requestDoc?._id || null },
+        });
+      }
+    }
+  } catch {
+    // Keep validation resilient.
   }
 }
 
@@ -439,6 +512,7 @@ router.patch(
       return reqDoc;
     });
     await notifyDemandeurOnStatusChange(updated, req.user.username, req.user.role);
+    await notifyMagasiniersOnRequestValidated(updated);
     return res.json(serializeRequest(updated));
   } catch (err) {
     if (String(err?.message || '').includes('not found')) {
@@ -888,22 +962,64 @@ router.patch(
     });
 
     try {
-      const teams = await User.find({ role: { $in: ['magasinier', 'responsable'] }, status: 'active' })
-        .select('_id username role')
-        .limit(40)
-        .lean();
+      const targetId = updated.served_by || updated.prepared_by;
+      const teams = targetId
+        ? await User.find({ _id: targetId, role: 'magasinier', status: 'active' })
+          .select('_id username email role')
+          .lean()
+        : [];
       if (teams.length) {
+        const subject = 'Reception confirmee par le demandeur';
+        const text = [
+          `Demande: DEM-${String(updated._id).slice(-6).toUpperCase()}`,
+          `Produit: ${updated.product?.name || 'Produit'}`,
+          `Demandeur: ${updated.demandeur?.username || 'demandeur'}`,
+          'Le demandeur a confirme la reception.',
+        ].join('\n');
+
         await Notification.insertMany(teams.map((u) => ({
           user: u._id,
-          title: 'Demande cloturee',
-          message: [
-            `Demande: DEM-${String(updated._id).slice(-6).toUpperCase()}`,
-            `Produit: ${updated.product?.name || 'Produit'}`,
-            `Par: ${updated.demandeur?.username || 'demandeur'}`,
-          ].join('\n'),
+          title: subject,
+          message: text,
           type: 'info',
           is_read: false,
+          event_type: 'REQUEST_RECEIPT_CONFIRMED',
         })));
+
+        const appUrl = process.env.APP_BASE_URL || process.env.FRONTEND_URL || '';
+        for (const magasinier of teams) {
+          if (!magasinier.email) continue;
+          try {
+            const prefs = await getUserPreferences(magasinier._id);
+            if (!canSendNotificationEmail(prefs, 'demandes')) continue;
+            const targetUrl = appUrl ? `${appUrl}/magasinier/inbox` : '';
+            const mailText = [
+              `Bonjour ${magasinier.username || ''},`,
+              '',
+              text,
+              targetUrl ? `Ouvrir le centre de preparation: ${targetUrl}` : null,
+            ].filter(Boolean).join('\n');
+            await enqueueMail({
+              kind: 'request_receipt_confirmed_magasinier',
+              role: 'magasinier',
+              to: magasinier.email,
+              subject,
+              text: mailText,
+              html: `<p>${mailText.replace(/\n/g, '<br/>')}</p>`,
+              job_id: `request_receipt_confirmed_${updated._id}_${magasinier._id}_${Date.now()}`,
+            });
+          } catch (err) {
+            await logSecurityEvent({
+              event_type: 'email_failed',
+              user: magasinier._id,
+              email: magasinier.email,
+              role: 'magasinier',
+              success: false,
+              details: `Receipt confirmation magasinier mail enqueue failed: ${err?.message || 'unknown_error'}`,
+              after: { request_id: updated?._id || null },
+            });
+          }
+        }
       }
     } catch {
       // best-effort

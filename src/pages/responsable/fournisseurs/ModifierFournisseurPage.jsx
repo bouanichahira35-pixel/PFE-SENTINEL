@@ -1,3 +1,7 @@
+// BLOC 1 - Role du fichier.
+// Ce fichier affiche une page du module fournisseurs responsable pour ModifierFournisseurPage.
+// Point de vigilance: garder les props, appels API et classes CSS synchronises avec les ecrans existants.
+
 import { useEffect, useState } from 'react';
 import { Truck } from 'lucide-react';
 import { useNavigate, useParams } from 'react-router-dom';
@@ -6,6 +10,7 @@ import SidebarResp from '../../../components/responsable/SidebarResp';
 import HeaderPage from '../../../components/shared/HeaderPage';
 import LoadingSpinner from '../../../components/shared/LoadingSpinner';
 import { useToast } from '../../../components/shared/Toast';
+import { useConfirm } from '../../../components/shared/ConfirmDialog';
 import FournisseurForm from '../../../components/fournisseurs/FournisseurForm';
 import { getFournisseur, updateFournisseur } from '../../../services/fournisseurService';
 
@@ -13,6 +18,7 @@ import '../FournisseursResp.css';
 
 const ModifierFournisseurPage = ({ userName, onLogout }) => {
   const toast = useToast();
+  const confirmAction = useConfirm();
   const { id } = useParams();
   const navigate = useNavigate();
   const [sidebarCollapsed, setSidebarCollapsed] = useState(() => (typeof window !== 'undefined' ? window.innerWidth <= 768 : false));
@@ -67,9 +73,15 @@ const ModifierFournisseurPage = ({ userName, onLogout }) => {
       const code = err?.data?.code;
       if (code === 'DUPLICATE_WARNING') {
         const list = Array.isArray(err?.data?.potential_duplicates) ? err.data.potential_duplicates : [];
-        const names = list.slice(0, 5).map((d) => `- ${d.name} (${d.similarity ?? '?'})`).join('\n');
-        // eslint-disable-next-line no-alert
-        const ok = window.confirm(`Doublon potentiel détecté.\n\n${names}\n\nMettre à jour quand même ?`);
+        const details = list.slice(0, 5).map((d) => `${d.name} (${d.similarity ?? '?'})`);
+        const ok = await confirmAction({
+          title: 'Doublon potentiel detecte',
+          badge: 'Verification requise',
+          message: 'Des fiches fournisseurs proches existent deja. Voulez-vous mettre a jour quand meme ?',
+          details,
+          confirmLabel: 'Mettre a jour',
+          variant: 'warning',
+        });
         if (ok) {
           await updateFournisseur(sid, { ...payload, confirm_duplicate: true });
           toast.success('Fournisseur mis à jour.');

@@ -1,3 +1,9 @@
+/*
+ * BLOC 1 - Role du fichier.
+ * Ce fichier affiche une page de l'espace responsable pour ChatbotResp.
+ * Point de vigilance: garder les props, appels API et classes CSS synchronises avec les ecrans existants.
+ */
+
 .main-content.chatbot-main {
   --chat-surface: var(--color-bg-primary);
   --chat-surface-soft: color-mix(in srgb, var(--color-bg-primary) 78%, var(--color-bg-secondary));
@@ -160,6 +166,39 @@
 
 .chatbot-ai-hint strong {
   color: #92400e;
+}
+
+.chatbot-alert-context {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 0.7rem;
+  padding: 0.85rem;
+  border: 1px solid rgba(25, 118, 210, 0.22);
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--chat-surface) 86%, var(--chat-primary));
+  box-shadow: 0 12px 30px rgba(15, 23, 42, 0.06);
+}
+
+.chatbot-alert-context div {
+  min-width: 0;
+  display: grid;
+  gap: 0.2rem;
+}
+
+.chatbot-alert-context span {
+  color: var(--chat-muted);
+  font-size: 0.72rem;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.chatbot-alert-context strong {
+  min-width: 0;
+  color: var(--chat-text);
+  font-size: 0.9rem;
+  font-weight: 850;
+  overflow-wrap: anywhere;
 }
 
 .chatbot-toolbar {
@@ -366,6 +405,18 @@
   background: rgba(5, 150, 105, 0.1);
 }
 
+.source-badge.groq {
+  color: #1d4ed8;
+  border-color: rgba(37, 99, 235, 0.28);
+  background: rgba(37, 99, 235, 0.1);
+}
+
+.source-badge.fallback {
+  color: #92400e;
+  border-color: rgba(245, 158, 11, 0.32);
+  background: rgba(245, 158, 11, 0.12);
+}
+
 .source-badge.local {
   color: #475569;
 }
@@ -544,10 +595,15 @@
 
   .chatbot-header,
   .chatbot-capabilities,
+  .chatbot-alert-context,
   .chatbot-toolbar,
   .chatbot-suggestions,
   .chatbot-input {
     border-radius: 8px;
+  }
+
+  .chatbot-alert-context {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
   .chatbot-toolbar {
@@ -590,6 +646,10 @@
 
   .chatbot-capabilities {
     gap: 0.45rem;
+  }
+
+  .chatbot-alert-context {
+    grid-template-columns: 1fr;
   }
 
   .cap-pill {

@@ -1,3 +1,9 @@
+/*
+ * BLOC 1 - Role du fichier.
+ * Ce fichier definit le style visuel associe a darkModeCompatibility.
+ * Point de vigilance: verifier les impacts responsive avant de renommer une classe.
+ */
+
 /* Compatibility bridge for legacy screens that still use hard-coded light surfaces.
    Keep new code on the token system instead of extending this list. */
 [data-theme="dark"] {

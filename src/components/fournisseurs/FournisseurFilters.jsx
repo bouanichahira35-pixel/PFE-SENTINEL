@@ -1,3 +1,7 @@
+// BLOC 1 - Role du fichier.
+// Ce fichier fournit un composant React specialise pour FournisseurFilters.
+// Point de vigilance: garder les props, appels API et classes CSS synchronises avec les ecrans existants.
+
 import './fournisseurs.css';
 
 const DOMAINES = [

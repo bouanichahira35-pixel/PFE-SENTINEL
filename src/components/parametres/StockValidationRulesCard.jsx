@@ -1,3 +1,7 @@
+// BLOC 1 - Role du fichier.
+// Ce fichier fournit un composant React specialise pour StockValidationRulesCard.
+// Point de vigilance: garder les props, appels API et classes CSS synchronises avec les ecrans existants.
+
 import { CheckCircle2, ShieldAlert } from 'lucide-react';
 
 function ToggleRow({ label, desc, checked, onChange, disabled }) {

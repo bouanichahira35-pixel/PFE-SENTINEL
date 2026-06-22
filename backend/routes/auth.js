@@ -10,12 +10,6 @@ const UserSession = require('../models/UserSession');
 const { normalizeRole, isTechnicalRole, getStoredRoleCandidates } = require('../constants/roles');
 const { logSecurityEvent } = require('../services/securityAuditService');
 const { sendMailOrThrow, isMailConfigured } = require('../services/mailerService');
-const {
-  isTwilioSmsConfigured,
-  isTwilioWhatsappConfigured,
-  sendSmsOrThrow,
-  sendWhatsappOrThrow,
-} = require('../services/twilioService');
 const requireAuth = require('../middlewares/requireAuth');
 const { getSessionInactivityMs, formatInactivityMessage } = require('../utils/sessionPolicy');
 
@@ -38,8 +32,6 @@ const RESET_MAIL_SEND_TIMEOUT_MS = Math.max(
 const OTP_MAIL_SEND_RETRIES = Math.max(1, Number(process.env.OTP_MAIL_SEND_RETRIES || 2));
 const OTP_MAIL_RETRY_DELAY_MS = Math.max(0, Number(process.env.OTP_MAIL_RETRY_DELAY_MS || 1200));
 const IS_PROD = String(process.env.NODE_ENV || '').trim().toLowerCase() === 'production';
-const RESET_DEV_OTP_ENABLED =
-  !IS_PROD && String(process.env.RESET_DEV_OTP_ENABLED || 'true').trim().toLowerCase() === 'true';
 
 const REFRESH_COOKIE_NAME = String(process.env.REFRESH_COOKIE_NAME || 'sentinel_refresh').trim();
 
@@ -132,13 +124,15 @@ function normalizePhone(raw) {
   return cleaned;
 }
 
-function normalizeOtpChannel(raw) {
-  const key = String(raw || '').trim().toLowerCase();
-  if (!key) return 'email';
-  if (['email', 'mail'].includes(key)) return 'email';
-  if (['sms', 'phone', 'tel', 'telephone'].includes(key)) return 'sms';
-  if (['whatsapp', 'wa'].includes(key)) return 'whatsapp';
-  return key;
+function normalizeResetChannel(raw) {
+  const key = String(raw || 'email').trim().toLowerCase();
+  if (key === 'mail') return 'email';
+  if (key === 'email') return key;
+  return '';
+}
+
+function getResetRecipient(user) {
+  return String(user?.email || '').trim().toLowerCase();
 }
 
 function buildIdentifierQuery(identifier) {
@@ -201,7 +195,8 @@ function delay(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-async function sendPasswordResetOtpOrThrow({ to, role, rawCode, ttlMinutes }) {
+async function sendPasswordResetOtpOrThrow({ to, rawCode, ttlMinutes }) {
+  const messageText = `Votre code SENTINEL est ${rawCode}. Il expire dans ${ttlMinutes} minutes.`;
   let lastError = null;
 
   for (let attempt = 1; attempt <= OTP_MAIL_SEND_RETRIES; attempt += 1) {
@@ -210,13 +205,13 @@ async function sendPasswordResetOtpOrThrow({ to, role, rawCode, ttlMinutes }) {
         sendMailOrThrow({
           to,
           subject: 'Code de reinitialisation mot de passe',
-          text: `Votre code est: ${rawCode}. Il expire dans ${ttlMinutes} minutes.`,
+          text: messageText,
           html: `<p>Votre code de reinitialisation est: <b>${rawCode}</b></p><p>Il expire dans ${ttlMinutes} minutes.</p>`,
         }),
         RESET_MAIL_SEND_TIMEOUT_MS,
         'mail_send_timeout'
       );
-      return;
+      return { channel: 'email' };
     } catch (err) {
       lastError = err;
       if (attempt < OTP_MAIL_SEND_RETRIES && OTP_MAIL_RETRY_DELAY_MS > 0) {
@@ -489,16 +484,16 @@ router.post('/login', async (req, res) => {
 
 // POST /api/auth/forgot-password/request
 // BLOC 4 - Demande de code de recuperation.
-// POST /api/auth/forgot-password/request envoie un code par email, SMS ou WhatsApp.
+// POST /api/auth/forgot-password/request envoie un code par email uniquement.
 router.post('/forgot-password/request', async (req, res) => {
   try {
     const identifier = extractIdentifier(req.body);
     const role = req.body?.role;
-    const channel = normalizeOtpChannel(req.body?.channel);
+    const channel = normalizeResetChannel(req.body?.channel);
 
     if (!identifier) return res.status(400).json({ error: 'email ou identifier obligatoire' });
-    if (!['email', 'sms', 'whatsapp'].includes(channel)) {
-      return res.status(400).json({ error: 'Canal invalide (email, sms, whatsapp)' });
+    if (!channel) {
+      return res.status(400).json({ error: 'Canal de reinitialisation invalide. Utilisez email.' });
     }
 
     let normalizedRole = null;
@@ -568,122 +563,68 @@ router.post('/forgot-password/request', async (req, res) => {
       await PasswordReset.updateOne({ _id: resetDoc._id }, { $set: { status: 'expired' } });
     }
 
-    async function sendDevOtp(details) {
+    const recipient = getResetRecipient(user);
+    if (!recipient) {
+      await expireReset();
       await logSecurityEvent({
-        event_type: 'password_reset_request',
+        event_type: 'otp_failed',
         user: user._id,
         email: user.email,
         role: canonicalRole,
         ip_address: ip,
         user_agent: ua,
-        success: true,
-        details,
+        success: false,
+        details: 'OTP email failed: recipient_missing',
       });
-      return res.json({
-        message: 'Si ce compte existe, un code a ete envoye.',
-        dev_otp: rawCode,
-        cooldown_seconds: cooldownSeconds,
-      });
+      return res.status(400).json({ error: 'Email utilisateur indisponible.' });
     }
 
-    if (channel === 'email') {
-      const mailConfigured = isMailConfigured();
-      if (!mailConfigured) {
-        if (IS_PROD || !RESET_DEV_OTP_ENABLED) {
-          await expireReset();
-          return res.status(503).json({ error: 'Service email indisponible. Contactez l administrateur.' });
-        }
+    if (!isMailConfigured()) {
+      await expireReset();
+      await logSecurityEvent({
+        event_type: 'otp_failed',
+        user: user._id,
+        email: user.email,
+        role: canonicalRole,
+        ip_address: ip,
+        user_agent: ua,
+        success: false,
+        details: 'OTP email failed: mail_not_configured',
+      });
+      return res.status(503).json({ error: 'Service email indisponible. Contactez l administrateur.' });
+    }
 
-        return await sendDevOtp('DEV_OTP returned (MAIL not configured)');
-      }
-
-      try {
-        await sendPasswordResetOtpOrThrow({
-          to: user.email,
-          role: canonicalRole,
-          rawCode,
-          ttlMinutes: RESET_CODE_TTL_MINUTES,
-        });
-
-        await logSecurityEvent({
-          event_type: 'email_sent',
-          user: user._id,
-          email: user.email,
-          role: canonicalRole,
-          ip_address: ip,
-          user_agent: ua,
-          success: true,
-          details: 'OTP email envoye',
-        });
-      } catch (err) {
-        await expireReset();
-
-        await logSecurityEvent({
-          event_type: 'email_failed',
-          user: user._id,
-          email: user.email,
-          role: canonicalRole,
-          ip_address: ip,
-          user_agent: ua,
-          success: false,
-          details: `OTP email failed: ${err?.message || 'mail_failed'}`,
-        });
-
-        return res.status(503).json({ error: 'Echec envoi email. Reessayez dans quelques instants.' });
-      }
-    } else {
-      const destination = normalizePhone(identifier) || normalizePhone(user.telephone);
-      if (!destination) {
-        await expireReset();
-        return res.status(400).json({ error: 'Numero de telephone invalide' });
-      }
-
-      const configured = channel === 'sms' ? isTwilioSmsConfigured() : isTwilioWhatsappConfigured();
-      if (!configured) {
-        if (!IS_PROD && RESET_DEV_OTP_ENABLED) {
-          return await sendDevOtp(`DEV_OTP returned (${channel} not configured)`);
-        }
-        await expireReset();
-        return res.status(503).json({
-          error:
-            channel === 'sms'
-              ? 'Service SMS indisponible. Contactez l administrateur.'
-              : 'Service WhatsApp indisponible. Contactez l administrateur.',
-        });
-      }
-
-      const body = `Votre code est: ${rawCode}. Il expire dans ${RESET_CODE_TTL_MINUTES} minutes.`;
-
-      try {
-        if (channel === 'sms') {
-          await sendSmsOrThrow({ to: destination, body });
-        } else {
-          await sendWhatsappOrThrow({ to: destination, body });
-        }
-      } catch (err) {
-        await expireReset();
-        await logSecurityEvent({
-          event_type: `${channel}_failed`,
-          user: user._id,
-          email: user.email,
-          role: canonicalRole,
-          ip_address: ip,
-          user_agent: ua,
-          success: false,
-          details: `OTP ${channel} failed: ${err?.message || 'send_failed'}`,
-        });
-        return res.status(503).json({ error: 'Echec envoi code. Reessayez dans quelques instants.' });
-      }
+    try {
+      const delivery = await sendPasswordResetOtpOrThrow({
+        to: recipient,
+        rawCode,
+        ttlMinutes: RESET_CODE_TTL_MINUTES,
+      });
 
       await logSecurityEvent({
-        event_type: `${channel}_sent`,
+        event_type: 'otp_sent',
         user: user._id,
         email: user.email,
         role: canonicalRole,
         ip_address: ip,
         user_agent: ua,
         success: true,
-        details: `OTP ${channel} envoye`,
+        details: `OTP ${delivery.channel || channel} envoye`,
+      });
+    } catch (err) {
+      await expireReset();
+      await logSecurityEvent({
+        event_type: 'otp_failed',
+        user: user._id,
+        email: user.email,
+        role: canonicalRole,
+        ip_address: ip,
+        user_agent: ua,
+        success: false,
+        details: `OTP ${channel} failed: ${err?.code || err?.message || 'delivery_failed'}`,
+      });
+      return res.status(err?.statusCode || 503).json({
+        error: 'Echec envoi email. Reessayez dans quelques instants.',
       });
     }
 
@@ -695,10 +636,10 @@ router.post('/forgot-password/request', async (req, res) => {
       ip_address: ip,
       user_agent: ua,
       success: true,
-      details: 'OTP envoye',
+      details: `OTP envoye via ${channel}`,
     });
 
-    return res.json({ message: 'Si ce compte existe, un code a ete envoye.', cooldown_seconds: cooldownSeconds });
+    return res.json({ message: 'Si ce compte existe, un code a ete envoye.', channel, cooldown_seconds: cooldownSeconds });
   } catch (err) {
     return res.status(500).json({ error: 'Erreur serveur' });
   }

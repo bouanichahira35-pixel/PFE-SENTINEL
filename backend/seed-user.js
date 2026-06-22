@@ -1,3 +1,7 @@
+// BLOC 1 - Role du fichier.
+// Ce fichier participe au fonctionnement du module seed-user.
+// Point de vigilance: modifier avec prudence car ce fichier peut etre importe par plusieurs modules.
+
 require('./loadEnv');
 const mongoose = require('./db');
 const bcrypt = require('bcryptjs');

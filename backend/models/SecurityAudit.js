@@ -1,27 +1,12 @@
+// BLOC 1 - Role du fichier.
+// Ce fichier decrit le modele MongoDB SecurityAudit, ses champs, index et regles de validation.
+// Point de vigilance: eviter de changer un champ sans verifier les migrations, seeds, routes et tests.
+
 const mongoose = require('../db');
 
 const securityAuditSchema = new mongoose.Schema(
   {
-    event_type: {
-      type: String,
-      enum: [
-        'login_success',
-        'login_failed',
-        'logout',
-        'logout_all',
-        'password_reset_request',
-        'password_reset_verify',
-        'password_reset_done',
-        'password_change',
-        'token_rejected',
-        'email_sent',
-        'email_failed',
-        'user_status_changed',
-        'session_revoked',
-        'sessions_revoked',
-      ],
-      required: true,
-    },
+    event_type: { type: String, required: true, trim: true, maxlength: 80, index: true },
     user: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
     email: String,
     email_hash: String,

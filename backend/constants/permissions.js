@@ -1,3 +1,7 @@
+// BLOC 1 - Role du fichier.
+// Ce fichier centralise des constantes backend pour permissions.
+// Point de vigilance: modifier avec prudence car ce fichier peut etre importe par plusieurs modules.
+
 const PERMISSIONS = Object.freeze({
   PRODUCT_READ: 'product.read',
   PRODUCT_CREATE: 'product.create',

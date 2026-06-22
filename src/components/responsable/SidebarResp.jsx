@@ -1,3 +1,7 @@
+// BLOC 1 - Role du fichier.
+// Ce fichier fournit un composant React specialise pour SidebarResp.
+// Point de vigilance: garder les props, appels API et classes CSS synchronises avec les ecrans existants.
+
 import { useCallback, useMemo, useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import {
@@ -12,10 +16,10 @@ import {
   History,
   LayoutDashboard,
   LogOut,
+  MessageCircle,
   PackageSearch,
   Settings,
   ShoppingCart,
-  TrendingUp,
   Truck,
 } from 'lucide-react';
 import logoETAP from '../../assets/logoETAP.png';
@@ -81,11 +85,18 @@ function useSections(labels, badges) {
       ],
     },
     {
+      key: 'communication',
+      title: labels.communication,
+      defaultOpen: true,
+      items: [
+        { key: 'chat', icon: MessageCircle, label: labels.chat, to: '/responsable/chat' },
+      ],
+    },
+    {
       key: 'analyse',
       title: labels.analyse,
       defaultOpen: false,
       items: [
-        { key: 'conso',     icon: TrendingUp,    label: labels.consommation, to: '/responsable/consommation' },
         { key: 'alertes',   icon: AlertTriangle, label: labels.alertes,      to: '/responsable/pilotage', search: 'tab=alertes', badge: badges.alertes },
         { key: 'assistant', icon: Bot,           label: labels.assistant,    to: '/responsable/chatbot' },
       ],
@@ -110,7 +121,8 @@ const LABELS = {
     stock: 'STOCK',                   produits: 'Référentiel produit', critiques: 'Produits critiques',
                                       chimique: 'Registre chimique',  transactions: 'Transactions',
     approvisionnement: 'APPROVISIONNEMENT', fournisseurs: 'Fournisseurs', commandes: 'Commandes',
-    analyse: 'ANALYSE & IA',          consommation: 'Consommation',   alertes: 'Alertes',
+    communication: 'COMMUNICATION',        chat: 'Chat',
+    analyse: 'ANALYSE & IA',          alertes: 'Alertes',
                                       assistant: 'Assistant IA',
     compte: 'COMPTE',                 parametres: 'Paramètres',       deconnexion: 'Déconnexion',
   },
@@ -120,7 +132,8 @@ const LABELS = {
     stock: 'STOCK',                   produits: 'Product catalog', critiques: 'Critical products',
                                       chimique: 'Chemical register', transactions: 'Transactions',
     approvisionnement: 'SUPPLY',      fournisseurs: 'Suppliers', commandes: 'Orders',
-    analyse: 'ANALYTICS & AI',        consommation: 'Consumption', alertes: 'Alerts',
+    communication: 'COMMUNICATION',   chat: 'Chat',
+    analyse: 'ANALYTICS & AI',        alertes: 'Alerts',
                                       assistant: 'AI Assistant',
     compte: 'ACCOUNT',                parametres: 'Settings',       deconnexion: 'Logout',
   },

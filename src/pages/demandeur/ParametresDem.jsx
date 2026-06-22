@@ -1,8 +1,13 @@
+// BLOC 1 - Role du fichier.
+// Ce fichier affiche une page de l'espace demandeur pour ParametresDem.
+// Point de vigilance: garder les props, appels API et classes CSS synchronises avec les ecrans existants.
+
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { User, Lock, Bell, Globe, Camera, Save, Eye, EyeOff } from 'lucide-react';
+import { User, Lock, Bell, Globe, Camera, Save, Eye, EyeOff, LifeBuoy } from 'lucide-react';
 import SidebarDem from '../../components/demandeur/SidebarDem';
 import HeaderPage from '../../components/shared/HeaderPage';
 import LoadingSpinner from '../../components/shared/LoadingSpinner';
+import SupportItTickets from '../../components/parametres/SupportItTickets';
 import useProtectedFileUrl from '../../hooks/useProtectedFileUrl';
 import { get, patch, post, uploadFile } from '../../services/api';
 import { useToast } from '../../components/shared/Toast';
@@ -55,6 +60,7 @@ const ParametresDem = ({ userName, onLogout }) => {
     { id: 'securite', label: ({ fr: 'Sécurité', en: 'Security', ar: 'الأمان' }[uiLanguage]), icon: Lock },
     { id: 'notifications', label: ({ fr: 'Notifications', en: 'Notifications', ar: 'الإشعارات' }[uiLanguage]), icon: Bell },
     { id: 'langue', label: ({ fr: 'Langue', en: 'Language', ar: 'اللغة' }[uiLanguage]), icon: Globe },
+    { id: 'support', label: ({ fr: 'Support IT', en: 'IT Support', ar: 'Support IT' }[uiLanguage]), icon: LifeBuoy },
   ]), [uiLanguage]);
 
   const i18n = useMemo(() => ({
@@ -404,6 +410,16 @@ const ParametresDem = ({ userName, onLogout }) => {
                       English
                     </button>
                   </div>
+                </div>
+              )}
+
+              {activeTab === 'support' && (
+                <div className="param-section">
+                  <h2>Support IT demandeur</h2>
+                  <p className="profile-avatar-hint">
+                    Assistance ciblee pour le catalogue, le profil utilisateur et les demandes bloquees.
+                  </p>
+                  <SupportItTickets role="demandeur" />
                 </div>
               )}
             </div>

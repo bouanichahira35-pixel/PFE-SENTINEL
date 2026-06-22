@@ -1,3 +1,7 @@
+// BLOC 1 - Role du fichier.
+// Ce fichier affiche une page du module fournisseurs responsable pour NouveauFournisseurPage.
+// Point de vigilance: garder les props, appels API et classes CSS synchronises avec les ecrans existants.
+
 import { useState } from 'react';
 import { Truck } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
@@ -5,6 +9,7 @@ import { useNavigate } from 'react-router-dom';
 import SidebarResp from '../../../components/responsable/SidebarResp';
 import HeaderPage from '../../../components/shared/HeaderPage';
 import { useToast } from '../../../components/shared/Toast';
+import { useConfirm } from '../../../components/shared/ConfirmDialog';
 import FournisseurForm from '../../../components/fournisseurs/FournisseurForm';
 import { createFournisseur } from '../../../services/fournisseurService';
 
@@ -12,6 +17,7 @@ import '../FournisseursResp.css';
 
 const NouveauFournisseurPage = ({ userName, onLogout }) => {
   const toast = useToast();
+  const confirmAction = useConfirm();
   const navigate = useNavigate();
   const [sidebarCollapsed, setSidebarCollapsed] = useState(() => (typeof window !== 'undefined' ? window.innerWidth <= 768 : false));
   const [saving, setSaving] = useState(false);
@@ -42,9 +48,15 @@ const NouveauFournisseurPage = ({ userName, onLogout }) => {
       const code = err?.data?.code;
       if (code === 'DUPLICATE_WARNING') {
         const list = Array.isArray(err?.data?.potential_duplicates) ? err.data.potential_duplicates : [];
-        const names = list.slice(0, 5).map((d) => `- ${d.name} (${d.similarity ?? '?'})`).join('\n');
-        // eslint-disable-next-line no-alert
-        const ok = window.confirm(`Doublon potentiel détecté.\n\n${names}\n\nCréer quand même ?`);
+        const details = list.slice(0, 5).map((d) => `${d.name} (${d.similarity ?? '?'})`);
+        const ok = await confirmAction({
+          title: 'Doublon potentiel detecte',
+          badge: 'Verification requise',
+          message: 'Des fiches fournisseurs proches existent deja. Voulez-vous creer quand meme ?',
+          details,
+          confirmLabel: 'Creer quand meme',
+          variant: 'warning',
+        });
         if (ok) {
           const confirmed = await createFournisseur({ ...payload, confirm_duplicate: true });
           const sid = String(confirmed?.supplier?._id || confirmed?.supplier?.id || '').trim();

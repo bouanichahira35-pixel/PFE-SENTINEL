@@ -1,3 +1,7 @@
+// BLOC 1 - Role du fichier.
+// Ce fichier fournit un composant React specialise pour SidebarAdmin.
+// Point de vigilance: garder les props, appels API et classes CSS synchronises avec les ecrans existants.
+
 import { Link, useLocation } from 'react-router-dom';
 import {
   Grid3X3,
@@ -6,7 +10,6 @@ import {
   Monitor,
   KeyRound,
   ShieldAlert,
-  FileText,
   Settings,
   Headset,
   ChevronLeft,
@@ -76,6 +79,7 @@ const SidebarAdmin = ({ collapsed, onToggle, onLogout, userName }) => {
       logout: 'Déconnexion',
     },
   }[language] || {};
+  labels.security = 'Securite & Audit';
 
   const sections = [
     {
@@ -89,7 +93,6 @@ const SidebarAdmin = ({ collapsed, onToggle, onLogout, userName }) => {
         { icon: KeyRound, label: labels.roles_permissions || 'Rôles & permissions', path: '/admin/roles-permissions' },
         { icon: Monitor, label: labels.sessions || 'Sessions', path: '/admin/sessions' },
         { icon: ShieldAlert, label: labels.security || 'Sécurité', path: '/admin/securite' },
-        { icon: FileText, label: labels.audit || 'Historique / Audit', path: '/admin/audit' },
       ],
     },
     {

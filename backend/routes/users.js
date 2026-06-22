@@ -1,3 +1,7 @@
+// BLOC 1 - Role du fichier.
+// Ce fichier expose les endpoints REST du domaine users et controle les regles d'acces cote API.
+// Point de vigilance: verifier l'authentification, les roles et les validations avant toute modification.
+
 const router = require('express').Router();
 
 const requireAuth = require('../middlewares/requireAuth');
@@ -18,9 +22,18 @@ const { logSecurityEvent } = require('../services/securityAuditService');
 const { getUserPreferences, canSendNotificationEmail } = require('../services/userPreferencesService');
 const { getRolePermissions } = require('../services/rbacPolicyService');
 const { ERROR_CODES } = require('../constants/errorCodes');
-const { normalizeEmail, normalizePhone, isValidEmail, isValidPhone, isSafeText, isStrongPassword } = require('../utils/validation');
+const {
+  normalizeEmail,
+  normalizePhone,
+  isValidEmail,
+  isValidObjectIdLike,
+  isSafeText,
+  isStrongPassword,
+} = require('../utils/validation');
 
 const PROFILE_VALUES = ['bureautique', 'menage', 'petrole'];
+const ACCOUNT_TYPES = ['interne', 'externe'];
+const PREFERRED_LANGUAGES = ['fr', 'ar', 'en'];
 const LIMITED_MANAGED_ROLES = new Set(['magasinier', 'demandeur']);
 
 function getActorRole(req) {
@@ -36,6 +49,41 @@ function normalizeServiceDirection(value) {
   const raw = String(value || '').trim();
   if (!raw) return '';
   return raw.slice(0, 80);
+}
+
+function normalizeOptionalText(value, max = 80) {
+  const raw = String(value || '').trim();
+  if (!raw) return '';
+  return raw.slice(0, max);
+}
+
+function normalizeEmployeeId(value) {
+  return String(value || '').trim().toUpperCase().slice(0, 24);
+}
+
+function normalizeTunisianPhone(value) {
+  const raw = normalizePhone(value) || '';
+  if (!raw) return '';
+  if (raw.startsWith('+216')) return `+216${raw.slice(4).replace(/\D/g, '').slice(0, 8)}`;
+  const digits = raw.replace(/\D/g, '');
+  const withoutCountry = digits.startsWith('216') ? digits.slice(3) : digits;
+  return `+216${withoutCountry.slice(0, 8)}`;
+}
+
+function isValidTunisianPhone(value) {
+  return /^\+216\d{8}$/.test(String(value || ''));
+}
+
+function parseOptionalDate(value, fieldName) {
+  const raw = String(value || '').trim();
+  if (!raw) return null;
+  const d = new Date(raw);
+  if (Number.isNaN(d.getTime())) {
+    const err = new Error(`${fieldName} invalide`);
+    err.statusCode = 400;
+    throw err;
+  }
+  return d;
 }
 
 function mapServiceToProfile(serviceDirection) {
@@ -77,7 +125,8 @@ router.get('/', requireAnyPermission(PERMISSIONS.USER_LIST, PERMISSIONS.USER_MAN
     }
 
     const users = await User.find(q)
-      .select('_id username email telephone role status date_creation last_login demandeur_profile service_direction image_profile')
+      .select('_id username email telephone role status date_creation last_login demandeur_profile service_direction image_profile employee_id job_title hire_date account_expires_at account_type two_factor_required site_location manager_user preferred_language notification_channels')
+      .populate({ path: 'manager_user', select: '_id username email role' })
       .sort({ role: 1, username: 1 })
       .lean();
 
@@ -159,7 +208,7 @@ router.get('/:id/permissions', requireRole('admin'), async (req, res) => {
 router.patch('/:id/permissions', requireRole('admin'), strictBody(['permissions']), async (req, res) => {
   try {
     const user = await User.findById(req.params.id)
-      .select('_id role rbac_permissions')
+      .select('_id role username email rbac_permissions')
       .lean();
 
     if (!user) return res.status(404).json({ error: 'Utilisateur introuvable' });
@@ -177,6 +226,9 @@ router.patch('/:id/permissions', requireRole('admin'), strictBody(['permissions'
 
     const roleList = Array.from(roleSet.values()).sort();
     const shouldInherit = next.length === roleList.length && next.every((p, i) => p === roleList[i]);
+    const before = Array.isArray(user.rbac_permissions)
+      ? user.rbac_permissions.map((p) => String(p || '').trim()).filter(Boolean).sort()
+      : roleList;
 
     // Safety guard: avoid self lock-out. An admin can only keep full inherited permissions on itself.
     if (String(req.user?.id) === String(user._id) && !shouldInherit) {
@@ -188,6 +240,43 @@ router.patch('/:id/permissions', requireRole('admin'), strictBody(['permissions'
     } else {
       await User.updateOne({ _id: user._id }, { $set: { rbac_permissions: next } });
     }
+    if (typeof requireAuth.invalidateUserSessionsCache === 'function') {
+      requireAuth.invalidateUserSessionsCache(user._id);
+    }
+
+    await History.create({
+      action_type: 'user_update',
+      user: req.user.id,
+      source: 'ui',
+      description: 'Permissions utilisateur modifiees',
+      actor_role: req.user.role,
+      tags: ['user', 'permissions', roleId],
+      context: {
+        target_user_id: String(user._id),
+        target_username: user.username,
+        target_email: user.email,
+        target_role: roleId,
+        inherits_role: shouldInherit,
+        before,
+        after: next,
+      },
+    });
+
+    await logSecurityEvent({
+      event_type: 'user_permissions_changed',
+      user: req.user.id,
+      role: req.user.role,
+      ip_address: req.ip,
+      user_agent: req.headers['user-agent'] || '',
+      success: true,
+      details: `Changed user permissions ${user._id} role=${roleId} inherits=${shouldInherit}`,
+      after: {
+        target_user_id: String(user._id),
+        target_role: roleId,
+        inherits_role: shouldInherit,
+        permissions_count: next.length,
+      },
+    });
 
     return res.json({ ok: true, userId: String(user._id), roleId, inherits_role: shouldInherit, permissions: next });
   } catch (err) {
@@ -426,27 +515,61 @@ router.post(
 );
 
 // POST /api/users
-// Body: { username, email, telephone, role, password, demandeur_profile?, service_direction? }
+// Body: { username, email, telephone, role, password, demandeur_profile?, service_direction?, ...identity/governance fields }
 router.post(
   '/',
   requireRole('admin'),
   requireAnyPermission(PERMISSIONS.USER_CREATE, PERMISSIONS.USER_MANAGE),
-  strictBody(['username', 'email', 'telephone', 'role', 'password', 'demandeur_profile', 'service_direction']),
+  strictBody([
+    'username',
+    'email',
+    'telephone',
+    'role',
+    'password',
+    'demandeur_profile',
+    'service_direction',
+    'employee_id',
+    'job_title',
+    'hire_date',
+    'account_expires_at',
+    'account_type',
+    'two_factor_required',
+    'site_location',
+    'manager_user_id',
+    'preferred_language',
+    'notification_channels',
+  ]),
   async (req, res) => {
     try {
       const username = String(req.body?.username || '').trim();
       const email = normalizeEmail(req.body?.email);
-      const telephone = normalizePhone(req.body?.telephone);
+      const telephone = normalizeTunisianPhone(req.body?.telephone);
       const role = normalizeRole(req.body?.role);
       const password = String(req.body?.password || '');
       const demandeurProfile = String(req.body?.demandeur_profile || '').trim().toLowerCase();
       const serviceDirection = normalizeServiceDirection(req.body?.service_direction);
+      const employeeId = normalizeEmployeeId(req.body?.employee_id);
+      const jobTitle = normalizeOptionalText(req.body?.job_title, 80);
+      const hireDate = parseOptionalDate(req.body?.hire_date, 'hire_date');
+      const accountExpiresAt = parseOptionalDate(req.body?.account_expires_at, 'account_expires_at');
+      const accountType = ACCOUNT_TYPES.includes(String(req.body?.account_type || '').trim())
+        ? String(req.body.account_type).trim()
+        : 'interne';
+      const twoFactorRequired = Boolean(req.body?.two_factor_required);
+      const siteLocation = normalizeOptionalText(req.body?.site_location, 100);
+      const managerUserId = String(req.body?.manager_user_id || '').trim();
+      const preferredLanguage = PREFERRED_LANGUAGES.includes(String(req.body?.preferred_language || '').trim())
+        ? String(req.body.preferred_language).trim()
+        : 'fr';
+      const notificationChannels = req.body?.notification_channels && typeof req.body.notification_channels === 'object'
+        ? req.body.notification_channels
+        : {};
 
       if (!username || username.length < 3 || username.length > 60 || !isSafeText(username, { min: 3, max: 60 })) {
         return res.status(400).json({ error: 'username invalide (3-60, sans caracteres speciaux)' });
       }
       if (!isValidEmail(email)) return res.status(400).json({ error: 'email invalide' });
-      if (!isValidPhone(telephone)) return res.status(400).json({ error: 'telephone invalide' });
+      if (!isValidTunisianPhone(telephone)) return res.status(400).json({ error: 'telephone invalide (format requis: +216XXXXXXXX)' });
       if (!isTechnicalRole(role)) return res.status(400).json({ error: 'role invalide' });
       if (!isStrongPassword(password)) {
         return res.status(400).json({ error: 'password invalide (min 8, 1 maj, 1 min, 1 chiffre)' });
@@ -454,12 +577,44 @@ router.post(
       if (serviceDirection && !isSafeText(serviceDirection, { min: 2, max: 80 })) {
         return res.status(400).json({ error: 'service_direction invalide (2-80, sans caracteres speciaux)' });
       }
+      if (employeeId && !/^[A-Z0-9-]{3,24}$/.test(employeeId)) {
+        return res.status(400).json({ error: 'matricule invalide (3-24, lettres/chiffres/tiret)' });
+      }
+      if (jobTitle && !isSafeText(jobTitle, { min: 2, max: 80 })) {
+        return res.status(400).json({ error: 'fonction invalide (2-80, sans caracteres speciaux)' });
+      }
+      if (siteLocation && !isSafeText(siteLocation, { min: 2, max: 100 })) {
+        return res.status(400).json({ error: 'site_location invalide (2-100, sans caracteres speciaux)' });
+      }
+      if (hireDate && accountExpiresAt && hireDate > accountExpiresAt) {
+        return res.status(400).json({ error: 'date_expiration doit etre posterieure a la date embauche' });
+      }
+      if (managerUserId && !isValidObjectIdLike(managerUserId)) {
+        return res.status(400).json({ error: 'responsable hierarchique invalide' });
+      }
 
       const existingEmail = await User.findOne({ email }).select('_id').lean();
       if (existingEmail?._id) return res.status(409).json({ error: 'Email deja utilise' });
 
       const existingUsername = await User.findOne({ username }).select('_id').lean();
       if (existingUsername?._id) return res.status(409).json({ error: 'Username deja utilise' });
+
+      if (employeeId) {
+        const existingEmployeeId = await User.findOne({ employee_id: employeeId }).select('_id').lean();
+        if (existingEmployeeId?._id) return res.status(409).json({ error: 'Matricule deja utilise' });
+      }
+
+      let managerUser = null;
+      if (managerUserId) {
+        managerUser = await User.findById(managerUserId).select('_id role status').lean();
+        if (!managerUser) return res.status(404).json({ error: 'Responsable hierarchique introuvable' });
+        if (!['admin', 'responsable'].includes(normalizeRole(managerUser.role))) {
+          return res.status(400).json({ error: 'Le N+1 doit etre admin ou responsable' });
+        }
+        if (managerUser.status !== 'active') {
+          return res.status(400).json({ error: 'Le N+1 doit etre un compte actif' });
+        }
+      }
 
       const allowedProfiles = new Set(PROFILE_VALUES);
       const profileFromService = mapServiceToProfile(serviceDirection);
@@ -475,10 +630,22 @@ router.post(
         role,
         status: 'active',
         password_hash: hash,
+        employee_id: employeeId || undefined,
+        job_title: jobTitle,
+        hire_date: hireDate,
+        account_expires_at: accountExpiresAt,
+        account_type: accountType,
+        two_factor_required: twoFactorRequired,
+        site_location: siteLocation,
+        manager_user: managerUser?._id || null,
+        preferred_language: preferredLanguage,
+        notification_channels: {
+          email: notificationChannels.email !== false,
+        },
+        service_direction: serviceDirection || '',
         ...(role === 'demandeur'
           ? {
             demandeur_profile: profileToSave,
-            service_direction: serviceDirection || '',
           }
           : {}),
       });
@@ -494,7 +661,11 @@ router.post(
           target_user_id: String(user._id),
           target_email: email,
           target_username: username,
+          target_employee_id: employeeId || '',
           role,
+          account_type: accountType,
+          two_factor_required: twoFactorRequired,
+          account_expires_at: accountExpiresAt,
         },
       });
 
@@ -519,10 +690,249 @@ router.post(
           status: user.status,
           demandeur_profile: user.demandeur_profile,
           service_direction: user.service_direction || '',
+          employee_id: user.employee_id || '',
+          job_title: user.job_title || '',
+          hire_date: user.hire_date || null,
+          account_expires_at: user.account_expires_at || null,
+          account_type: user.account_type || 'interne',
+          two_factor_required: Boolean(user.two_factor_required),
+          site_location: user.site_location || '',
+          manager_user: user.manager_user || null,
+          preferred_language: user.preferred_language || 'fr',
+          notification_channels: user.notification_channels || { email: true },
         },
       });
     } catch (err) {
+      if (err?.statusCode) {
+        return res.status(err.statusCode).json({ error: err.message });
+      }
       return res.status(500).json({ error: 'Failed to create user', details: err.message });
+    }
+  }
+);
+
+// PATCH /api/users/:id/profile
+// Met a jour les champs de profil modifiables depuis le formulaire admin.
+router.patch(
+  '/:id/profile',
+  requireAnyPermission(PERMISSIONS.USER_PROFILE_UPDATE, PERMISSIONS.USER_MANAGE),
+  strictBody([
+    'username',
+    'email',
+    'telephone',
+    'demandeur_profile',
+    'service_direction',
+    'employee_id',
+    'job_title',
+    'hire_date',
+    'account_expires_at',
+    'account_type',
+    'two_factor_required',
+    'site_location',
+    'manager_user_id',
+    'preferred_language',
+    'notification_channels',
+  ]),
+  async (req, res) => {
+    try {
+      const actorRole = getActorRole(req);
+      const user = await User.findById(req.params.id)
+        .select('_id username email telephone role status demandeur_profile service_direction employee_id job_title hire_date account_expires_at account_type two_factor_required site_location manager_user preferred_language notification_channels')
+        .lean();
+      if (!user?._id) return res.status(404).json({ error: 'Utilisateur introuvable' });
+      if (!canManageTargetRole(actorRole, normalizeRole(user.role))) {
+        return res.status(403).json({ error: 'Acces refuse pour ce role (cible)' });
+      }
+
+      const username = String(req.body?.username || '').trim();
+      const email = normalizeEmail(req.body?.email);
+      const telephone = normalizeTunisianPhone(req.body?.telephone);
+      const serviceDirection = normalizeServiceDirection(req.body?.service_direction);
+      const demandeurProfile = String(req.body?.demandeur_profile || '').trim().toLowerCase();
+      const employeeId = normalizeEmployeeId(req.body?.employee_id);
+      const jobTitle = normalizeOptionalText(req.body?.job_title, 80);
+      const hireDate = parseOptionalDate(req.body?.hire_date, 'hire_date');
+      const accountExpiresAt = parseOptionalDate(req.body?.account_expires_at, 'account_expires_at');
+      const accountType = ACCOUNT_TYPES.includes(String(req.body?.account_type || '').trim())
+        ? String(req.body.account_type).trim()
+        : 'interne';
+      const twoFactorRequired = Boolean(req.body?.two_factor_required);
+      const siteLocation = normalizeOptionalText(req.body?.site_location, 100);
+      const managerUserId = String(req.body?.manager_user_id || '').trim();
+      const preferredLanguage = PREFERRED_LANGUAGES.includes(String(req.body?.preferred_language || '').trim())
+        ? String(req.body.preferred_language).trim()
+        : 'fr';
+      const notificationChannels = req.body?.notification_channels && typeof req.body.notification_channels === 'object'
+        ? req.body.notification_channels
+        : {};
+
+      if (!username || username.length < 3 || username.length > 60 || !isSafeText(username, { min: 3, max: 60 })) {
+        return res.status(400).json({ error: 'username invalide (3-60, sans caracteres speciaux)' });
+      }
+      if (!isValidEmail(email)) return res.status(400).json({ error: 'email invalide' });
+      if (!isValidTunisianPhone(telephone)) return res.status(400).json({ error: 'telephone invalide (format requis: +216XXXXXXXX)' });
+      if (serviceDirection && !isSafeText(serviceDirection, { min: 2, max: 80 })) {
+        return res.status(400).json({ error: 'service_direction invalide (2-80, sans caracteres speciaux)' });
+      }
+      if (employeeId && !/^[A-Z0-9-]{3,24}$/.test(employeeId)) {
+        return res.status(400).json({ error: 'matricule invalide (3-24, lettres/chiffres/tiret)' });
+      }
+      if (jobTitle && !isSafeText(jobTitle, { min: 2, max: 80 })) {
+        return res.status(400).json({ error: 'fonction invalide (2-80, sans caracteres speciaux)' });
+      }
+      if (siteLocation && !isSafeText(siteLocation, { min: 2, max: 100 })) {
+        return res.status(400).json({ error: 'site_location invalide (2-100, sans caracteres speciaux)' });
+      }
+      if (hireDate && accountExpiresAt && hireDate > accountExpiresAt) {
+        return res.status(400).json({ error: 'date_expiration doit etre posterieure a la date embauche' });
+      }
+      if (managerUserId && !isValidObjectIdLike(managerUserId)) {
+        return res.status(400).json({ error: 'responsable hierarchique invalide' });
+      }
+
+      const existingEmail = await User.findOne({ email, _id: { $ne: user._id } }).select('_id').lean();
+      if (existingEmail?._id) return res.status(409).json({ error: 'Email deja utilise' });
+
+      const existingUsername = await User.findOne({ username, _id: { $ne: user._id } }).select('_id').lean();
+      if (existingUsername?._id) return res.status(409).json({ error: 'Username deja utilise' });
+
+      if (employeeId) {
+        const existingEmployeeId = await User.findOne({ employee_id: employeeId, _id: { $ne: user._id } }).select('_id').lean();
+        if (existingEmployeeId?._id) return res.status(409).json({ error: 'Matricule deja utilise' });
+      }
+
+      let managerUser = null;
+      if (managerUserId) {
+        if (String(managerUserId) === String(user._id)) {
+          return res.status(400).json({ error: 'Un utilisateur ne peut pas etre son propre N+1' });
+        }
+        managerUser = await User.findById(managerUserId).select('_id role status').lean();
+        if (!managerUser) return res.status(404).json({ error: 'Responsable hierarchique introuvable' });
+        if (!['admin', 'responsable'].includes(normalizeRole(managerUser.role))) {
+          return res.status(400).json({ error: 'Le N+1 doit etre admin ou responsable' });
+        }
+        if (managerUser.status !== 'active') {
+          return res.status(400).json({ error: 'Le N+1 doit etre un compte actif' });
+        }
+      }
+
+      const isDemandeur = normalizeRole(user.role) === 'demandeur';
+      const allowedProfiles = new Set(PROFILE_VALUES);
+      const profileFromService = mapServiceToProfile(serviceDirection);
+      const nextProfile = isDemandeur
+        ? (allowedProfiles.has(demandeurProfile)
+          ? demandeurProfile
+          : (profileFromService || user.demandeur_profile || 'bureautique'))
+        : user.demandeur_profile;
+
+      const before = {
+        username: user.username,
+        email: user.email,
+        telephone: user.telephone,
+        employee_id: user.employee_id || '',
+        job_title: user.job_title || '',
+        service_direction: user.service_direction || '',
+        demandeur_profile: user.demandeur_profile || '',
+        account_type: user.account_type || 'interne',
+        two_factor_required: Boolean(user.two_factor_required),
+        site_location: user.site_location || '',
+        manager_user_id: String(user.manager_user || ''),
+        preferred_language: user.preferred_language || 'fr',
+      };
+
+      const $set = {
+        username,
+        email,
+        telephone,
+        employee_id: employeeId,
+        job_title: jobTitle,
+        hire_date: hireDate,
+        account_expires_at: accountExpiresAt,
+        account_type: accountType,
+        two_factor_required: twoFactorRequired,
+        service_direction: serviceDirection,
+        demandeur_profile: nextProfile,
+        site_location: siteLocation,
+        manager_user: managerUser?._id || null,
+        preferred_language: preferredLanguage,
+        notification_channels: {
+          email: notificationChannels.email !== false,
+        },
+      };
+
+      const updateDoc = { $set };
+      if (!employeeId) {
+        delete updateDoc.$set.employee_id;
+        updateDoc.$unset = { employee_id: '' };
+      }
+
+      await User.updateOne({ _id: user._id }, updateDoc);
+
+      await History.create({
+        action_type: 'user_update',
+        user: req.user.id,
+        source: 'ui',
+        description: 'Profil utilisateur mis a jour',
+        actor_role: req.user.role,
+        tags: ['user', 'profile_update', user.role],
+        context: {
+          target_user_id: String(user._id),
+          target_username: username,
+          before,
+          after: {
+            username,
+            email,
+            telephone,
+            employee_id: employeeId || '',
+            job_title: jobTitle,
+            service_direction: serviceDirection,
+            demandeur_profile: nextProfile || '',
+            account_type: accountType,
+            two_factor_required: twoFactorRequired,
+            site_location: siteLocation,
+            manager_user_id: managerUserId,
+            preferred_language: preferredLanguage,
+          },
+        },
+      });
+
+      await logSecurityEvent({
+        event_type: 'user_profile_updated',
+        user: req.user.id,
+        role: req.user.role,
+        ip_address: req.ip,
+        user_agent: req.headers['user-agent'] || '',
+        success: true,
+        details: `Updated profile for user ${user._id} role=${user.role} email=${email}`,
+      });
+
+      return res.json({
+        message: 'Profil utilisateur mis a jour',
+        user: {
+          id: user._id,
+          username,
+          email,
+          telephone,
+          role: user.role,
+          service_direction: serviceDirection,
+          demandeur_profile: nextProfile,
+          employee_id: employeeId || '',
+          job_title: jobTitle,
+          hire_date: hireDate,
+          account_expires_at: accountExpiresAt,
+          account_type: accountType,
+          two_factor_required: twoFactorRequired,
+          site_location: siteLocation,
+          manager_user: managerUser?._id || null,
+          preferred_language: preferredLanguage,
+          notification_channels: $set.notification_channels,
+        },
+      });
+    } catch (err) {
+      if (err?.statusCode) {
+        return res.status(err.statusCode).json({ error: err.message });
+      }
+      return res.status(500).json({ error: 'Failed to update user profile', details: err.message });
     }
   }
 );
@@ -556,7 +966,10 @@ router.patch(
         }
       }
 
-      await User.updateOne({ _id: user._id }, { $set: { role } });
+      await User.updateOne({ _id: user._id }, { $set: { role }, $unset: { rbac_permissions: 1 } });
+      if (typeof requireAuth.invalidateUserSessionsCache === 'function') {
+        requireAuth.invalidateUserSessionsCache(user._id);
+      }
 
       await History.create({
         action_type: 'user_update',
@@ -666,7 +1079,7 @@ router.post(
   '/:id/reset-password',
   requireRole('admin'),
   requireAnyPermission(PERMISSIONS.USER_PASSWORD_RESET, PERMISSIONS.USER_MANAGE),
-  strictBody(['reason']),
+  strictBody(['reason', 'new_password']),
   async (req, res) => {
     try {
       const reason = String(req.body?.reason || '').trim();

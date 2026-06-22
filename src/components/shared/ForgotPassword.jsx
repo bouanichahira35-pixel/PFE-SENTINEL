@@ -1,6 +1,10 @@
+// BLOC 1 - Role du fichier.
+// Ce fichier fournit un composant React partage pour ForgotPassword.
+// Point de vigilance: garder les props, appels API et classes CSS synchronises avec les ecrans existants.
+
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { Mail, Phone, MessageCircle, ArrowLeft, AlertTriangle, CheckCircle, ShieldCheck, Lock, Eye, EyeOff } from 'lucide-react';
+import { Mail, ArrowLeft, AlertTriangle, CheckCircle, ShieldCheck, Lock, Eye, EyeOff } from 'lucide-react';
 import logoETAP from '../../assets/logoETAP.png';
 import { post } from '../../services/api';
 import { getUiErrorMessage } from '../../services/uiError';
@@ -12,10 +16,8 @@ const ForgotPassword = () => {
   const roleFromLogin = location.state?.role ? String(location.state.role) : '';
   const roleFilter = useMemo(() => String(roleFromLogin || '').trim(), [roleFromLogin]);
   const [identifier, setIdentifier] = useState('');
-  const [channel, setChannel] = useState('email'); // email | sms | whatsapp
   const [code, setCode] = useState('');
   const [resetToken, setResetToken] = useState('');
-  const [devOtp, setDevOtp] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [showNewPassword, setShowNewPassword] = useState(false);
@@ -28,8 +30,7 @@ const ForgotPassword = () => {
   const [resendRemainingSec, setResendRemainingSec] = useState(0);
 
   const RESEND_COOLDOWN_SEC = 60;
-  const isDevUi = process.env.NODE_ENV !== 'production';
-  const showDevOtp = isDevUi && String(process.env.REACT_APP_SHOW_DEV_OTP || '').trim().toLowerCase() === 'true';
+  const getCodeSentMessage = () => "Code envoye. Verifiez votre boite Gmail et le dossier spam.";
 
   const validateEmail = (value) => {
     const regex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -37,11 +38,6 @@ const ForgotPassword = () => {
   };
 
   const normalizeIdentifier = (value) => String(value || '').trim().replace(/\s+/g, '');
-
-  const validatePhoneE164 = (value) => {
-    const cleaned = normalizeIdentifier(value).replace(/[^\d+]/g, '');
-    return /^\+\d{8,15}$/.test(cleaned);
-  };
 
   const validatePassword = (value) => {
     if (typeof value !== 'string') return false;
@@ -72,39 +68,24 @@ const ForgotPassword = () => {
     const normalized = normalizeIdentifier(identifier);
 
     if (!normalized) {
-      setError('Veuillez entrer votre email ou numero de telephone');
+      setError('Veuillez entrer votre adresse email');
       return;
     }
 
-    if (channel === 'email') {
-      if (!validateEmail(normalized)) {
-        setError('Veuillez entrer une adresse email valide');
-        return;
-      }
-    } else {
-      if (!validatePhoneE164(normalized)) {
-        setError('Veuillez entrer un numero valide au format +216XXXXXXXX');
-        return;
-      }
+    if (!validateEmail(normalized)) {
+      setError('Veuillez entrer une adresse email valide');
+      return;
     }
 
     setIsLoading(true);
 
     try {
       const payload = roleFilter
-        ? { identifier: normalized, role: roleFilter, channel }
-        : { identifier: normalized, channel };
+        ? { identifier: normalized, role: roleFilter, channel: 'email' }
+        : { identifier: normalized, channel: 'email' };
       const data = await post('/auth/forgot-password/request', payload);
-      const maybeDevOtp = typeof data?.dev_otp === 'string' ? data.dev_otp : '';
-      setDevOtp(maybeDevOtp);
       setStep('verify');
-      if (channel === 'email' && maybeDevOtp && !showDevOtp) {
-        setInfo("Service email non configure. Activez le SMTP backend pour recevoir le code.");
-      } else if (channel === 'email' && showDevOtp && maybeDevOtp) {
-        setInfo("SMTP non configure: en mode dev, le code s'affiche ci-dessous.");
-      } else {
-        setInfo("Code envoye. Verifiez votre boite de reception (et spam).");
-      }
+      setInfo(getCodeSentMessage(data?.channel));
       const cooldown = Number(data?.cooldown_seconds || RESEND_COOLDOWN_SEC);
       setResendRemainingSec(Number.isFinite(cooldown) ? Math.max(0, Math.floor(cooldown)) : RESEND_COOLDOWN_SEC);
     } catch (err) {
@@ -150,14 +131,8 @@ const ForgotPassword = () => {
     if (resendRemainingSec > 0) return;
 
     const normalized = normalizeIdentifier(identifier);
-    const ok =
-      channel === 'email'
-        ? validateEmail(normalized)
-        : channel === 'sms' || channel === 'whatsapp'
-        ? validatePhoneE164(normalized)
-        : false;
 
-    if (!normalized || !ok) {
+    if (!normalized || !validateEmail(normalized)) {
       setError('Veuillez entrer une valeur valide');
       setStep('request');
       return;
@@ -166,16 +141,10 @@ const ForgotPassword = () => {
     setIsResending(true);
     try {
       const payload = roleFilter
-        ? { identifier: normalized, role: roleFilter, channel }
-        : { identifier: normalized, channel };
+        ? { identifier: normalized, role: roleFilter, channel: 'email' }
+        : { identifier: normalized, channel: 'email' };
       const data = await post('/auth/forgot-password/request', payload);
-      const maybeDevOtp = typeof data?.dev_otp === 'string' ? data.dev_otp : '';
-      setDevOtp(maybeDevOtp);
-      if (channel === 'email' && maybeDevOtp && !showDevOtp) {
-        setInfo("Service email non configure. Activez le SMTP backend pour recevoir le code.");
-      } else {
-        setInfo('Code renvoye. Verifiez votre boite de reception.');
-      }
+      setInfo(getCodeSentMessage(data?.channel));
       const cooldown = Number(data?.cooldown_seconds || RESEND_COOLDOWN_SEC);
       setResendRemainingSec(Number.isFinite(cooldown) ? Math.max(0, Math.floor(cooldown)) : RESEND_COOLDOWN_SEC);
     } catch (err) {
@@ -274,7 +243,7 @@ const ForgotPassword = () => {
 
           <h1 className="forgot-title">Mot de passe oublie</h1>
           <p className="forgot-subtitle">
-            {step === 'request' && "Choisissez un canal, puis entrez votre email ou numero pour recevoir un code"}
+            {step === 'request' && 'Entrez votre email pour recevoir un code de verification'}
             {step === 'verify' && "Entrez le code recu (cela peut prendre jusqu'a 1 minute)"}
             {step === 'reset' && 'Definissez un nouveau mot de passe'}
           </p>
@@ -282,41 +251,13 @@ const ForgotPassword = () => {
           {step === 'request' && (
             <form onSubmit={handleRequestCode} className="forgot-form">
               <div className="forgot-field">
-                <label htmlFor="channel" className="forgot-label">
-                  Envoyer le code via
-                </label>
-                <div className="forgot-method-row">
-                  <select
-                    id="channel"
-                    className="forgot-select"
-                    value={channel}
-                    onChange={(e) => {
-                      setChannel(e.target.value);
-                      setError('');
-                      setInfo('');
-                    }}
-                  >
-                    <option value="email">Email</option>
-                    <option value="sms">SMS</option>
-                    <option value="whatsapp">WhatsApp</option>
-                  </select>
-                </div>
-              </div>
-
-              <div className="forgot-field">
                 <label htmlFor="identifier" className="forgot-label">
-                  {channel === 'email' ? 'Adresse email' : channel === 'sms' ? 'Numero de telephone' : 'Numero WhatsApp'}
+                  Adresse email
                 </label>
                 <div className="forgot-input-wrapper">
-                  {channel === 'email' ? (
-                    <Mail size={20} className="forgot-input-icon" />
-                  ) : channel === 'sms' ? (
-                    <Phone size={20} className="forgot-input-icon" />
-                  ) : (
-                    <MessageCircle size={20} className="forgot-input-icon" />
-                  )}
+                  <Mail size={20} className="forgot-input-icon" />
                   <input
-                    type="text"
+                    type="email"
                     id="identifier"
                     name="identifier"
                     value={identifier}
@@ -324,9 +265,9 @@ const ForgotPassword = () => {
                       setIdentifier(e.target.value);
                       setError('');
                     }}
-                    placeholder={channel === 'email' ? 'ex: nom@gmail.com' : 'ex: +21698123456'}
+                    placeholder="ex: nom@gmail.com"
                     className="forgot-input"
-                    autoComplete={channel === 'email' ? 'email' : 'tel'}
+                    autoComplete="email"
                   />
                 </div>
               </div>
@@ -400,18 +341,8 @@ const ForgotPassword = () => {
                 </span>
               </button>
 
-              {showDevOtp && devOtp && (
-                <div className="forgot-error" style={{ background: 'rgba(16,185,129,0.12)', borderColor: 'rgba(16,185,129,0.35)' }}>
-                  <CheckCircle size={16} />
-                  <span>Mode dev: votre code est {devOtp}</span>
-                </div>
-              )}
-
               {info && (
-                <div
-                  className="forgot-error"
-                  style={{ background: 'rgba(21,101,192,0.10)', borderColor: 'rgba(21,101,192,0.25)', color: '#1565c0' }}
-                >
+                <div className="forgot-info">
                   <ShieldCheck size={16} />
                   <span>{info}</span>
                 </div>
@@ -444,7 +375,6 @@ const ForgotPassword = () => {
                   setInfo('');
                   setError('');
                   setCode('');
-                  setDevOtp('');
                   setIsResending(false);
                   setResendRemainingSec(0);
                 }}

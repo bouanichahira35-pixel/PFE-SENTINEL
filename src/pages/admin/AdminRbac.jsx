@@ -1,3 +1,7 @@
+// BLOC 1 - Role du fichier.
+// Ce fichier affiche une page de l'espace administrateur pour AdminRbac.
+// Point de vigilance: garder les props, appels API et classes CSS synchronises avec les ecrans existants.
+
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { KeyRound, RefreshCw, Save, Search } from 'lucide-react';
 import SidebarAdmin from '../../components/admin/SidebarAdmin';
@@ -94,8 +98,16 @@ const AdminRbac = ({ userName, onLogout }) => {
   const [userQuery, setUserQuery] = useState('');
   const [selectedUserId, setSelectedUserId] = useState(null);
 
+  const [policy, setPolicy] = useState(null);
+  const [permissionCatalog, setPermissionCatalog] = useState([]);
+  const [permissionMeta, setPermissionMeta] = useState({});
+  const [adminGuard, setAdminGuard] = useState({});
   const [availableByRole, setAvailableByRole] = useState({});
   const [availableLoading, setAvailableLoading] = useState(false);
+
+  const [roleOriginal, setRoleOriginal] = useState(null);
+  const [roleChecked, setRoleChecked] = useState(null);
+  const [roleSaving, setRoleSaving] = useState(false);
 
   const [permLoading, setPermLoading] = useState(false);
   const [permSaving, setPermSaving] = useState(false);
@@ -104,10 +116,49 @@ const AdminRbac = ({ userName, onLogout }) => {
 
   const [confirmLeave, setConfirmLeave] = useState({ open: false, nextRoleId: null, nextUserId: null });
 
-  const isDirty = useMemo(() => {
+  const isUserDirty = useMemo(() => {
     if (!Array.isArray(permOriginal) || !Array.isArray(permChecked)) return false;
     return !arraysEqual(permOriginal, permChecked);
   }, [permChecked, permOriginal]);
+
+  const isRoleDirty = useMemo(() => {
+    if (!Array.isArray(roleOriginal) || !Array.isArray(roleChecked)) return false;
+    return !arraysEqual(roleOriginal, roleChecked);
+  }, [roleChecked, roleOriginal]);
+
+  const isDirty = isRoleDirty || isUserDirty;
+
+  const applyPolicyPayload = useCallback((payload) => {
+    const nextPolicy = payload?.policy && typeof payload.policy === 'object' ? payload.policy : null;
+    const meta = payload?.permission_meta && typeof payload.permission_meta === 'object' ? payload.permission_meta : {};
+    const permissions = Array.isArray(payload?.permissions) ? payload.permissions.slice().sort() : [];
+    const guard = payload?.admin_guard && typeof payload.admin_guard === 'object' ? payload.admin_guard : {};
+    setPolicy(nextPolicy);
+    setPermissionMeta(meta);
+    setPermissionCatalog(permissions);
+    setAdminGuard(guard);
+    return { policy: nextPolicy, permission_meta: meta, permissions, admin_guard: guard };
+  }, []);
+
+  const loadPolicy = useCallback(async () => {
+    const res = await get('/admin/rbac');
+    return applyPolicyPayload(res);
+  }, [applyPolicyPayload]);
+
+  const getRolePermissionsFromPolicy = useCallback((roleId, sourcePolicy = policy) => {
+    const list = sourcePolicy?.role_permissions?.[roleId];
+    return Array.isArray(list) ? list.slice().sort() : [];
+  }, [policy]);
+
+  const getAssignablePermissionsForRole = useCallback((roleId) => {
+    if (roleId === 'admin') {
+      const guarded = Array.isArray(adminGuard?.technical_only_permissions)
+        ? adminGuard.technical_only_permissions
+        : [];
+      return guarded.slice().sort();
+    }
+    return permissionCatalog.slice().sort();
+  }, [adminGuard, permissionCatalog]);
 
   const loadRoles = useCallback(async () => {
     setRolesLoading(true);
@@ -129,7 +180,7 @@ const AdminRbac = ({ userName, onLogout }) => {
         }
       }
     } catch (err) {
-      toastRef.current.error(getUiErrorMessage(err, 'Chargement rôles échoué'));
+      toastRef.current.error(getUiErrorMessage(err, 'Chargement roles echoue'));
     } finally {
       setRolesLoading(false);
     }
@@ -146,11 +197,38 @@ const AdminRbac = ({ userName, onLogout }) => {
       const list = Array.isArray(res?.users) ? res.users : [];
       setUsers(list);
     } catch (err) {
-      toastRef.current.error(getUiErrorMessage(err, 'Chargement utilisateurs échoué'));
+      toastRef.current.error(getUiErrorMessage(err, 'Chargement utilisateurs echoue'));
     } finally {
       setUsersLoading(false);
     }
   }, [toastRef]);
+
+  const loadRolePermissions = useCallback(async (roleId) => {
+    if (!roleId) {
+      setRoleOriginal(null);
+      setRoleChecked(null);
+      return null;
+    }
+    setAvailableLoading(true);
+    try {
+      let current = policy;
+      if (!current) {
+        const loaded = await loadPolicy();
+        current = loaded.policy;
+      }
+      const perms = getRolePermissionsFromPolicy(roleId, current);
+      setRoleOriginal(perms);
+      setRoleChecked(perms);
+      return perms;
+    } catch (err) {
+      toastRef.current.error(getUiErrorMessage(err, 'Chargement permissions du role echoue'));
+      setRoleOriginal(null);
+      setRoleChecked(null);
+      return null;
+    } finally {
+      setAvailableLoading(false);
+    }
+  }, [getRolePermissionsFromPolicy, loadPolicy, policy, toastRef]);
 
   const ensureAvailableForRole = useCallback(async (roleId) => {
     if (!roleId) return null;
@@ -182,7 +260,7 @@ const AdminRbac = ({ userName, onLogout }) => {
         throw err;
       }
     } catch (err) {
-      toastRef.current.error(getUiErrorMessage(err, 'Chargement permissions (rôle) échoué'));
+      toastRef.current.error(getUiErrorMessage(err, 'Chargement permissions role echoue'));
       return null;
     } finally {
       setAvailableLoading(false);
@@ -214,7 +292,7 @@ const AdminRbac = ({ userName, onLogout }) => {
         throw err;
       }
     } catch (err) {
-      toastRef.current.error(getUiErrorMessage(err, 'Chargement permissions (utilisateur) échoué'));
+      toastRef.current.error(getUiErrorMessage(err, 'Chargement permissions utilisateur echoue'));
       setPermOriginal(null);
       setPermChecked(null);
     } finally {
@@ -224,7 +302,10 @@ const AdminRbac = ({ userName, onLogout }) => {
 
   useEffect(() => {
     loadRoles();
-  }, [loadRoles]);
+    loadPolicy().catch((err) => {
+      toastRef.current.error(getUiErrorMessage(err, 'Chargement politique RBAC echoue'));
+    });
+  }, [loadPolicy, loadRoles, toastRef]);
 
   const filteredUsers = useMemo(() => {
     const q = normalizeQuery(userQuery);
@@ -237,7 +318,15 @@ const AdminRbac = ({ userName, onLogout }) => {
   }, [userQuery, users]);
 
   const available = useMemo(() => (selectedRoleId ? availableByRole?.[selectedRoleId] : null), [availableByRole, selectedRoleId]);
-  const sections = useMemo(() => groupPermissions(available?.permissions || [], available?.permission_meta || {}), [available?.permission_meta, available?.permissions]);
+  const roleAssignablePermissions = useMemo(
+    () => (selectedRoleId ? getAssignablePermissionsForRole(selectedRoleId) : []),
+    [getAssignablePermissionsForRole, selectedRoleId]
+  );
+  const roleSections = useMemo(
+    () => groupPermissions(roleAssignablePermissions, permissionMeta),
+    [permissionMeta, roleAssignablePermissions]
+  );
+  const userSections = useMemo(() => groupPermissions(available?.permissions || [], available?.permission_meta || {}), [available?.permission_meta, available?.permissions]);
 
   const requestRoleSelect = useCallback((roleId) => {
     if (isDirty) {
@@ -246,9 +335,12 @@ const AdminRbac = ({ userName, onLogout }) => {
     }
     setSelectedRoleId(roleId);
     setSelectedUserId(null);
+    setPermOriginal(null);
+    setPermChecked(null);
     loadUsersForRole(roleId);
     ensureAvailableForRole(roleId);
-  }, [ensureAvailableForRole, isDirty, loadUsersForRole]);
+    loadRolePermissions(roleId);
+  }, [ensureAvailableForRole, isDirty, loadRolePermissions, loadUsersForRole]);
 
   const requestUserSelect = useCallback((userId) => {
     if (!selectedRoleId) return;
@@ -273,6 +365,7 @@ const AdminRbac = ({ userName, onLogout }) => {
       setPermOriginal(null);
       setPermChecked(null);
       loadUsersForRole(nextRoleId);
+      loadRolePermissions(nextRoleId);
       ensureAvailableForRole(nextRoleId).then(() => {
         if (nextUserId) loadUserPermissions(nextUserId);
       });
@@ -285,7 +378,17 @@ const AdminRbac = ({ userName, onLogout }) => {
       setPermChecked(null);
       ensureAvailableForRole(selectedRoleId).then(() => loadUserPermissions(nextUserId));
     }
-  }, [closeConfirm, confirmLeave.nextRoleId, confirmLeave.nextUserId, ensureAvailableForRole, loadUserPermissions, loadUsersForRole, selectedRoleId]);
+  }, [closeConfirm, confirmLeave.nextRoleId, confirmLeave.nextUserId, ensureAvailableForRole, loadRolePermissions, loadUserPermissions, loadUsersForRole, selectedRoleId]);
+
+  const toggleRolePermission = useCallback((permId) => {
+    setRoleChecked((prev) => {
+      const list = Array.isArray(prev) ? prev.slice() : [];
+      const has = list.includes(permId);
+      const next = has ? list.filter((x) => x !== permId) : [...list, permId];
+      next.sort();
+      return next;
+    });
+  }, []);
 
   const togglePermission = useCallback((permId) => {
     setPermChecked((prev) => {
@@ -302,25 +405,73 @@ const AdminRbac = ({ userName, onLogout }) => {
     setPermSaving(true);
     try {
       await patch(`/users/${encodeURIComponent(selectedUserId)}/permissions`, { permissions: permChecked });
-      toastRef.current.success('Permissions enregistrées.');
+      toastRef.current.success('Exception utilisateur enregistree.');
       setPermOriginal(permChecked.slice().sort());
     } catch (err) {
-      toastRef.current.error(getUiErrorMessage(err, 'Enregistrement permissions échoué'));
+      toastRef.current.error(getUiErrorMessage(err, 'Enregistrement permissions utilisateur echoue'));
     } finally {
       setPermSaving(false);
     }
   }, [permChecked, selectedUserId, toastRef]);
 
+  const saveRole = useCallback(async () => {
+    if (!selectedRoleId || !Array.isArray(roleChecked) || !policy?.role_permissions) return;
+    setRoleSaving(true);
+    try {
+      const nextRolePermissions = {
+        ...(policy.role_permissions || {}),
+        [selectedRoleId]: roleChecked.slice().sort(),
+      };
+      const res = await patch('/admin/rbac', { role_permissions: nextRolePermissions });
+      const loaded = applyPolicyPayload({
+        ...res,
+        permission_meta: permissionMeta,
+        permissions: permissionCatalog,
+        admin_guard: adminGuard,
+      });
+      const saved = getRolePermissionsFromPolicy(selectedRoleId, loaded.policy);
+      setRoleOriginal(saved);
+      setRoleChecked(saved);
+      setAvailableByRole((prev) => ({
+        ...(prev || {}),
+        [selectedRoleId]: {
+          permissions: saved,
+          permission_meta: permissionMeta,
+        },
+      }));
+      if (selectedUserId) await loadUserPermissions(selectedUserId);
+      toastRef.current.success('Permissions du role enregistrees.');
+    } catch (err) {
+      toastRef.current.error(getUiErrorMessage(err, 'Enregistrement permissions du role echoue'));
+    } finally {
+      setRoleSaving(false);
+    }
+  }, [
+    adminGuard,
+    applyPolicyPayload,
+    getRolePermissionsFromPolicy,
+    loadUserPermissions,
+    permissionCatalog,
+    permissionMeta,
+    policy,
+    roleChecked,
+    selectedRoleId,
+    selectedUserId,
+    toastRef,
+  ]);
+
   const refresh = useCallback(async () => {
     await loadRoles();
+    await loadPolicy();
     if (selectedRoleId) {
       await loadUsersForRole(selectedRoleId);
+      await loadRolePermissions(selectedRoleId);
       await ensureAvailableForRole(selectedRoleId);
     }
     if (selectedUserId) {
       await loadUserPermissions(selectedUserId);
     }
-  }, [ensureAvailableForRole, loadRoles, loadUserPermissions, loadUsersForRole, selectedRoleId, selectedUserId]);
+  }, [ensureAvailableForRole, loadPolicy, loadRolePermissions, loadRoles, loadUserPermissions, loadUsersForRole, selectedRoleId, selectedUserId]);
 
   return (
     <div className="admin-layout">
@@ -332,34 +483,32 @@ const AdminRbac = ({ userName, onLogout }) => {
       />
       <div className={`admin-main ${sidebarCollapsed ? 'collapsed' : ''}`}>
         <HeaderPage
-          title="Rôles & permissions"
-          subtitle="Ajuster les permissions par utilisateur (sous-ensemble du rôle)"
+          title="Roles & permissions"
+          subtitle="Modifier les droits du role entier, puis les exceptions par utilisateur si necessaire"
           icon={<KeyRound size={24} />}
         />
-        {(rolesLoading || usersLoading || availableLoading || permLoading || permSaving) && (
+        {(rolesLoading || usersLoading || availableLoading || permLoading || permSaving || roleSaving) && (
           <LoadingSpinner
             overlay
-            text={permSaving ? 'Enregistrement...' : 'Chargement...'}
+            text={(permSaving || roleSaving) ? 'Enregistrement...' : 'Chargement...'}
           />
         )}
         <div className="admin-page">
-          {/* Toolbar : Actualiser uniquement — bouton Enregistrer retiré du haut */}
           <div className="admin-toolbar">
             <button
               className="admin-btn"
               type="button"
               onClick={refresh}
-              disabled={rolesLoading || usersLoading || permLoading || permSaving}
+              disabled={rolesLoading || usersLoading || availableLoading || permLoading || permSaving || roleSaving}
             >
               <RefreshCw size={16} />
               <span>Actualiser</span>
             </button>
           </div>
 
-          <div className="rp-grid" aria-label="Rôles & permissions">
-            {/* Colonne Rôles */}
-            <div className="rp-panel" aria-label="Rôles">
-              <div className="rp-panel-header">Rôles</div>
+          <div className="rp-grid" aria-label="Roles & permissions">
+            <div className="rp-panel" aria-label="Roles">
+              <div className="rp-panel-header">Roles</div>
               <div className="rp-list">
                 {roles.map((r) => {
                   const id = safeText(r?.id);
@@ -372,7 +521,7 @@ const AdminRbac = ({ userName, onLogout }) => {
                       type="button"
                       className={`rp-item ${active ? 'active' : ''}`}
                       onClick={() => requestRoleSelect(id)}
-                      disabled={!id || rolesLoading || permSaving}
+                      disabled={!id || rolesLoading || roleSaving || permSaving}
                     >
                       <span className="rp-item-main">{label}</span>
                       <span className="rp-badge" aria-label={`${count} utilisateurs`}>{count}</span>
@@ -380,16 +529,15 @@ const AdminRbac = ({ userName, onLogout }) => {
                   );
                 })}
                 {!roles.length && (
-                  <div className="rp-empty">Aucun rôle.</div>
+                  <div className="rp-empty">Aucun role.</div>
                 )}
               </div>
             </div>
 
-            {/* Colonne Utilisateurs */}
             <div className="rp-panel" aria-label="Utilisateurs">
               <div className="rp-panel-header">Utilisateurs</div>
               {!selectedRoleId ? (
-                <div className="rp-empty">Sélectionnez un rôle.</div>
+                <div className="rp-empty">Selectionnez un role.</div>
               ) : (
                 <>
                   <div className="rp-search">
@@ -398,7 +546,7 @@ const AdminRbac = ({ userName, onLogout }) => {
                       value={userQuery}
                       onChange={(e) => setUserQuery(e.target.value)}
                       placeholder="Rechercher (nom, email)"
-                      disabled={usersLoading || permSaving}
+                      disabled={usersLoading || permSaving || roleSaving}
                     />
                   </div>
                   <div className="rp-list">
@@ -411,7 +559,7 @@ const AdminRbac = ({ userName, onLogout }) => {
                           type="button"
                           className={`rp-user ${active ? 'active' : ''}`}
                           onClick={() => requestUserSelect(id)}
-                          disabled={!id || usersLoading || permSaving}
+                          disabled={!id || usersLoading || permSaving || roleSaving}
                         >
                           <span className="rp-avatar" aria-hidden="true">{initialsFromUser(u)}</span>
                           <span className="rp-user-body">
@@ -429,36 +577,33 @@ const AdminRbac = ({ userName, onLogout }) => {
               )}
             </div>
 
-            {/* Colonne Permissions */}
             <div className="rp-panel rp-panel-wide" aria-label="Permissions">
               <div className="rp-panel-header">
                 <span>Permissions{isDirty ? ' *' : ''}</span>
               </div>
               {!selectedRoleId ? (
-                <div className="rp-empty">Sélectionnez un rôle.</div>
-              ) : !selectedUserId ? (
-                <div className="rp-empty">Sélectionnez un utilisateur.</div>
+                <div className="rp-empty">Selectionnez un role.</div>
               ) : (
                 <>
                   <div className="rp-perm-header">
                     <div className="rp-note">
-                      Permissions pour le rôle <strong>{ROLE_LABELS[selectedRoleId] || selectedRoleId}</strong>
+                      Permissions appliquees a tout le role <strong>{ROLE_LABELS[selectedRoleId] || selectedRoleId}</strong>
                     </div>
                     <button
                       className="admin-btn primary"
                       type="button"
-                      onClick={save}
-                      disabled={!isDirty || permLoading || permSaving}
+                      onClick={saveRole}
+                      disabled={!isRoleDirty || availableLoading || roleSaving}
                     >
                       <Save size={16} />
-                      <span>Enregistrer</span>
+                      <span>Enregistrer role</span>
                     </button>
                   </div>
 
                   <div className="rp-sections">
-                    {sections.map((sec) => {
+                    {roleSections.map((sec) => {
                       const total = sec.items.length;
-                      const checkedCount = sec.items.filter((p) => Array.isArray(permChecked) && permChecked.includes(p.id)).length;
+                      const checkedCount = sec.items.filter((p) => Array.isArray(roleChecked) && roleChecked.includes(p.id)).length;
                       return (
                         <div className="rp-section" key={sec.area}>
                           <div className="rp-section-title">
@@ -467,17 +612,16 @@ const AdminRbac = ({ userName, onLogout }) => {
                           </div>
                           <div className="rp-perms">
                             {sec.items.map((p) => {
-                              const checked = Array.isArray(permChecked) && permChecked.includes(p.id);
+                              const checked = Array.isArray(roleChecked) && roleChecked.includes(p.id);
                               return (
                                 <label className="rp-perm" key={p.id}>
                                   <input
                                     type="checkbox"
                                     checked={checked}
-                                    onChange={() => togglePermission(p.id)}
-                                    disabled={permLoading || permSaving}
+                                    onChange={() => toggleRolePermission(p.id)}
+                                    disabled={availableLoading || roleSaving}
                                   />
                                   <span className="rp-perm-text">
-                                    {/* Libellé uniquement — code technique retiré */}
                                     <span className="rp-perm-label">{p.label}</span>
                                   </span>
                                 </label>
@@ -487,10 +631,62 @@ const AdminRbac = ({ userName, onLogout }) => {
                         </div>
                       );
                     })}
-                    {!sections.length && (
-                      <div className="rp-empty">Aucune permission disponible pour ce rôle.</div>
+                    {!roleSections.length && (
+                      <div className="rp-empty">Aucune permission disponible pour ce role.</div>
                     )}
                   </div>
+
+                  {selectedUserId ? (
+                    <div className="rp-user-override">
+                      <div className="rp-perm-header">
+                        <div className="rp-note">Exception pour l'utilisateur selectionne</div>
+                        <button
+                          className="admin-btn primary"
+                          type="button"
+                          onClick={save}
+                          disabled={!isUserDirty || permLoading || permSaving}
+                        >
+                          <Save size={16} />
+                          <span>Enregistrer exception</span>
+                        </button>
+                      </div>
+                      <div className="rp-sections rp-sections-compact">
+                        {userSections.map((sec) => {
+                          const total = sec.items.length;
+                          const checkedCount = sec.items.filter((p) => Array.isArray(permChecked) && permChecked.includes(p.id)).length;
+                          return (
+                            <div className="rp-section" key={`user-${sec.area}`}>
+                              <div className="rp-section-title">
+                                <span>{sec.areaLabel}</span>
+                                <span className="rp-chip">{checkedCount}/{total}</span>
+                              </div>
+                              <div className="rp-perms">
+                                {sec.items.map((p) => {
+                                  const checked = Array.isArray(permChecked) && permChecked.includes(p.id);
+                                  return (
+                                    <label className="rp-perm" key={`user-${p.id}`}>
+                                      <input
+                                        type="checkbox"
+                                        checked={checked}
+                                        onChange={() => togglePermission(p.id)}
+                                        disabled={permLoading || permSaving}
+                                      />
+                                      <span className="rp-perm-text">
+                                        <span className="rp-perm-label">{p.label}</span>
+                                      </span>
+                                    </label>
+                                  );
+                                })}
+                              </div>
+                            </div>
+                          );
+                        })}
+                        {!userSections.length && (
+                          <div className="rp-empty">Aucune permission utilisateur disponible.</div>
+                        )}
+                      </div>
+                    </div>
+                  ) : null}
                 </>
               )}
             </div>
@@ -507,16 +703,16 @@ const AdminRbac = ({ userName, onLogout }) => {
         >
           <div className="admin-modal" onClick={(e) => e.stopPropagation()}>
             <div className="admin-modal-head">
-              <strong>Modifications non enregistrées</strong>
+              <strong>Modifications non enregistrees</strong>
             </div>
             <div className="admin-note" style={{ marginTop: 10 }}>
-              Vous avez des changements non sauvegardés. Voulez-vous les abandonner ?
+              Vous avez des changements non sauvegardes. Voulez-vous les abandonner ?
             </div>
             <div className="admin-modal-actions">
-              <button className="admin-btn" type="button" onClick={closeConfirm} disabled={permSaving}>
+              <button className="admin-btn" type="button" onClick={closeConfirm} disabled={permSaving || roleSaving}>
                 Annuler
               </button>
-              <button className="admin-btn primary" type="button" onClick={confirmDiscard} disabled={permSaving}>
+              <button className="admin-btn primary" type="button" onClick={confirmDiscard} disabled={permSaving || roleSaving}>
                 Abandonner
               </button>
             </div>

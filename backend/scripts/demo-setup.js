@@ -1,3 +1,7 @@
+// BLOC 1 - Role du fichier.
+// Ce fichier sert de script de maintenance, seed, test ou migration pour demo-setup.
+// Point de vigilance: ne pas lancer en production sans confirmer les variables .env et la base cible.
+
 require('../loadEnv');
 
 const { spawnSync } = require('child_process');

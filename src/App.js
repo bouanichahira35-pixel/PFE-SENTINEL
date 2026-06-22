@@ -2,6 +2,7 @@
 // Ce fichier rassemble les ecrans de l'application et decide quelle page afficher.
 import { useState, useEffect, useCallback } from "react";
 import { ToastProvider } from "./components/shared/Toast";
+import { ConfirmDialogProvider } from "./components/shared/ConfirmDialog";
 import "./App.css";
 
 import SplashScreen from "./components/shared/SplashScreen";
@@ -58,7 +59,6 @@ import ParametresDem from "./pages/demandeur/ParametresDem";
 import AdminDashboard from "./pages/admin/AdminDashboard";
 import AdminUsers from "./pages/admin/AdminUsers";
 import AdminIA from "./pages/admin/AdminIA";
-import AdminAudit from "./pages/admin/AdminAudit";
 import AdminSettings from "./pages/admin/AdminSettings";
 import AdminSecurity from "./pages/admin/AdminSecurity";
 import AdminSessions from "./pages/admin/AdminSessions";
@@ -409,8 +409,9 @@ const App = () => {
   // Cette partie affiche les pages selon l'etat de connexion et selon le role utilisateur.
   return (
     <ToastProvider>
-      <BrowserRouter>
-        <Routes>
+      <ConfirmDialogProvider>
+        <BrowserRouter>
+          <Routes>
           {!isAuthenticated ? (
             <>
               <Route path="/" element={<Navigate to="/login" replace />} />
@@ -440,7 +441,7 @@ const App = () => {
                   <Route path="/magasinier/audit-fifo" element={<Navigate to="/magasinier/historique" replace />} />
                   <Route path="/magasinier/chat" element={<ChatMag userName={userName} onLogout={handleLogout} />} />
                   <Route path="/magasinier/parametres" element={<ParametresMag userName={userName} onLogout={handleLogout} />} />
-                  <Route path="/" element={<Navigate to="/magasinier" replace />} />
+                  <Route path="/" element={<Navigate to="/magasinier/inbox" replace />} />
                   <Route path="/magasinier/inventaire/:id" element={<FeuilleInventaireMag userName={userName} onLogout={handleLogout} />} />
                 </>
               )}
@@ -484,7 +485,7 @@ const App = () => {
                   <Route path="/responsable/chat" element={<ChatResp userName={userName} onLogout={handleLogout} />} />
                   <Route path="/responsable/parametres" element={<ParametresResp userName={userName} onLogout={handleLogout} />} />
                   <Route path="/responsable/parametres/fournisseurs" element={<Navigate to="/responsable/fournisseurs" replace />} />
-                  <Route path="/" element={<Navigate to="/responsable" replace />} />
+                  <Route path="/" element={<Navigate to="/responsable/inventaires" replace />} />
                 </>
               )}
 
@@ -499,8 +500,8 @@ const App = () => {
                   <Route path="/admin/roles-permissions" element={<AdminRbac userName={userName} onLogout={handleLogout} />} />
                   <Route path="/admin/rbac" element={<Navigate to="/admin/roles-permissions" replace />} />
                   <Route path="/admin/securite" element={<AdminSecurity userName={userName} onLogout={handleLogout} />} />
-                  <Route path="/admin/audit" element={<AdminAudit userName={userName} onLogout={handleLogout} />} />
-                  <Route path="/admin/historique" element={<Navigate to="/admin/audit" replace />} />
+                  <Route path="/admin/audit" element={<Navigate to="/admin/securite" replace />} />
+                  <Route path="/admin/historique" element={<Navigate to="/admin/securite" replace />} />
                   <Route path="/admin/parametres" element={<AdminSettings userName={userName} onLogout={handleLogout} />} />
                   <Route path="/admin/support" element={<AdminSupport userName={userName} onLogout={handleLogout} />} />
                   <Route path="/" element={<Navigate to="/admin" replace />} />
@@ -520,8 +521,9 @@ const App = () => {
               <Route path="*" element={<NotFound />} />
             </>
           )}
-        </Routes>
-      </BrowserRouter>
+          </Routes>
+        </BrowserRouter>
+      </ConfirmDialogProvider>
     </ToastProvider>
   );
 };

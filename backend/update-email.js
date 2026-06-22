@@ -1,3 +1,7 @@
+// BLOC 1 - Role du fichier.
+// Ce fichier participe au fonctionnement du module update-email.
+// Point de vigilance: modifier avec prudence car ce fichier peut etre importe par plusieurs modules.
+
 require("dotenv").config();
 require("./db");
 const User = require("./models/User");

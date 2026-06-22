@@ -1,3 +1,7 @@
+// BLOC 1 - Role du fichier.
+// Ce fichier affiche une page de l'espace responsable pour DemandesAValider.
+// Point de vigilance: garder les props, appels API et classes CSS synchronises avec les ecrans existants.
+
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { CheckCircle2, RefreshCw, Search, XCircle, X } from 'lucide-react';
 import SidebarResp from '../../components/responsable/SidebarResp';
@@ -5,6 +9,7 @@ import HeaderPage from '../../components/shared/HeaderPage';
 import ProtectedPage from '../../components/shared/ProtectedPage';
 import LoadingSpinner from '../../components/shared/LoadingSpinner';
 import { useToast } from '../../components/shared/Toast';
+import { useConfirm } from '../../components/shared/ConfirmDialog';
 import { get, post } from '../../services/api';
 import './DemandesAValider.css';
 
@@ -137,6 +142,7 @@ function RejectModal({ reference, onConfirm, onCancel }) {
 
 const DemandesAValider = ({ userName, onLogout }) => {
   const toast = useToast();
+  const confirmAction = useConfirm();
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [actionBusyId, setActionBusyId] = useState('');
@@ -218,7 +224,13 @@ const DemandesAValider = ({ userName, onLogout }) => {
       return;
     }
 
-    const ok = window.confirm(`Approuver demande ${reference} ?`);
+    const ok = await confirmAction({
+      title: 'Approuver la demande',
+      badge: 'Validation responsable',
+      message: `Confirmer l approbation de la demande ${reference} ?`,
+      confirmLabel: 'Approuver',
+      variant: 'success',
+    });
     if (!ok) return;
 
     setActionBusyId(id);

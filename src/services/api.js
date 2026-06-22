@@ -194,18 +194,79 @@ function triggerAuthLogout(reason) {
   }
 }
 
+function isRecord(value) {
+  return value !== null && typeof value === "object";
+}
+
+function extractApiMessage(value, seen = new Set()) {
+  if (typeof value === "string") return value.trim();
+  if (typeof value === "number" || typeof value === "boolean") return String(value);
+  if (!isRecord(value) || seen.has(value)) return "";
+
+  seen.add(value);
+
+  const keys = [
+    "user_message",
+    "userMessage",
+    "message",
+    "error",
+    "title",
+    "detail",
+    "reason",
+  ];
+
+  for (const key of keys) {
+    const text = extractApiMessage(value[key], seen);
+    if (text) return text;
+  }
+
+  if (Array.isArray(value.details)) {
+    for (const item of value.details) {
+      const text = extractApiMessage(item, seen);
+      if (text) return text;
+    }
+  }
+
+  if (Array.isArray(value.errors)) {
+    for (const item of value.errors) {
+      const text = extractApiMessage(item, seen);
+      if (text) return text;
+    }
+  }
+
+  return "";
+}
+
+function isTechnicalApiMessage(message) {
+  const text = String(message || "").toLowerCase();
+  if (!text) return false;
+  return (
+    text.includes("[object object]") ||
+    text.includes("object object") ||
+    text.includes("<!doctype") ||
+    text.includes("<html") ||
+    text.includes("invalid_json") ||
+    text.includes("non_json_response") ||
+    text.includes("api_base") ||
+    text.includes("proxy") ||
+    text.includes("/api/") ||
+    text.includes("mongodb") ||
+    text.includes("stack")
+  );
+}
+
 function buildApiError(data) {
-  const reason = typeof data.reason === "string" ? data.reason : "";
-  const details = Array.isArray(data.details)
-    ? data.details.join(", ")
-    : (typeof data.details === "string" ? data.details : "");
-  const base = data.error || "Erreur API";
+  const base = extractApiMessage(data) || "Operation impossible. Veuillez reessayer.";
+  const userMessage = isTechnicalApiMessage(base)
+    ? "Operation impossible. Veuillez reessayer."
+    : base;
   const raw = typeof data.raw === "string" ? data.raw : "";
-  const rawHint = raw.trim().startsWith("<!DOCTYPE") || raw.trim().startsWith("<html")
-    ? "Reponse HTML recue. Verifiez API_BASE / proxy (backend)"
-    : "";
-  const suffix = [reason, details, rawHint].filter(Boolean).join(" | ");
-  return new Error(suffix ? `${base}: ${suffix}` : base);
+  const err = new Error(userMessage);
+  err.debug = {
+    api_error: data,
+    raw_preview: raw ? raw.slice(0, 400) : "",
+  };
+  return err;
 }
 
 async function readJsonOrText(res) {
@@ -297,7 +358,8 @@ async function requestInternal(path, method, payload, opts = {}) {
   const networkRetries = Math.max(0, Number(opts?.networkRetries || 0));
 
   const normalizedMethod = String(method || "GET").toUpperCase();
-  const cacheableGet = normalizedMethod === "GET" && !payload;
+  const isRealtimePath = requestPath.startsWith("/chat/");
+  const cacheableGet = normalizedMethod === "GET" && !payload && !isRealtimePath;
   const headers = { "Content-Type": "application/json" };
   const token = getAuthToken();
 
@@ -472,24 +534,78 @@ export function del(path, payload) {
 
 // BLOC 9 - Envoi de fichiers.
 // Cette partie utilise FormData au lieu de JSON pour envoyer images, PDF ou pieces jointes.
-async function uploadFileInternal(path, file, fieldName, retried = false) {
+function getUploadTargetUrls(requestPath) {
+  const primary = `${API_BASE}${requestPath}`;
+  const targets = [primary];
+
+  if (
+    typeof window !== "undefined" &&
+    String(API_BASE || "").startsWith("/") &&
+    ["localhost", "127.0.0.1"].includes(window.location.hostname)
+  ) {
+    const directBackend = `${window.location.protocol}//${window.location.hostname}:5000/api${requestPath}`;
+    if (!targets.includes(directBackend)) targets.push(directBackend);
+  }
+
+  return targets;
+}
+
+async function uploadFileInternal(path, file, fieldName, retried = false, targetIndex = 0) {
   const requestPath = normalizeApiPath(path);
   const token = getAuthToken();
-  const formData = new FormData();
-  formData.append(fieldName, file);
+  const targetUrls = getUploadTargetUrls(requestPath);
+  const targetUrl = targetUrls[Math.min(targetIndex, targetUrls.length - 1)];
 
   const startedAt = nowMs();
-  const res = await fetch(`${API_BASE}${requestPath}`, {
-    method: "POST",
-    headers: token ? { Authorization: `Bearer ${token}` } : undefined,
-    credentials: "include",
-    body: formData,
-  });
+  const controller = typeof AbortController !== "undefined" ? new AbortController() : null;
+  const requestTimeoutMs = getRequestTimeoutMs(requestPath);
+  const timeoutId = controller
+    ? setTimeout(() => controller.abort(), requestTimeoutMs)
+    : null;
+
+  let res;
+  try {
+    const formData = new FormData();
+    formData.append(fieldName, file);
+
+    res = await fetch(targetUrl, {
+      method: "POST",
+      headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+      credentials: "include",
+      body: formData,
+      signal: controller ? controller.signal : undefined,
+    });
+  } catch (err) {
+    const latencyMs = Math.max(0, Math.round(nowMs() - startedAt));
+    recordNetworkResult({ latencyMs, failed: true });
+
+    if (targetIndex + 1 < targetUrls.length) {
+      return uploadFileInternal(path, file, fieldName, retried, targetIndex + 1);
+    }
+
+    const isAbort = String(err?.name || "") === "AbortError";
+    const uploadErr = new Error(
+      isAbort
+        ? "Import plus lent que prevu. Verifiez l'etat du serveur puis reessayez."
+        : "Impossible de contacter le service pour importer le fichier. Verifiez que l'application est disponible."
+    );
+    uploadErr.cause = err;
+    uploadErr.debug = {
+      kind: isAbort ? "timeout" : "network",
+      path: requestPath,
+      target_url: targetUrl,
+      api_base: API_BASE,
+      latency_ms: latencyMs,
+    };
+    throw uploadErr;
+  } finally {
+    if (timeoutId) clearTimeout(timeoutId);
+  }
 
   if (res.status === 401 && token && !retried && requestPath !== "/auth/refresh") {
     const refreshed = await refreshAccessTokenOnce();
     if (refreshed?.ok && refreshed.token) {
-      return uploadFileInternal(requestPath, file, fieldName, true);
+      return uploadFileInternal(requestPath, file, fieldName, true, targetIndex);
     }
   }
 

@@ -1,3 +1,7 @@
+// BLOC 1 - Role du fichier.
+// Ce fichier expose les endpoints REST du domaine ai et controle les regles d'acces cote API.
+// Point de vigilance: verifier l'authentification, les roles et les validations avant toute modification.
+
 const router = require('express').Router();
 const AIAlert = require('../models/AIAlert');
 const AIPrediction = require('../models/AIPrediction');
@@ -17,6 +21,7 @@ const User = require('../models/User');
 const requireAuth = require('../middlewares/requireAuth');
 const strictBody = require('../middlewares/strictBody');
 const { isGeminiConfigured, generateGeminiContent, transcribeGeminiAudio } = require('../services/geminiService');
+const { isGroqConfigured } = require('../services/groqService');
 const {
   trainAndBuildDatasets,
   predictStockout,
@@ -370,6 +375,88 @@ function capability(enabled, reasons = []) {
   };
 }
 
+function cleanAssistantText(value, maxLength = 180) {
+  return String(value || '')
+    .replace(/[\r\n\t]+/g, ' ')
+    .replace(/\s{2,}/g, ' ')
+    .trim()
+    .slice(0, maxLength);
+}
+
+function cleanAssistantNumber(value) {
+  const n = Number(value);
+  return Number.isFinite(n) ? n : null;
+}
+
+function cleanAssistantCause(value) {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
+  return {
+    title: cleanAssistantText(value.title, 180),
+    detail: cleanAssistantText(value.detail, 360),
+    source: cleanAssistantText(value.source, 180),
+  };
+}
+
+function cleanClientAlertContext(value) {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
+  const ctx = {
+    source: 'alerte_ia',
+    alert_id: cleanAssistantText(value.alert_id || value.alertId, 40),
+    decision_id: cleanAssistantText(value.decision_id || value.decision, 120),
+    product_id: cleanAssistantText(value.product_id || value.productId, 40),
+    product_code: cleanAssistantText(value.product_code || value.productCode || value.product, 80),
+    product_name: cleanAssistantText(value.product_name || value.productName, 160),
+    alert_type: cleanAssistantText(value.alert_type || value.type, 40),
+    alert_type_label: cleanAssistantText(value.alert_type_label || value.typeLabel, 80),
+    risk_level: cleanAssistantText(value.risk_level || value.risk, 40),
+    risk_label: cleanAssistantText(value.risk_label || value.riskLabel, 80),
+    message: cleanAssistantText(value.message, 420),
+    current_stock: cleanAssistantNumber(value.current_stock ?? value.currentStock),
+    min_stock: cleanAssistantNumber(value.min_stock ?? value.minStock),
+    recommended_qty: cleanAssistantNumber(value.recommended_qty ?? value.recommendedQty),
+    product_status: cleanAssistantText(value.product_status || value.productStatus, 80),
+    family: cleanAssistantText(value.family, 100),
+    detected_at: cleanAssistantText(value.detected_at || value.detectedAt, 80),
+    cause: cleanAssistantCause(value.cause),
+  };
+  if (!ctx.alert_id && !ctx.product_id && !ctx.product_code && !ctx.product_name && !ctx.decision_id) return null;
+  return ctx;
+}
+
+async function buildAssistantAlertContext(rawValue) {
+  const clientCtx = cleanClientAlertContext(rawValue);
+  const alertId = clientCtx?.alert_id || '';
+  if (/^[a-f0-9]{24}$/i.test(alertId)) {
+    const alert = await AIAlert.findById(alertId)
+      .populate('product', 'name code_product status quantity_current seuil_minimum family')
+      .lean();
+    if (alert) {
+      const product = alert.product || {};
+      return {
+        source: 'alerte_ia',
+        alert_id: String(alert._id),
+        decision_id: clientCtx?.decision_id || `ai-alert-${String(alert._id)}`,
+        product_id: product?._id ? String(product._id) : '',
+        product_code: cleanAssistantText(product.code_product, 80),
+        product_name: cleanAssistantText(product.name, 160),
+        alert_type: cleanAssistantText(alert.alert_type, 40),
+        alert_type_label: clientCtx?.alert_type_label || '',
+        risk_level: cleanAssistantText(alert.risk_level, 40),
+        risk_label: clientCtx?.risk_label || '',
+        message: cleanAssistantText(alert.message, 420),
+        current_stock: cleanAssistantNumber(product.quantity_current),
+        min_stock: cleanAssistantNumber(product.seuil_minimum),
+        recommended_qty: clientCtx?.recommended_qty ?? null,
+        product_status: cleanAssistantText(product.status, 80),
+        family: cleanAssistantText(product.family, 100),
+        detected_at: alert.detected_at || alert.createdAt || clientCtx?.detected_at || null,
+        cause: clientCtx?.cause || null,
+      };
+    }
+  }
+  return clientCtx;
+}
+
 router.get('/alerts', requireAuth, async (req, res) => {
   try {
     if (!ensureResponsable(req, res)) return;
@@ -601,6 +688,8 @@ router.get('/assistant/status', requireAuth, async (req, res) => {
 
     const aiConfig = await getAiConfig();
     const geminiConfigured = isGeminiConfigured();
+    const groqConfigured = isGroqConfigured();
+    const activeTextProvider = groqConfigured ? 'groq' : geminiConfigured ? 'gemini' : 'fallback';
     const [registry, metrics] = await Promise.all([
       getSettingValue('ai_models_registry_v2', null),
       getSettingValue('ai_models_metrics_v2', null),
@@ -627,6 +716,26 @@ router.get('/assistant/status', requireAuth, async (req, res) => {
         configured: geminiConfigured,
         model_default: process.env.GEMINI_MODEL || 'gemini-2.0-flash',
       },
+      groq: {
+        configured: groqConfigured,
+        model_default: process.env.GROQ_MODEL || 'llama-3.3-70b-versatile',
+      },
+      providers: {
+        active_text_provider: activeTextProvider,
+        groq: {
+          configured: groqConfigured,
+          model_default: process.env.GROQ_MODEL || 'llama-3.3-70b-versatile',
+        },
+        gemini: {
+          configured: geminiConfigured,
+          model_default: process.env.GEMINI_MODEL || 'gemini-2.0-flash',
+        },
+        fallback: {
+          configured: true,
+          model_default: 'local-rules',
+        },
+      },
+      active_text_provider: activeTextProvider,
       models: {
         trained: Boolean(registry?.trained_at),
         model_version: registry?.model_version || null,
@@ -958,7 +1067,7 @@ router.get('/assistant/traces', requireAuth, async (req, res) => {
   }
 });
 
-router.post('/assistant/ask', requireAuth, strictBody(['question', 'history', 'mode', 'force_gemini']), async (req, res) => {
+router.post('/assistant/ask', requireAuth, strictBody(['question', 'history', 'mode', 'force_gemini', 'alert_context']), async (req, res) => {
   try {
     if (!ensureResponsable(req, res)) return;
     const aiConfig = await getAiConfig();
@@ -973,6 +1082,7 @@ router.post('/assistant/ask', requireAuth, strictBody(['question', 'history', 'm
     if (questionRaw.length > 2500) return res.status(400).json({ error: 'question trop longue (max 2500 caracteres)' });
     const mode = String(req.body?.mode || 'chat').toLowerCase() === 'report' ? 'report' : 'chat';
     const history = Array.isArray(req.body?.history) ? req.body.history.slice(-24) : [];
+    const alertContext = await buildAssistantAlertContext(req.body?.alert_context);
     const signals = await buildAssistantSignals({
       includeConsumption: aiConfig.analyseConsommation !== false,
     });
@@ -991,6 +1101,7 @@ router.post('/assistant/ask', requireAuth, strictBody(['question', 'history', 'm
         anomaly_top: signals.anomaly.slice(0, 30),
         action_plan: Array.isArray(signals.copilot?.action_plan) ? signals.copilot.action_plan.slice(0, 5) : [],
         metrics: signals.metrics || {},
+        focus_alert: alertContext || null,
       },
     });
 
@@ -1013,6 +1124,7 @@ router.post('/assistant/ask', requireAuth, strictBody(['question', 'history', 'm
       mode: assistant.mode || mode,
       ai_config: aiConfig,
       partial_warnings: signals.warnings,
+      focus_alert: alertContext || null,
       gemini_configured: geminiConfigured,
     });
   } catch (err) {
@@ -1054,7 +1166,7 @@ router.post('/assistant/transcribe', requireAuth, strictBody(['audio_base64', 'm
   }
 });
 
-router.post('/assistant/voice-ask', requireAuth, strictBody(['audio_base64', 'mime_type', 'history', 'mode', 'language']), async (req, res) => {
+router.post('/assistant/voice-ask', requireAuth, strictBody(['audio_base64', 'mime_type', 'history', 'mode', 'language', 'alert_context']), async (req, res) => {
   try {
     if (!ensureResponsable(req, res)) return;
     const aiConfig = await getAiConfig();
@@ -1081,6 +1193,7 @@ router.post('/assistant/voice-ask', requireAuth, strictBody(['audio_base64', 'mi
 
     const mode = String(req.body?.mode || 'chat').toLowerCase() === 'report' ? 'report' : 'chat';
     const history = Array.isArray(req.body?.history) ? req.body.history.slice(-24) : [];
+    const alertContext = await buildAssistantAlertContext(req.body?.alert_context);
     const signals = await buildAssistantSignals({
       includeConsumption: aiConfig.analyseConsommation !== false,
     });
@@ -1097,6 +1210,7 @@ router.post('/assistant/voice-ask', requireAuth, strictBody(['audio_base64', 'mi
         anomaly_top: signals.anomaly.slice(0, 5),
         action_plan: Array.isArray(signals.copilot?.action_plan) ? signals.copilot.action_plan.slice(0, 5) : [],
         metrics: signals.metrics || {},
+        focus_alert: alertContext || null,
       },
     });
 
@@ -1121,6 +1235,7 @@ router.post('/assistant/voice-ask', requireAuth, strictBody(['audio_base64', 'mi
       mode: assistant.mode || mode,
       ai_config: aiConfig,
       partial_warnings: signals.warnings,
+      focus_alert: alertContext || null,
     });
   } catch (err) {
     if (isGeminiUpstreamError(err)) {

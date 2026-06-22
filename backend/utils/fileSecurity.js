@@ -1,3 +1,7 @@
+// BLOC 1 - Role du fichier.
+// Ce fichier regroupe des fonctions utilitaires backend autour de fileSecurity.
+// Point de vigilance: modifier avec prudence car ce fichier peut etre importe par plusieurs modules.
+
 const path = require('path');
 const { spawn } = require('child_process');
 

@@ -1,3 +1,7 @@
+// BLOC 1 - Role du fichier.
+// Ce fichier fournit un hook React reutilisable pour useProtectedFileUrl.
+// Point de vigilance: modifier avec prudence car ce fichier peut etre importe par plusieurs modules.
+
 import { useEffect, useRef, useState } from 'react';
 import { API_BASE } from '../services/api';
 

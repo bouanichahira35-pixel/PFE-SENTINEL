@@ -1,3 +1,7 @@
+// BLOC 1 - Role du fichier.
+// Ce fichier participe au fonctionnement du module NotFound.
+// Point de vigilance: garder les props, appels API et classes CSS synchronises avec les ecrans existants.
+
 import { useNavigate } from 'react-router-dom';
 
 const NotFound = () => {

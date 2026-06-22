@@ -1,3 +1,7 @@
+// BLOC 1 - Role du fichier.
+// Ce fichier affiche une page du module fournisseurs responsable pour FournisseursPage.
+// Point de vigilance: garder les props, appels API et classes CSS synchronises avec les ecrans existants.
+
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Plus, RefreshCw, Truck } from 'lucide-react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
@@ -6,6 +10,7 @@ import SidebarResp from '../../../components/responsable/SidebarResp';
 import HeaderPage from '../../../components/shared/HeaderPage';
 import LoadingSpinner from '../../../components/shared/LoadingSpinner';
 import { useToast } from '../../../components/shared/Toast';
+import { useConfirm } from '../../../components/shared/ConfirmDialog';
 
 import FournisseurStatsCards from '../../../components/fournisseurs/FournisseurStatsCards';
 import FournisseurFilters from '../../../components/fournisseurs/FournisseurFilters';
@@ -36,6 +41,7 @@ function normalizeSupplierId(value) {
 
 const FournisseursPage = ({ userName, onLogout }) => {
   const toast = useToast();
+  const confirmAction = useConfirm();
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
 
@@ -218,8 +224,15 @@ const FournisseursPage = ({ userName, onLogout }) => {
     const current = String(s?.status || '').toUpperCase();
     const ns = String(nextStatus || '').toUpperCase();
     if (current !== ns) {
-      // eslint-disable-next-line no-alert
-      const ok = window.confirm(ns === 'SUSPENDU' ? 'Suspendre ce fournisseur ? Il ne pourra plus être utilisé pour une nouvelle commande.' : 'Réactiver ce fournisseur ?');
+      const ok = await confirmAction({
+        title: ns === 'SUSPENDU' ? 'Suspendre le fournisseur' : 'Reactiver le fournisseur',
+        badge: 'Referentiel fournisseurs',
+        message: ns === 'SUSPENDU'
+          ? 'Ce fournisseur ne pourra plus etre utilise pour une nouvelle commande.'
+          : 'Ce fournisseur redeviendra disponible pour les commandes.',
+        confirmLabel: ns === 'SUSPENDU' ? 'Suspendre' : 'Reactiver',
+        variant: ns === 'SUSPENDU' ? 'warning' : 'success',
+      });
       if (!ok) return;
     }
     try {

@@ -1,3 +1,7 @@
+// BLOC 1 - Role du fichier.
+// Ce fichier contient la logique metier reutilisable du domaine aiModelService, appelee par les routes ou les jobs.
+// Point de vigilance: preserver les contrats appeles par plusieurs routes.
+
 const fs = require('fs');
 const path = require('path');
 const { spawnSync } = require('child_process');
@@ -179,6 +183,7 @@ function buildAssistantContextText(ctx) {
     anomaly_top: Array.isArray(ctx.anomaly_top) ? ctx.anomaly_top.slice(0, 5) : [],
     action_plan: Array.isArray(ctx.action_plan) ? ctx.action_plan.slice(0, 5) : [],
     metrics: ctx.metrics && typeof ctx.metrics === 'object' ? ctx.metrics : {},
+    focus_alert: ctx.focus_alert && typeof ctx.focus_alert === 'object' ? ctx.focus_alert : null,
   };
   return `CONTEXTE OPERATOIRE (extrait):\n${JSON.stringify(safe, null, 2)}`;
 }
@@ -1534,8 +1539,10 @@ async function askResponsableAssistant(options = {}) {
     const anomalyTop = topItems(ctx?.anomaly_top, 'anomaly_score', 7);
     const actionPlan = Array.isArray(ctx?.action_plan) ? ctx.action_plan : [];
     const metrics = ctx && typeof ctx === 'object' && ctx.metrics && typeof ctx.metrics === 'object' ? ctx.metrics : {};
+    const focusAlert = ctx && typeof ctx === 'object' && ctx.focus_alert && typeof ctx.focus_alert === 'object' ? ctx.focus_alert : null;
 
     const compact = {
+      focus_alert: focusAlert,
       stockout_top: stockoutTop.map((x) => ({
         product_name: x.product_name,
         code_product: x.code_product,
@@ -1581,6 +1588,7 @@ async function askResponsableAssistant(options = {}) {
     const anomalyTop = topItems(ctx?.anomaly_top, 'anomaly_score', 5);
     const actionPlan = Array.isArray(ctx?.action_plan) ? ctx.action_plan : [];
     const metrics = ctx && typeof ctx === 'object' && ctx.metrics && typeof ctx.metrics === 'object' ? ctx.metrics : {};
+    const focusAlert = ctx && typeof ctx === 'object' && ctx.focus_alert && typeof ctx.focus_alert === 'object' ? ctx.focus_alert : null;
 
     const normalize = (s) => String(s || '')
       .toLowerCase()
@@ -1590,6 +1598,36 @@ async function askResponsableAssistant(options = {}) {
       .trim();
 
     const queryNorm = normalize(query);
+    const wantsFocusedAlert = Boolean(focusAlert) && (
+      queryNorm.includes('alerte')
+      || queryNorm.includes('decision')
+      || queryNorm.includes('triage')
+      || queryNorm.includes('cause')
+      || queryNorm.includes('risque')
+      || queryNorm.includes('analyse')
+    );
+    if (wantsFocusedAlert) {
+      const name = [focusAlert.product_code, focusAlert.product_name]
+        .map((x) => String(x || '').trim())
+        .filter(Boolean)
+        .filter((x, idx, arr) => arr.indexOf(x) === idx)
+        .join(' - ') || 'Produit';
+      const cause = focusAlert.cause && typeof focusAlert.cause === 'object' ? focusAlert.cause : {};
+      const reason = cause.detail || focusAlert.message || 'Signal IA a confirmer avec le stock physique et les sorties recentes.';
+      const actionQty = Number(focusAlert.recommended_qty || 0);
+      const action = actionQty > 0
+        ? `preparer une commande ou un transfert de ${qty(actionQty)} unite(s)`
+        : 'ouvrir la fiche produit et verifier le dernier mouvement';
+      return [
+        `Alerte IA pour ${name}:`,
+        `- Decision: ${focusAlert.decision_id || 'a confirmer'}.`,
+        `- Type/risque: ${focusAlert.alert_type_label || focusAlert.alert_type || 'alerte IA'} / ${focusAlert.risk_label || focusAlert.risk_level || 'niveau non precise'}.`,
+        `- Stock/seuil: ${focusAlert.current_stock ?? '-'} / ${focusAlert.min_stock ?? '-'}.`,
+        `- Cause probable: ${reason}`,
+        `- Action responsable: ${action}, puis marquer l'alerte revue apres controle.`,
+      ].join('\n');
+    }
+
     const isMostlyDots = queryNorm.replace(/[.\s]/g, '').length === 0;
     if (isMostlyDots) {
       return [
@@ -1921,6 +1959,7 @@ async function askResponsableAssistant(options = {}) {
       'Tu parles de facon naturelle, claire, professionnelle et humaine.',
       'Toujours: repondre a la question precise avant d’ajouter des recommandations.',
       'Si l’utilisateur pose un "pourquoi" sur un produit, reponds SPECIFIQUEMENT sur ce produit.',
+      'Si CONTEXTE OPERATOIRE contient focus_alert, traite cette alerte comme le contexte prioritaire de la conversation.',
       'Si l’utilisateur demande un resume (ex: "en 5 lignes"), respecte strictement la contrainte de longueur.',
       'Ne jamais inventer des donnees absentes du contexte.',
       'Tu as acces a des outils (lecture seule) pour interroger le stock et les alertes. Utilise-les si ca aide a repondre avec des chiffres reels.',

@@ -1,3 +1,7 @@
+// BLOC 1 - Role du fichier.
+// Ce fichier sert d'outil local pour serve-build-proxy.
+// Point de vigilance: modifier avec prudence car ce fichier peut etre importe par plusieurs modules.
+
 /* eslint-disable no-console */
 const http = require('http');
 const fs = require('fs');

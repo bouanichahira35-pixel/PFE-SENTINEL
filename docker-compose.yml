@@ -12,6 +12,7 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
+      start_period: 20s
 
   redis:
     image: redis:7-alpine
@@ -24,6 +25,7 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
+      start_period: 10s
 
   backend:
     build:
@@ -38,13 +40,28 @@ services:
       PORT: 5000
       MONGODB_URI: mongodb://mongo:27017/pfe_sentinel
       REDIS_URL: redis://redis:6379
-      JWT_SECRET: dev_jwt_secret_change_me
-      PII_HASH_SECRET: dev_pii_hash_secret_change_me
-      INTERNAL_BOND_QR_SECRET: dev_qr_secret_change_me
-      FRONTEND_URLS: http://localhost:8080
-      MAIL_QUEUE_ENABLED: "true"
+      JWT_SECRET: ${DOCKER_JWT_SECRET:-sentinel_docker_dev_jwt_secret_32_chars}
+      PII_HASH_SECRET: ${DOCKER_PII_HASH_SECRET:-sentinel_docker_dev_pii_secret_32_chars}
+      INTERNAL_BOND_QR_SECRET: ${DOCKER_INTERNAL_BOND_QR_SECRET:-sentinel_docker_dev_qr_secret_32_chars}
+      SUPPLIER_PORTAL_JWT_SECRET: ${DOCKER_SUPPLIER_PORTAL_JWT_SECRET:-sentinel_docker_supplier_secret_32_chars}
+      FRONTEND_URL: http://localhost:8080
+      FRONTEND_URLS: http://localhost:8080,http://127.0.0.1:8080
+      APP_BASE_URL: http://localhost:8080
+      MAIL_QUEUE_ENABLED: ${DOCKER_MAIL_QUEUE_ENABLED:-false}
+      MAIL_HOST: ${DOCKER_MAIL_HOST:-}
+      MAIL_PORT: ${DOCKER_MAIL_PORT:-587}
+      MAIL_SECURE: ${DOCKER_MAIL_SECURE:-false}
+      MAIL_USER: ${DOCKER_MAIL_USER:-}
+      MAIL_PASS: ${DOCKER_MAIL_PASS:-}
+      MAIL_FROM: ${DOCKER_MAIL_FROM:-}
       AI_AUTO_TRAIN_ON_BOOT: "false"
+      AI_AUTO_TRAINING_JOB_ENABLED: "false"
+      AI_ALERTS_REBUILD_ON_BOOT: "false"
+      DOMAIN_CLEANUP_ON_BOOT: "false"
+      PO_REMINDERS_JOB_ENABLED: "false"
       AI_PYTHON_BIN: python3
+      GEMINI_API_KEY: ${DOCKER_GEMINI_API_KEY:-}
+      GROQ_API_KEY: ${DOCKER_GROQ_API_KEY:-}
     volumes:
       - backend_uploads:/app/uploads
       - backend_ai_data:/app/data/ai
@@ -53,6 +70,12 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O - http://127.0.0.1:5000/api/health >/dev/null 2>&1 || exit 1"]
+      interval: 20s
+      timeout: 5s
+      retries: 6
+      start_period: 30s
 
   web:
     build:
@@ -65,10 +88,16 @@ services:
     ports:
       - "8080:80"
     depends_on:
-      - backend
+      backend:
+        condition: service_started
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O - http://127.0.0.1/ >/dev/null 2>&1 || exit 1"]
+      interval: 20s
+      timeout: 5s
+      retries: 6
+      start_period: 10s
 
 volumes:
   mongo_data:
   backend_uploads:
   backend_ai_data:
-

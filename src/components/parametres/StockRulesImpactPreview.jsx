@@ -1,3 +1,7 @@
+// BLOC 1 - Role du fichier.
+// Ce fichier fournit un composant React specialise pour StockRulesImpactPreview.
+// Point de vigilance: garder les props, appels API et classes CSS synchronises avec les ecrans existants.
+
 import { BarChart3, TriangleAlert } from 'lucide-react';
 
 function kpiValue(impact, key, fallback = 0) {
@@ -27,7 +31,7 @@ export default function StockRulesImpactPreview({ impact, loading = false, onApp
         {loading ? (
           <div className="sr-help">Chargement de l’impact…</div>
         ) : !impact?.counts ? (
-          <div className="sr-help">Impact indisponible. Vérifiez que le backend est démarré.</div>
+          <div className="sr-help">Impact indisponible. Verifiez que le service est disponible.</div>
         ) : (
           <>
             <div className="sr-kpis">
@@ -70,4 +74,3 @@ export default function StockRulesImpactPreview({ impact, loading = false, onApp
     </div>
   );
 }
-

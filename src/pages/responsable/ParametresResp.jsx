@@ -1,3 +1,7 @@
+// BLOC 1 - Role du fichier.
+// Ce fichier affiche une page de l'espace responsable pour ParametresResp.
+// Point de vigilance: garder les props, appels API et classes CSS synchronises avec les ecrans existants.
+
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { User, Lock, Moon, Sun, Camera, Save, Globe, Bell, Eye, EyeOff, Truck, RefreshCw, LifeBuoy } from 'lucide-react';
 import { useLocation, useNavigate } from 'react-router-dom';
@@ -8,6 +12,7 @@ import useTheme from '../../hooks/useTheme';
 import useProtectedFileUrl from '../../hooks/useProtectedFileUrl';
 import { get, patch, post, uploadFile } from '../../services/api';
 import { useToast } from '../../components/shared/Toast';
+import { useConfirm } from '../../components/shared/ConfirmDialog';
 import { setUiLanguage, useUiLanguage } from '../../utils/uiLanguage';
 import { asNonNegativeInt, asPositiveInt, isSafeText, sanitizeText } from '../../utils/formGuards';
 import './ParametresResp.css';
@@ -29,6 +34,7 @@ const DEMANDEUR_PROFILES = [
 
 const ParametresResp = ({ userName, onLogout }) => {
   const toast = useToast();
+  const confirmAction = useConfirm();
   const uiLanguage = useUiLanguage();
   const location = useLocation();
   const navigate = useNavigate();
@@ -390,7 +396,13 @@ const ParametresResp = ({ userName, onLogout }) => {
   }; */
 
   const handleRevokeSessions = async (u) => { 
-    const confirmed = window.confirm(`Deconnecter toutes les sessions actives de ${u.username} ?`);
+    const confirmed = await confirmAction({
+      title: 'Deconnecter les sessions',
+      badge: 'Securite compte',
+      message: `Deconnecter toutes les sessions actives de ${u.username} ?`,
+      confirmLabel: 'Deconnecter',
+      variant: 'danger',
+    });
     if (!confirmed) return;
     setUserActionId(`revoke-${u._id}`);
     try {
@@ -1756,8 +1768,8 @@ const ParametresResp = ({ userName, onLogout }) => {
 
                       {!geminiStatus?.configured ? (
                         <div style={{ marginTop: 10, fontSize: 12, color: '#64748b', fontWeight: 800 }}>
-                          Astuce: connectez-vous en administrateur (informatique) puis configurez <strong>GEMINI_API_KEY</strong> dans <strong>backend/.env</strong>,
-                          puis redemarrez le backend.
+                          Astuce: connectez-vous en administrateur informatique, configurez <strong>GEMINI_API_KEY</strong> dans les parametres serveur,
+                          puis redemarrez le service applicatif.
                         </div>
                       ) : null}
                     </div>

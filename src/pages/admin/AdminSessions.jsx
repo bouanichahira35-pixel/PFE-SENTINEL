@@ -1,3 +1,7 @@
+// BLOC 1 - Role du fichier.
+// Ce fichier affiche une page de l'espace administrateur pour AdminSessions.
+// Point de vigilance: garder les props, appels API et classes CSS synchronises avec les ecrans existants.
+
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   Activity,
@@ -34,6 +38,7 @@ import HeaderPage from '../../components/shared/HeaderPage';
 import LoadingSpinner from '../../components/shared/LoadingSpinner';
 import { get, post } from '../../services/api';
 import { useToast } from '../../components/shared/Toast';
+import { usePrompt } from '../../components/shared/ConfirmDialog';
 import { getUiErrorMessage } from '../../services/uiError';
 import './AdminSessions.css';
 
@@ -119,6 +124,7 @@ const generateRoleDistribution = (sessions) => {
 
 const AdminSessions = ({ userName, onLogout }) => {
   const toast = useToast();
+  const promptAction = usePrompt();
   const [sidebarCollapsed, setSidebarCollapsed] = useState(() => (
     typeof window !== 'undefined' ? window.innerWidth <= 768 : false
   ));
@@ -180,7 +186,16 @@ const AdminSessions = ({ userName, onLogout }) => {
       toast.error('Vous ne pouvez pas révoquer votre propre session');
       return;
     }
-    const reason = window.prompt(`Motif de revocation pour ${sessionEmail} :`, 'Controle administrateur');
+    const reason = await promptAction({
+      title: 'Revoquer la session',
+      badge: 'Controle administrateur',
+      message: `Indiquez le motif de revocation pour ${sessionEmail}.`,
+      label: 'Motif',
+      defaultValue: 'Controle administrateur',
+      confirmLabel: 'Revoquer',
+      variant: 'danger',
+      required: true,
+    });
     if (!reason || String(reason).trim().length < 5) {
       toast.error('Motif obligatoire (minimum 5 caracteres)');
       return;

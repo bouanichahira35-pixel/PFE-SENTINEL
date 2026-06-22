@@ -1,3 +1,7 @@
+// BLOC 1 - Role du fichier.
+// Ce fichier affiche une page de l'espace magasinier pour InventaireMag.
+// Point de vigilance: garder les props, appels API et classes CSS synchronises avec les ecrans existants.
+
 /**
  * SENTINEL – Mes Inventaires (Magasinier)
  *
@@ -76,6 +80,7 @@ function stageInfo(inv, progress) {
   if (st === 'A_VALIDER')    return { label: 'Soumis',              tone: 'ready' };
   if (st === 'VALIDE')       return { label: 'Validé',              tone: 'ok' };
   if (st === 'REJETE')       return { label: 'Rejeté',              tone: 'neutral' };
+  if (st === 'ANNULE')       return { label: 'Interrompu par responsable', tone: 'neutral' };
   if (st === 'EN_COURS') {
     if (tot > 0 && cnt >= tot) return { label: 'À soumettre',       tone: 'ready' };
     return                       { label: 'En cours',               tone: 'warn' };
@@ -99,7 +104,7 @@ function fillCls(pct) {
 }
 
 const ACTIVE_STATUSES   = ['A_FAIRE', 'EN_COURS', 'A_RECOMPTER'];
-const READONLY_STATUSES = ['A_VALIDER', 'VALIDE', 'REJETE'];
+const READONLY_STATUSES = ['A_VALIDER', 'VALIDE', 'REJETE', 'ANNULE'];
 
 /* ═══════════════════════════════════════
    Component

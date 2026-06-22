@@ -1,3 +1,9 @@
+/*
+ * BLOC 1 - Role du fichier.
+ * Ce fichier affiche une page de l'espace demandeur pour ProduitsDem.
+ * Point de vigilance: garder les props, appels API et classes CSS synchronises avec les ecrans existants.
+ */
+
 .products-dem-page {
   display: flex;
   flex-direction: column;

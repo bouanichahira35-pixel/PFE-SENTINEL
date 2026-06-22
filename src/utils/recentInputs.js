@@ -1,3 +1,7 @@
+// BLOC 1 - Role du fichier.
+// Ce fichier regroupe des fonctions utilitaires frontend autour de recentInputs.
+// Point de vigilance: modifier avec prudence car ce fichier peut etre importe par plusieurs modules.
+
 export function loadRecentList(key, maxItems = 8) {
   if (typeof window === 'undefined') return [];
   try {

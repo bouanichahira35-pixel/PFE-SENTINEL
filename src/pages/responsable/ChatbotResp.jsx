@@ -1,3 +1,7 @@
+// BLOC 1 - Role du fichier.
+// Ce fichier affiche une page de l'espace responsable pour ChatbotResp.
+// Point de vigilance: garder les props, appels API et classes CSS synchronises avec les ecrans existants.
+
 import { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import { 
   Bot, 
@@ -46,6 +50,62 @@ function makeUserMessage(content) {
     content: String(content || ''),
     time: nowLabel(),
   };
+}
+
+function sourceMeta(source) {
+  const value = String(source || '').toLowerCase();
+  if (value === 'groq') return { className: 'groq', label: 'Groq' };
+  if (value === 'gemini') return { className: 'gemini', label: 'Gemini' };
+  if (value === 'fallback') return { className: 'fallback', label: 'Fallback' };
+  if (value === 'local') return { className: 'local', label: 'Local' };
+  return { className: 'local', label: value ? value.toUpperCase() : 'Local' };
+}
+
+function compactAlertContext(raw) {
+  if (!raw || typeof raw !== 'object') return null;
+  const ctx = {
+    source: 'alerte_ia',
+    alert_id: raw.alert_id || raw.alertId || '',
+    decision_id: raw.decision_id || raw.decision || '',
+    product_id: raw.product_id || raw.productId || '',
+    product_code: raw.product_code || raw.productCode || raw.product || '',
+    product_name: raw.product_name || raw.productName || '',
+    alert_type: raw.alert_type || raw.type || '',
+    alert_type_label: raw.alert_type_label || raw.typeLabel || '',
+    risk_level: raw.risk_level || raw.risk || '',
+    risk_label: raw.risk_label || raw.riskLabel || '',
+    message: raw.message || '',
+    current_stock: raw.current_stock ?? raw.currentStock ?? null,
+    min_stock: raw.min_stock ?? raw.minStock ?? null,
+    recommended_qty: raw.recommended_qty ?? raw.recommendedQty ?? null,
+    product_status: raw.product_status || raw.productStatus || '',
+    family: raw.family || '',
+    detected_at: raw.detected_at || raw.detectedAt || null,
+    cause: raw.cause && typeof raw.cause === 'object' ? raw.cause : null,
+  };
+  if (!ctx.alert_id && !ctx.product_id && !ctx.product_code && !ctx.product_name && !ctx.decision_id) return null;
+  return ctx;
+}
+
+function alertContextFromLocation(location) {
+  const stateContext = compactAlertContext(location?.state?.alertContext);
+  if (stateContext) return stateContext;
+
+  const params = new URLSearchParams(location?.search || '');
+  if (params.get('source') !== 'alerte_ia') return null;
+  return compactAlertContext({
+    alert_id: params.get('alertId') || '',
+    product_id: params.get('productId') || '',
+    product_code: params.get('product') || '',
+    decision_id: params.get('decision') || '',
+  });
+}
+
+function prefillFromAlertContext(ctx) {
+  if (!ctx) return '';
+  const product = ctx.product_code || ctx.product_name || 'ce produit';
+  const decision = ctx.decision_id ? ` Decision: ${ctx.decision_id}.` : '';
+  return `Analyse cette alerte IA pour ${product}.${decision} Explique la cause probable, le risque stock, et l'action responsable a lancer maintenant.`;
 }
 
 function renderMessageContent(text) {
@@ -114,6 +174,9 @@ const ChatbotResp = ({ userName, onLogout }) => {
   const [mediaRecorderSupported, setMediaRecorderSupported] = useState(false);
   const [copilotTopRisk, setCopilotTopRisk] = useState([]);
   const [geminiConfigured, setGeminiConfigured] = useState(null);
+  const [groqConfigured, setGroqConfigured] = useState(null);
+  const [activeTextProvider, setActiveTextProvider] = useState('fallback');
+  const [alertContext, setAlertContext] = useState(() => alertContextFromLocation(location));
   const [isRecording, setIsRecording] = useState(false);
   const [voiceBlob, setVoiceBlob] = useState(null);
   const [voiceUrl, setVoiceUrl] = useState('');
@@ -148,21 +211,27 @@ const ChatbotResp = ({ userName, onLogout }) => {
     window.speechSynthesis.cancel();
   }, []);
 
-  const refreshGeminiStatus = useCallback(async () => {
+  const refreshAssistantStatus = useCallback(async () => {
     try {
-      const gemini = await get('/ai/gemini/status');
-      const configured = Boolean(gemini?.configured);
-      setGeminiConfigured(configured);
-      return configured;
+      const status = await get('/ai/assistant/status');
+      const gemini = Boolean(status?.providers?.gemini?.configured ?? status?.gemini?.configured);
+      const groq = Boolean(status?.providers?.groq?.configured);
+      const active = String(status?.active_text_provider || (groq ? 'groq' : gemini ? 'gemini' : 'fallback')).toLowerCase();
+      setGeminiConfigured(gemini);
+      setGroqConfigured(groq);
+      setActiveTextProvider(active);
+      return { gemini, groq, active };
     } catch {
       setGeminiConfigured(false);
-      return false;
+      setGroqConfigured(false);
+      setActiveTextProvider('fallback');
+      return { gemini: false, groq: false, active: 'fallback' };
     }
   }, []);
 
   useEffect(() => {
-    refreshGeminiStatus();
-  }, [refreshGeminiStatus]);
+    refreshAssistantStatus();
+  }, [refreshAssistantStatus]);
 
   const normalizeForSpeech = useCallback((text) => (
     String(text || '')
@@ -254,10 +323,12 @@ const ChatbotResp = ({ userName, onLogout }) => {
 
     if (isListening) stopListening();
 
-    const currentGemini = geminiConfigured === true || (geminiConfigured === null && await refreshGeminiStatus());
-    if (!currentGemini && !localInfoShownRef.current) {
+    const currentStatus = (geminiConfigured === null || groqConfigured === null)
+      ? await refreshAssistantStatus()
+      : { gemini: geminiConfigured === true, groq: groqConfigured === true, active: activeTextProvider };
+    if (!currentStatus.groq && !currentStatus.gemini && !localInfoShownRef.current) {
       localInfoShownRef.current = true;
-      toast.info("Mode local actif (sans Gemini). Pour de meilleures réponses: Paramètres > IA.");
+      toast.info("Mode fallback actif (sans Groq/Gemini). Pour de meilleures reponses: Parametres > IA.");
     }
 
     let historySnapshot = messagesRef.current;
@@ -273,6 +344,7 @@ const ChatbotResp = ({ userName, onLogout }) => {
         question,
         history: buildHistoryPayload(historySnapshot),
         mode,
+        alert_context: alertContext || undefined,
       });
       const answer = String(result?.answer || "Je n'ai pas pu generer une reponse.");
       const source = String(result?.source || 'fallback');
@@ -300,10 +372,13 @@ const ChatbotResp = ({ userName, onLogout }) => {
   }, [
     buildHistoryPayload,
     downloadReport,
+    activeTextProvider,
+    alertContext,
     geminiConfigured,
+    groqConfigured,
     isListening,
     isTyping,
-    refreshGeminiStatus,
+    refreshAssistantStatus,
     stopListening,
     toast,
   ]);
@@ -414,6 +489,7 @@ const ChatbotResp = ({ userName, onLogout }) => {
         language: VOICE_LOCALE,
         history: buildHistoryPayload(historySnapshot),
         mode: 'chat',
+        alert_context: alertContext || undefined,
       });
 
       const transcript = String(result?.transcript || '').trim() || 'Message vocal (non transcrit)';
@@ -441,6 +517,7 @@ const ChatbotResp = ({ userName, onLogout }) => {
     blobToBase64,
     buildHistoryPayload,
     clearVoiceDraft,
+    alertContext,
     geminiConfigured,
     isSendingVoice,
     isTyping,
@@ -453,9 +530,13 @@ const ChatbotResp = ({ userName, onLogout }) => {
   }, [sendQuestion]);
 
   useEffect(() => {
-    const prefill = location?.state?.prefill;
-    if (prefill && typeof prefill === 'string') {
-      setInputValue(prefill);
+    const nextContext = alertContextFromLocation(location);
+    if (nextContext) setAlertContext(nextContext);
+    const prefill = typeof location?.state?.prefill === 'string'
+      ? location.state.prefill
+      : prefillFromAlertContext(nextContext);
+    if (prefill) {
+      setInputValue((prev) => (prev.trim() ? prev : prefill));
       inputRef.current?.focus();
     }
   }, [location]);
@@ -511,13 +592,17 @@ const ChatbotResp = ({ userName, onLogout }) => {
     try {
       const [result, gemini] = await Promise.all([
         post('/ai/copilot/recommendations', { horizon_days: 14, top_n: 5, simulations: [] }),
-        get('/ai/gemini/status').catch(() => ({ configured: false })),
+        get('/ai/assistant/status').catch(() => ({ providers: { gemini: { configured: false }, groq: { configured: false } }, active_text_provider: 'fallback' })),
       ]);
       setCopilotTopRisk(Array.isArray(result?.top_risk_products) ? result.top_risk_products : []);
-      setGeminiConfigured(Boolean(gemini?.configured));
+      setGeminiConfigured(Boolean(gemini?.providers?.gemini?.configured ?? gemini?.gemini?.configured));
+      setGroqConfigured(Boolean(gemini?.providers?.groq?.configured));
+      setActiveTextProvider(String(gemini?.active_text_provider || 'fallback').toLowerCase());
     } catch (_) {
       setCopilotTopRisk([]);
       setGeminiConfigured(false);
+      setGroqConfigured(false);
+      setActiveTextProvider('fallback');
     }
   }, []);
 
@@ -650,8 +735,14 @@ const ChatbotResp = ({ userName, onLogout }) => {
             </div>
 
             <div className="chatbot-capabilities"> 
-              <span className={`cap-pill ${geminiConfigured ? 'ok' : 'warn'}`}> 
-                {geminiConfigured ? 'Gemini actif' : 'Mode local'} 
+              <span className={`cap-pill ${activeTextProvider === 'fallback' ? 'warn' : 'ok'}`}>
+                Texte {sourceMeta(activeTextProvider).label}
+              </span>
+              <span className={`cap-pill ${groqConfigured ? 'ok' : 'off'}`}>
+                Groq {groqConfigured ? 'configure' : 'non configure'}
+              </span>
+              <span className={`cap-pill ${geminiConfigured ? 'ok' : 'off'}`}>
+                Gemini {geminiConfigured ? 'configure' : 'non configure'}
               </span> 
               <span className={`cap-pill ${speechSupported ? 'ok' : 'off'}`}>
                 Micro {speechSupported ? 'disponible' : 'non supporte'}
@@ -663,6 +754,29 @@ const ChatbotResp = ({ userName, onLogout }) => {
                 Envoi vocal {(mediaRecorderSupported && geminiConfigured) ? 'disponible' : (mediaRecorderSupported ? 'Gemini requis' : 'non supporte')} 
               </span> 
             </div> 
+
+            {alertContext && (
+              <div className="chatbot-alert-context">
+                <div>
+                  <span>Contexte alerte IA</span>
+                  <strong>{alertContext.product_code || alertContext.product_name || 'Produit'}</strong>
+                </div>
+                <div>
+                  <span>Decision</span>
+                  <strong>{alertContext.decision_id || 'A confirmer'}</strong>
+                </div>
+                <div>
+                  <span>Stock / seuil</span>
+                  <strong>
+                    {alertContext.current_stock ?? '-'} / {alertContext.min_stock ?? '-'}
+                  </strong>
+                </div>
+                <div>
+                  <span>Action cible</span>
+                  <strong>{alertContext.recommended_qty ? `${alertContext.recommended_qty} u.` : 'Diagnostic'}</strong>
+                </div>
+              </div>
+            )}
 
             {copilotTopRisk.length > 0 && ( 
               <div className="chatbot-ai-hint"> 
@@ -766,11 +880,14 @@ const ChatbotResp = ({ userName, onLogout }) => {
                           </button>
                         </>
                       )}
-                      {message.type === 'bot' && message.source && (
-                        <span className={`source-badge ${message.source === 'gemini' ? 'gemini' : 'local'}`}>
-                          {message.source === 'gemini' ? 'Gemini' : 'Local'}
-                        </span>
-                      )}
+                      {message.type === 'bot' && message.source && (() => {
+                        const meta = sourceMeta(message.source);
+                        return (
+                          <span className={`source-badge ${meta.className}`}>
+                            {meta.label}
+                          </span>
+                        );
+                      })()}
                     </div>
                   </div>
                 </div>

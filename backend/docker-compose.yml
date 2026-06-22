@@ -8,21 +8,35 @@ services:
     ports:
       - "5000:5000"
     environment:
+      NODE_ENV: development
       MONGODB_URI: mongodb://mongo:27017/pfe_sentinel
       REDIS_URL: redis://redis:6379
       PORT: 5000
-      JWT_SECRET: change_me_super_secret
+      JWT_SECRET: ${DOCKER_JWT_SECRET:-sentinel_docker_dev_jwt_secret_32_chars}
+      PII_HASH_SECRET: ${DOCKER_PII_HASH_SECRET:-sentinel_docker_dev_pii_secret_32_chars}
+      INTERNAL_BOND_QR_SECRET: ${DOCKER_INTERNAL_BOND_QR_SECRET:-sentinel_docker_dev_qr_secret_32_chars}
+      SUPPLIER_PORTAL_JWT_SECRET: ${DOCKER_SUPPLIER_PORTAL_JWT_SECRET:-sentinel_docker_supplier_secret_32_chars}
       FRONTEND_URL: http://localhost:3000
-      FRONTEND_URLS: http://localhost:3000,http://127.0.0.1:3000
-      INTERNAL_BOND_QR_SECRET: change_me_qr_secret
-      MAIL_QUEUE_ENABLED: "true"
+      FRONTEND_URLS: http://localhost:3000,http://127.0.0.1:3000,http://localhost:8080,http://127.0.0.1:8080
+      APP_BASE_URL: http://localhost:3000
+      MAIL_QUEUE_ENABLED: ${DOCKER_MAIL_QUEUE_ENABLED:-false}
       AI_AUTO_TRAIN_ON_BOOT: "false"
+      AI_AUTO_TRAINING_JOB_ENABLED: "false"
+      AI_ALERTS_REBUILD_ON_BOOT: "false"
+      DOMAIN_CLEANUP_ON_BOOT: "false"
+      PO_REMINDERS_JOB_ENABLED: "false"
       AI_PYTHON_BIN: python3
     depends_on:
       mongo:
         condition: service_healthy
       redis:
         condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O - http://127.0.0.1:5000/api/health >/dev/null 2>&1 || exit 1"]
+      interval: 20s
+      timeout: 5s
+      retries: 6
+      start_period: 30s
 
   mongo:
     image: mongo:7
@@ -37,6 +51,7 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
+      start_period: 20s
 
   redis:
     image: redis:7-alpine
@@ -49,6 +64,7 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
+      start_period: 10s
 
 volumes:
   mongo_data:

@@ -1,3 +1,9 @@
+/*
+ * BLOC 1 - Role du fichier.
+ * Ce fichier fournit un composant React partage pour HeaderPage.
+ * Point de vigilance: garder les props, appels API et classes CSS synchronises avec les ecrans existants.
+ */
+
 .header-page {
   display: flex;
   align-items: center;
@@ -179,8 +185,8 @@
   position: absolute;
   top: 46px;
   right: 0;
-  width: 320px;
-  max-height: 420px;
+  width: 360px;
+  max-height: 480px;
   background: var(--color-bg-primary);
   border: 1px solid var(--color-border);
   border-radius: 10px;
@@ -190,11 +196,30 @@
 }
 
 .notif-panel-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
   padding: 0.75rem 1rem;
   border-bottom: 1px solid var(--color-border);
   background: var(--color-bg-secondary);
   color: var(--color-text-primary);
   font-size: 0.9rem;
+}
+
+.notif-mark-all {
+  border: none;
+  background: transparent;
+  color: var(--color-primary);
+  font-size: 0.75rem;
+  font-weight: 600;
+  cursor: pointer;
+  padding: 0.2rem 0;
+}
+
+.notif-mark-all:disabled {
+  color: var(--color-text-muted);
+  cursor: not-allowed;
 }
 
 .notif-settings-row {
@@ -280,8 +305,37 @@
 }
 
 .notif-list {
-  max-height: 360px;
+  max-height: 420px;
   overflow-y: auto;
+}
+
+.notif-groups {
+  display: flex;
+  flex-direction: column;
+}
+
+.notif-group {
+  border-bottom: 1px solid var(--color-border);
+}
+
+.notif-group:last-child {
+  border-bottom: none;
+}
+
+.notif-group-header {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 0.45rem 1rem;
+  background: var(--color-bg-secondary);
+  color: var(--color-text-secondary);
+  font-size: 0.72rem;
+  font-weight: 700;
+  text-transform: uppercase;
 }
 
 .notif-item {
@@ -310,13 +364,41 @@
   font-size: 0.85rem;
   font-weight: 600;
   color: var(--color-text-primary);
-  margin-bottom: 0.2rem;
+  margin-bottom: 0.15rem;
+}
+
+.notif-item-top {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+.notif-date {
+  flex-shrink: 0;
+  color: var(--color-text-muted);
+  font-size: 0.68rem;
+  line-height: 1.2;
+}
+
+.notif-context {
+  display: inline-flex;
+  align-items: center;
+  width: fit-content;
+  margin: 0.05rem 0 0.25rem;
+  padding: 0.12rem 0.42rem;
+  border-radius: 999px;
+  background: var(--color-bg-secondary);
+  color: var(--color-text-secondary);
+  font-size: 0.68rem;
+  font-weight: 600;
 }
 
 .notif-message {
   font-size: 0.78rem;
   color: var(--color-text-secondary);
   line-height: 1.3;
+  overflow-wrap: anywhere;
 }
 
 .notif-empty {
@@ -387,6 +469,6 @@
 
   .notif-panel {
     right: -8px;
-    width: min(92vw, 320px);
+    width: min(92vw, 360px);
   }
 }

@@ -1,3 +1,7 @@
+// BLOC 1 - Role du fichier.
+// Ce fichier centralise des constantes frontend pour permissions.
+// Point de vigilance: modifier avec prudence car ce fichier peut etre importe par plusieurs modules.
+
 import { ROLES } from './roles';
 
 export const PERMISSIONS = Object.freeze({

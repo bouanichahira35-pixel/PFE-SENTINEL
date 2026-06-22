@@ -1,3 +1,7 @@
+// BLOC 1 - Role du fichier.
+// Ce fichier affiche une page de l'espace responsable pour InventairesResp.
+// Point de vigilance: garder les props, appels API et classes CSS synchronises avec les ecrans existants.
+
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ArrowRight, ClipboardCheck, ClipboardList, History, Info, RefreshCw, Rocket, Save, Search, ShieldAlert, XCircle } from 'lucide-react';
@@ -6,6 +10,7 @@ import HeaderPage from '../../components/shared/HeaderPage';
 import ProtectedPage from '../../components/shared/ProtectedPage';
 import LoadingSpinner from '../../components/shared/LoadingSpinner';
 import { useToast } from '../../components/shared/Toast';
+import { usePrompt } from '../../components/shared/ConfirmDialog';
 import { get, patch, post } from '../../services/api';
 import './InventairesResp.css';
 
@@ -31,6 +36,7 @@ const STATUS_LABELS = {
   REJETE: 'Rejeté',
   ANNULE: 'Annulé',
 };
+STATUS_LABELS.ANNULE = 'Interrompu par responsable';
 
 function toDateInputValue(value) {
   if (!value) return '';
@@ -72,6 +78,7 @@ function perimeterLabel(inv) {
 
 const InventairesResp = ({ userName, onLogout }) => {
   const toast = useToast();
+  const promptAction = usePrompt();
   const navigate = useNavigate();
   const [sidebarCollapsed, setSidebarCollapsed] = useState(() => (typeof window !== 'undefined' ? window.innerWidth <= 768 : false));
   const [isLoading, setIsLoading] = useState(false);
@@ -266,7 +273,16 @@ const InventairesResp = ({ userName, onLogout }) => {
 
   const cancelInventory = async () => {
     if (!activeInventory?._id || !canCancelActive) return;
-    const motif = window.prompt(`Motif d'annulation pour ${activeInventory.reference} :`, 'Inventaire stoppe par le responsable');
+    const motif = await promptAction({
+      title: 'Annuler l inventaire',
+      badge: 'Motif obligatoire',
+      message: `Indiquez pourquoi ${activeInventory.reference} doit etre interrompu.`,
+      label: 'Motif d annulation',
+      defaultValue: 'Inventaire stoppe par le responsable',
+      confirmLabel: 'Annuler l inventaire',
+      variant: 'danger',
+      required: true,
+    });
     if (!motif || String(motif).trim().length < 5) {
       toast.error('Motif obligatoire (minimum 5 caracteres)');
       return;

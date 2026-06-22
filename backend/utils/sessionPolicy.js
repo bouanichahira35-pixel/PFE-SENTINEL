@@ -1,3 +1,7 @@
+// BLOC 1 - Role du fichier.
+// Ce fichier regroupe des fonctions utilitaires backend autour de sessionPolicy.
+// Point de vigilance: modifier avec prudence car ce fichier peut etre importe par plusieurs modules.
+
 function getSessionInactivityMs() {
   // Default: 2 hours of inactivity (pragmatic for business apps).
   // Can be tightened via SESSION_INACTIVITY_MS in production.

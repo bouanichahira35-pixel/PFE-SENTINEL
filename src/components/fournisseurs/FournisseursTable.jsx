@@ -1,3 +1,7 @@
+// BLOC 1 - Role du fichier.
+// Ce fichier fournit un composant React specialise pour FournisseursTable.
+// Point de vigilance: garder les props, appels API et classes CSS synchronises avec les ecrans existants.
+
 import { Eye, Mail, Pencil, Phone, PlusCircle, Power, Send } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import './fournisseurs.css';

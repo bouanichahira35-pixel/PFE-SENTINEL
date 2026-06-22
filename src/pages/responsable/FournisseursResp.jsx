@@ -1,3 +1,7 @@
+// BLOC 1 - Role du fichier.
+// Ce fichier affiche une page de l'espace responsable pour FournisseursResp.
+// Point de vigilance: garder les props, appels API et classes CSS synchronises avec les ecrans existants.
+
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   Truck, RefreshCw, Plus, Pencil, Eye, Power, ShieldAlert, ShieldCheck,
@@ -10,6 +14,7 @@ import HeaderPage from '../../components/shared/HeaderPage';
 import LoadingSpinner from '../../components/shared/LoadingSpinner';
 import { get, post, patch } from '../../services/api';
 import { useToast } from '../../components/shared/Toast';
+import { useConfirm } from '../../components/shared/ConfirmDialog';
 import { sanitizeText, isSafeText } from '../../utils/formGuards';
 import './FournisseursResp.css';
 
@@ -31,6 +36,7 @@ const emptyDraft = { id:'', name:'', email:'', phone:'', address:'', domain:'', 
 /* ─── component ─── */
 const FournisseursResp = ({ userName, onLogout }) => {
   const toast = useToast();
+  const confirmAction = useConfirm();
   const [sidebarCollapsed, setSidebarCollapsed] = useState(() => typeof window !== 'undefined' ? window.innerWidth <= 768 : false);
   const [loading, setLoading] = useState(false);
 
@@ -195,7 +201,16 @@ const FournisseursResp = ({ userName, onLogout }) => {
     const sid = String(supplierId||'').trim(); if (!sid) return;
     const st = String(nextStatus||'').trim();
     const confirmText = st==='INACTIF' ? 'Ce fournisseur sera désactivé. Son historique sera conservé.' : st==='SUSPENDU' ? 'Ce fournisseur sera suspendu.' : null;
-    if (confirmText && !window.confirm(confirmText)) return;
+    if (confirmText) {
+      const ok = await confirmAction({
+        title: 'Changer le statut fournisseur',
+        badge: 'Referentiel fournisseurs',
+        message: confirmText,
+        confirmLabel: 'Confirmer',
+        variant: st === 'SUSPENDU' ? 'warning' : 'danger',
+      });
+      if (!ok) return;
+    }
     try {
       await patch(`/suppliers/${encodeURIComponent(sid)}/status`, {status:st});
       toast.success(`Statut mis à jour : ${statusLabel(st)}`); await load();

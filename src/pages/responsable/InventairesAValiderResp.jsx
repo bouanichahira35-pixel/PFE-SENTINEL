@@ -1,3 +1,7 @@
+// BLOC 1 - Role du fichier.
+// Ce fichier affiche une page de l'espace responsable pour InventairesAValiderResp.
+// Point de vigilance: garder les props, appels API et classes CSS synchronises avec les ecrans existants.
+
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ArrowRight, CheckCircle2, ClipboardCheck, ClipboardList, Info, RefreshCw, Rocket, RotateCcw, Search, XCircle } from 'lucide-react';
@@ -6,6 +10,7 @@ import HeaderPage from '../../components/shared/HeaderPage';
 import ProtectedPage from '../../components/shared/ProtectedPage';
 import LoadingSpinner from '../../components/shared/LoadingSpinner';
 import { useToast } from '../../components/shared/Toast';
+import { useConfirm } from '../../components/shared/ConfirmDialog';
 import { get, post } from '../../services/api';
 import './InventairesAValiderResp.css';
 
@@ -52,6 +57,7 @@ function assignedMagasiniersLabel(inv) {
 
 const InventairesAValiderResp = ({ userName, onLogout }) => {
   const toast = useToast();
+  const confirmAction = useConfirm();
   const navigate = useNavigate();
   const [sidebarCollapsed, setSidebarCollapsed] = useState(() => (typeof window !== 'undefined' ? window.innerWidth <= 768 : false));
   const [isLoading, setIsLoading] = useState(false);
@@ -102,7 +108,13 @@ const InventairesAValiderResp = ({ userName, onLogout }) => {
   }, [filtered]);
 
   const validateInventory = async (invId, reference) => {
-    const ok = window.confirm(`Valider l’inventaire ${reference || ''} ? Cette action ajuste définitivement le stock.`);
+    const ok = await confirmAction({
+      title: 'Valider l inventaire',
+      badge: 'Impact stock',
+      message: `${reference || 'Cet inventaire'} sera cloture et le stock sera ajuste definitivement.`,
+      confirmLabel: 'Valider',
+      variant: 'warning',
+    });
     if (!ok) return;
     setActionBusyId(String(invId));
     try {

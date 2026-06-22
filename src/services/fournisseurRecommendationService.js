@@ -1,3 +1,7 @@
+// BLOC 1 - Role du fichier.
+// Ce fichier organise les appels API ou la logique frontend partagee pour fournisseurRecommendationService.
+// Point de vigilance: modifier avec prudence car ce fichier peut etre importe par plusieurs modules.
+
 import { get, post } from './api';
 
 export async function recommendFournisseurs({ productId, quantity } = {}) {

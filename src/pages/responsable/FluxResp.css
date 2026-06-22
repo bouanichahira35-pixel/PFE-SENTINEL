@@ -1,3 +1,9 @@
+/*
+ * BLOC 1 - Role du fichier.
+ * Ce fichier affiche une page de l'espace responsable pour FluxResp.
+ * Point de vigilance: garder les props, appels API et classes CSS synchronises avec les ecrans existants.
+ */
+
 .flux-resp-layout {
   display: flex;
   min-height: 100vh;

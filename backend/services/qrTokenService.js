@@ -1,3 +1,7 @@
+// BLOC 1 - Role du fichier.
+// Ce fichier contient la logique metier reutilisable du domaine qrTokenService, appelee par les routes ou les jobs.
+// Point de vigilance: preserver les contrats appeles par plusieurs routes.
+
 const crypto = require('crypto');
 
 const DEFAULT_TTL_HOURS = 24;

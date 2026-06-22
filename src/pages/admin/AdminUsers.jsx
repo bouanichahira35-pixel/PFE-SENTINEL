@@ -1,3 +1,7 @@
+// BLOC 1 - Role du fichier.
+// Ce fichier affiche une page de l'espace administrateur pour AdminUsers.
+// Point de vigilance: garder les props, appels API et classes CSS synchronises avec les ecrans existants.
+
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import {
@@ -5,6 +9,8 @@ import {
   KeyRound, Monitor, UserPlus, RotateCcw,
   MoreVertical, Eye, Pencil, Copy, X,
   AlertTriangle, Activity, Wifi, Trash2, ChevronLeft, ChevronRight,
+  Building2, Mail,
+  ShieldCheck, Wand2, EyeOff, UserRoundCheck, Languages,
 } from 'lucide-react';
 import SidebarAdmin from '../../components/admin/SidebarAdmin';
 import HeaderPage from '../../components/shared/HeaderPage';
@@ -39,6 +45,26 @@ const CATALOG_PROFILES_CREATE = [
   ...CATALOG_PROFILES,
 ];
 
+const ACCOUNT_TYPES = [
+  { id: 'interne', label: 'Interne ETAP' },
+  { id: 'externe', label: 'Externe / Prestataire' },
+];
+
+const LANGUAGE_OPTIONS = [
+  { id: 'fr', label: 'Francais' },
+  { id: 'ar', label: 'Arabe' },
+  { id: 'en', label: 'English' },
+];
+
+const SITE_OPTIONS = [
+  'Siege social',
+  'Direction Exploration',
+  'Direction Production',
+  'Site de production Sud',
+  'Champ petrolier El Borma',
+  'Base logistique Sfax',
+];
+
 const PAGE_SIZE = 25;
 const DEMO_TOTAL_USERS = 300;
 
@@ -54,6 +80,13 @@ function formatDateTime(value) {
   return d.toLocaleString('fr-FR');
 }
 
+function formatDateInput(value) {
+  if (!value) return '';
+  const d = new Date(value);
+  if (Number.isNaN(d.getTime())) return '';
+  return d.toISOString().slice(0, 10);
+}
+
 function isStrongPassword(pwd) {
   const p = safeStr(pwd);
   if (p.length < 8 || p.length > 64) return false;
@@ -66,8 +99,33 @@ function isValidEmail(value) {
 
 function normalizePhone(value) { return safeStr(value).replace(/[^\d+]/g, ''); }
 
+function normalizeTunisianPhone(value) {
+  const raw = normalizePhone(value);
+  if (!raw) return '+216';
+  const digits = raw.replace(/\D/g, '');
+  const localDigits = digits.startsWith('216') ? digits.slice(3) : digits;
+  return `+216${localDigits.slice(0, 8)}`;
+}
+
 function isValidPhone(value) {
-  return /^(\+?\d{6,18})$/.test(normalizePhone(value));
+  return /^\+216\d{8}$/.test(normalizeTunisianPhone(value));
+}
+
+function isValidEmployeeId(value) {
+  const v = safeStr(value).toUpperCase();
+  return !v || /^[A-Z0-9-]{3,24}$/.test(v);
+}
+
+function generateSecurePassword() {
+  const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789';
+  const array = new Uint32Array(12);
+  if (typeof window !== 'undefined' && window.crypto?.getRandomValues) {
+    window.crypto.getRandomValues(array);
+  } else {
+    for (let i = 0; i < array.length; i += 1) array[i] = Math.floor(Math.random() * chars.length);
+  }
+  const body = Array.from(array, (n) => chars[n % chars.length]).join('');
+  return `Tmp_${body}A1`;
 }
 
 function statusLabel(s) {
@@ -89,7 +147,20 @@ function roleLabel(role) {
 
 function matchesNeedle(u, needle) {
   if (!needle) return true;
-  return [u?.username, u?.email, u?.telephone, roleLabel(u?.role), u?.role, u?.service_direction, u?.demandeur_profile]
+  return [
+    u?.username,
+    u?.email,
+    u?.telephone,
+    u?.employee_id,
+    u?.job_title,
+    roleLabel(u?.role),
+    u?.role,
+    u?.service_direction,
+    u?.demandeur_profile,
+    u?.site_location,
+    u?.account_type,
+    u?.manager_user?.username,
+  ]
     .map((p) => safeStr(p).toLowerCase())
     .some((p) => p.includes(needle));
 }
@@ -137,15 +208,27 @@ export default function AdminUsers({ userName, onLogout }) {
   const [reasonDialog, setReasonDialog] = useState({ open: false, kind: '', userId: null, nextRole: '' });
   const [reasonText, setReasonText]     = useState('');
   const [newPasswordById, setNewPasswordById] = useState({});
+  const [showCreatePassword, setShowCreatePassword] = useState(false);
+  const [showEditPassword, setShowEditPassword] = useState(false);
 
   const [createDraft, setCreateDraft] = useState({
-    username: '', email: '', telephone: '',
+    username: '', email: '', telephone: '+216',
     role: 'demandeur', password: '',
     demandeur_profile: 'bureautique', service_direction: '',
+    employee_id: '', job_title: '', hire_date: '', account_expires_at: '',
+    account_type: 'interne', two_factor_required: false,
+    site_location: '', manager_user_id: '', preferred_language: 'fr',
+    notification_channels: { email: true },
   });
 
   const [editDraft, setEditDraft] = useState({
-    service_direction: '', demandeur_profile: 'bureautique',
+    username: '', email: '', telephone: '+216',
+    role: 'demandeur', password: '', password_reason: '', role_reason: '',
+    demandeur_profile: 'bureautique', service_direction: '',
+    employee_id: '', job_title: '', hire_date: '', account_expires_at: '',
+    account_type: 'interne', two_factor_required: false,
+    site_location: '', manager_user_id: '', preferred_language: 'fr',
+    notification_channels: { email: true },
   });
 
   const currentUserId = useMemo(() => readCurrentUserId(), []);
@@ -210,6 +293,11 @@ export default function AdminUsers({ userName, onLogout }) {
     return Array.from(set).sort((a, b) => a.localeCompare(b));
   }, [allUsers]);
 
+  const managerOptions = useMemo(() => (allUsers || [])
+    .filter((u) => ['admin', 'responsable'].includes(safeStr(u?.role)) && safeStr(u?.status) === 'active')
+    .sort((a, b) => safeStr(a?.username).localeCompare(safeStr(b?.username))),
+  [allUsers]);
+
   /* ── filtrage : identique à l'original ── */
   const filteredUsers = useMemo(() => {
     const needle = safeStr(q).toLowerCase();
@@ -250,6 +338,38 @@ export default function AdminUsers({ userName, onLogout }) {
 
   const clearFilters = useCallback(() => {
     setQ(''); setRoleFilter(''); setStatusFilter(''); setServiceFilter('');
+  }, []);
+
+  const resetCreateDraft = useCallback(() => {
+    setCreateDraft({
+      username: '', email: '', telephone: '+216', role: 'demandeur',
+      password: '', demandeur_profile: 'bureautique', service_direction: '',
+      employee_id: '', job_title: '', hire_date: '', account_expires_at: '',
+      account_type: 'interne', two_factor_required: false,
+      site_location: '', manager_user_id: '', preferred_language: 'fr',
+      notification_channels: { email: true },
+    });
+    setShowCreatePassword(false);
+  }, []);
+
+  const updateCreateNotification = useCallback((key, value) => {
+    setCreateDraft((p) => ({
+      ...p,
+      notification_channels: {
+        ...(p.notification_channels || { email: true }),
+        [key]: value,
+      },
+    }));
+  }, []);
+
+  const updateEditNotification = useCallback((key, value) => {
+    setEditDraft((p) => ({
+      ...p,
+      notification_channels: {
+        ...(p.notification_channels || { email: true }),
+        [key]: value,
+      },
+    }));
   }, []);
 
   const selectedUser = useMemo(() => {
@@ -338,9 +458,29 @@ export default function AdminUsers({ userName, onLogout }) {
   const openEdit = useCallback((id) => {
     const u = allUsers.find((x) => String(x?._id) === String(id));
     setEditDraft({
+      username: safeStr(u?.username),
+      email: safeStr(u?.email),
+      telephone: normalizeTunisianPhone(u?.telephone || '+216'),
+      role: safeStr(u?.role || 'demandeur'),
+      password: '',
+      password_reason: '',
+      role_reason: '',
       service_direction: safeStr(u?.service_direction),
       demandeur_profile: safeStr(u?.demandeur_profile || 'bureautique') || 'bureautique',
+      employee_id: safeStr(u?.employee_id),
+      job_title: safeStr(u?.job_title),
+      hire_date: formatDateInput(u?.hire_date),
+      account_expires_at: formatDateInput(u?.account_expires_at),
+      account_type: safeStr(u?.account_type || 'interne') || 'interne',
+      two_factor_required: Boolean(u?.two_factor_required),
+      site_location: safeStr(u?.site_location),
+      manager_user_id: safeStr(u?.manager_user?._id || u?.manager_user),
+      preferred_language: safeStr(u?.preferred_language || 'fr') || 'fr',
+      notification_channels: {
+        email: u?.notification_channels?.email !== false,
+      },
     });
+    setShowEditPassword(false);
     setEditUserId(id); setDetailUserId(null); setMenuOpenForId(null);
   }, [allUsers]);
 
@@ -353,14 +493,26 @@ export default function AdminUsers({ userName, onLogout }) {
     const payload = {
       username:  safeStr(createDraft.username),
       email:     safeStr(createDraft.email),
-      telephone: normalizePhone(createDraft.telephone),
+      telephone: normalizeTunisianPhone(createDraft.telephone),
       role:      safeStr(createDraft.role),
       password:  safeStr(createDraft.password),
+      employee_id: safeStr(createDraft.employee_id).toUpperCase(),
+      job_title: safeStr(createDraft.job_title),
+      hire_date: safeStr(createDraft.hire_date),
+      account_expires_at: safeStr(createDraft.account_expires_at),
+      account_type: safeStr(createDraft.account_type || 'interne'),
+      two_factor_required: Boolean(createDraft.two_factor_required),
+      service_direction: safeStr(createDraft.service_direction),
+      site_location: safeStr(createDraft.site_location),
+      manager_user_id: safeStr(createDraft.manager_user_id),
+      preferred_language: safeStr(createDraft.preferred_language || 'fr'),
+      notification_channels: {
+        email: createDraft.notification_channels?.email !== false,
+      },
       ...(createDraft.role === 'demandeur' ? {
         ...(createDraft.demandeur_profile && createDraft.demandeur_profile !== 'auto'
           ? { demandeur_profile: safeStr(createDraft.demandeur_profile || 'bureautique') }
           : {}),
-        service_direction: safeStr(createDraft.service_direction),
       } : {}),
     };
 
@@ -374,14 +526,29 @@ export default function AdminUsers({ userName, onLogout }) {
     if (!payload.telephone || !isValidPhone(payload.telephone)) {
       toast.warning('Téléphone invalide (ex: +21698123456).'); return;
     }
+    if (!isValidEmployeeId(payload.employee_id)) {
+      toast.warning('Matricule invalide (3-24 caracteres, lettres/chiffres/tiret).'); return;
+    }
+    if (payload.job_title && payload.job_title.length < 2) {
+      toast.warning('Fonction/Poste invalide (min 2 caracteres).'); return;
+    }
+    if (payload.service_direction && payload.service_direction.length < 2) {
+      toast.warning('Service/Direction invalide (min 2 caracteres).'); return;
+    }
+    if (payload.site_location && payload.site_location.length < 2) {
+      toast.warning('Site/Localisation invalide (min 2 caracteres).'); return;
+    }
+    if (payload.hire_date && payload.account_expires_at
+      && new Date(payload.hire_date) > new Date(payload.account_expires_at)) {
+      toast.warning('La date d expiration doit etre apres la date d embauche.'); return;
+    }
     if (!isStrongPassword(payload.password)) { toast.warning(PASSWORD_HINT); return; }
 
     setIsLoading(true);
     try {
       await post('/users', payload);
       toast.success('Utilisateur créé.');
-      setCreateDraft({ username: '', email: '', telephone: '', role: 'demandeur',
-        password: '', demandeur_profile: 'bureautique', service_direction: '' });
+      resetCreateDraft();
       setCreateOpen(false);
       await loadUsers();
     } catch (err) {
@@ -389,38 +556,7 @@ export default function AdminUsers({ userName, onLogout }) {
     } finally {
       setIsLoading(false);
     }
-  }, [createDraft, loadUsers, toast]);
-
-  /* ── saveEdit : identique ── */
-  const saveEdit = useCallback(async () => {
-    if (!editUserId) return;
-    const u = allUsers.find((x) => String(x?._id) === String(editUserId));
-    if (!u) return;
-    setIsLoading(true);
-    try {
-      const sd = safeStr(editDraft.service_direction);
-      if (sd && sd.length < 2) { toast.warning('Service/Direction invalide (min 2 caractères).'); return; }
-      const sdChanged = safeStr(u.service_direction) !== sd;
-      if (sdChanged) {
-        await patch(`/users/${encodeURIComponent(u._id)}/service-direction`, { service_direction: sd });
-      }
-      if (u.role === 'demandeur') {
-        const profile = safeStr(editDraft.demandeur_profile || '').toLowerCase();
-        if (profile && profile !== safeStr(u.demandeur_profile || '').toLowerCase()) {
-          await patch(`/users/${encodeURIComponent(u._id)}/demandeur-profile`, { demandeur_profile: profile });
-        }
-      } else if (!sdChanged) {
-        toast.info('Aucun changement détecté.'); return;
-      }
-      toast.success('Mise à jour enregistrée.');
-      setEditUserId(null);
-      await loadUsers();
-    } catch (err) {
-      toast.error(getUiErrorMessage(err, 'Erreur mise à jour'));
-    } finally {
-      setIsLoading(false);
-    }
-  }, [allUsers, editDraft, editUserId, loadUsers, toast]);
+  }, [createDraft, loadUsers, resetCreateDraft, toast]);
 
   /* ── copyPassword : identique ── */
   const copyPassword = useCallback(async (userId) => {
@@ -433,6 +569,113 @@ export default function AdminUsers({ userName, onLogout }) {
       toast.warning('Impossible de copier automatiquement.');
     }
   }, [newPasswordById, toast]);
+
+  const saveFullEdit = useCallback(async () => {
+    if (!editUserId) return;
+    const u = allUsers.find((x) => String(x?._id) === String(editUserId));
+    if (!u) return;
+
+    const nextRole = safeStr(editDraft.role || u.role);
+    const roleChanged = nextRole !== safeStr(u.role);
+    const nextPassword = safeStr(editDraft.password);
+    const passwordChanged = Boolean(nextPassword);
+    const profilePayload = {
+      username: safeStr(editDraft.username),
+      email: safeStr(editDraft.email),
+      telephone: normalizeTunisianPhone(editDraft.telephone),
+      employee_id: safeStr(editDraft.employee_id).toUpperCase(),
+      job_title: safeStr(editDraft.job_title),
+      hire_date: safeStr(editDraft.hire_date),
+      account_expires_at: safeStr(editDraft.account_expires_at),
+      account_type: safeStr(editDraft.account_type || 'interne'),
+      two_factor_required: Boolean(editDraft.two_factor_required),
+      service_direction: safeStr(editDraft.service_direction),
+      site_location: safeStr(editDraft.site_location),
+      manager_user_id: safeStr(editDraft.manager_user_id),
+      preferred_language: safeStr(editDraft.preferred_language || 'fr'),
+      notification_channels: {
+        email: editDraft.notification_channels?.email !== false,
+      },
+      ...(nextRole === 'demandeur'
+        ? { demandeur_profile: safeStr(editDraft.demandeur_profile || 'bureautique') }
+        : {}),
+    };
+
+    if (!profilePayload.username || profilePayload.username.length < 3) {
+      toast.warning('Username invalide (min 3 caracteres).'); return;
+    }
+    if (!isValidEmail(profilePayload.email)) { toast.warning('Email invalide.'); return; }
+    if (!isValidPhone(profilePayload.telephone)) {
+      toast.warning('Telephone invalide. Format requis: +216XXXXXXXX.'); return;
+    }
+    if (profilePayload.service_direction && profilePayload.service_direction.length < 2) {
+      toast.warning('Service/Direction invalide (min 2 caracteres).'); return;
+    }
+    if (!isValidEmployeeId(profilePayload.employee_id)) {
+      toast.warning('Matricule invalide (lettres, chiffres ou tiret).'); return;
+    }
+    if (profilePayload.hire_date && profilePayload.account_expires_at
+      && new Date(profilePayload.hire_date) > new Date(profilePayload.account_expires_at)) {
+      toast.warning('La date d expiration doit etre apres la date d embauche.'); return;
+    }
+    if (roleChanged && safeStr(editDraft.role_reason).length < 5) {
+      toast.warning('Motif obligatoire pour modifier le role (min 5 caracteres).'); return;
+    }
+    if (passwordChanged && !isStrongPassword(nextPassword)) { toast.warning(PASSWORD_HINT); return; }
+    if (passwordChanged && safeStr(editDraft.password_reason).length < 5) {
+      toast.warning('Motif obligatoire pour reinitialiser le mot de passe (min 5 caracteres).'); return;
+    }
+
+    const profileChanged = [
+      [safeStr(u.username), profilePayload.username],
+      [safeStr(u.email), profilePayload.email],
+      [normalizeTunisianPhone(u.telephone), profilePayload.telephone],
+      [safeStr(u.employee_id).toUpperCase(), profilePayload.employee_id],
+      [safeStr(u.job_title), profilePayload.job_title],
+      [formatDateInput(u.hire_date), profilePayload.hire_date],
+      [formatDateInput(u.account_expires_at), profilePayload.account_expires_at],
+      [safeStr(u.account_type || 'interne'), profilePayload.account_type],
+      [Boolean(u.two_factor_required), profilePayload.two_factor_required],
+      [safeStr(u.service_direction), profilePayload.service_direction],
+      [safeStr(u.site_location), profilePayload.site_location],
+      [safeStr(u.manager_user?._id || u.manager_user), profilePayload.manager_user_id],
+      [safeStr(u.preferred_language || 'fr'), profilePayload.preferred_language],
+      [u.notification_channels?.email !== false, profilePayload.notification_channels.email],
+      [nextRole === 'demandeur' ? safeStr(u.demandeur_profile || 'bureautique') : '', safeStr(profilePayload.demandeur_profile || '')],
+    ].some(([before, after]) => before !== after);
+
+    if (!profileChanged && !roleChanged && !passwordChanged) {
+      toast.info('Aucun changement detecte.'); return;
+    }
+
+    setIsLoading(true);
+    try {
+      if (roleChanged) {
+        await patch(`/users/${encodeURIComponent(u._id)}/role`, {
+          role: nextRole,
+          reason: safeStr(editDraft.role_reason),
+        });
+      }
+      if (profileChanged) {
+        await patch(`/users/${encodeURIComponent(u._id)}/profile`, profilePayload);
+      }
+      if (passwordChanged) {
+        const res = await post(`/users/${encodeURIComponent(u._id)}/reset-password`, {
+          new_password: nextPassword,
+          reason: safeStr(editDraft.password_reason),
+        });
+        const newPwd = safeStr(res?.new_password);
+        if (newPwd) setNewPasswordById((p) => ({ ...p, [u._id]: newPwd }));
+      }
+      toast.success('Utilisateur mis a jour.');
+      closeDrawer();
+      await loadUsers();
+    } catch (err) {
+      toast.error(getUiErrorMessage(err, 'Erreur mise a jour'));
+    } finally {
+      setIsLoading(false);
+    }
+  }, [allUsers, closeDrawer, editDraft, editUserId, loadUsers, toast]);
 
   const emptyText = useMemo(() => {
     if (!allUsers.length)     return 'Aucun utilisateur trouvé.';
@@ -718,7 +961,205 @@ export default function AdminUsers({ userName, onLogout }) {
                   <button className="icon-btn" type="button" onClick={closeDrawer}
                     disabled={isLoading} aria-label="Fermer"><X size={18} /></button>
                 </div>
-                <div className="drawer-body">
+                <div className="drawer-body create-user-body">
+                  <div className="create-user-shell">
+                    <section className="create-section create-section--identity">
+                      <div className="create-section-head">
+                        <div className="create-section-icon"><UserRoundCheck size={17} /></div>
+                        <div>
+                          <h3>Identite professionnelle</h3>
+                          <p>Informations RH et contact principal du compte.</p>
+                        </div>
+                      </div>
+                      <div className="form-grid create-form-grid">
+                        <label>
+                          Username *
+                          <input value={createDraft.username}
+                            onChange={(e) => setCreateDraft((p) => ({ ...p, username: e.target.value }))}
+                            disabled={isLoading} maxLength={60} placeholder="ex: a.benali" />
+                        </label>
+                        <label>
+                          Email *
+                          <input type="email" value={createDraft.email}
+                            onChange={(e) => setCreateDraft((p) => ({ ...p, email: e.target.value }))}
+                            disabled={isLoading} maxLength={120} placeholder="prenom.nom@etap.com.tn" />
+                        </label>
+                        <label>
+                          Matricule
+                          <input value={createDraft.employee_id}
+                            onChange={(e) => setCreateDraft((p) => ({ ...p, employee_id: e.target.value.toUpperCase() }))}
+                            disabled={isLoading} maxLength={24} placeholder="ETAP-1024" />
+                        </label>
+                        <label>
+                          Fonction / Poste
+                          <input value={createDraft.job_title}
+                            onChange={(e) => setCreateDraft((p) => ({ ...p, job_title: e.target.value }))}
+                            disabled={isLoading} maxLength={80} placeholder="Ingenieur reservoir, Acheteur..." />
+                        </label>
+                        <label>
+                          Telephone *
+                          <input inputMode="tel" value={createDraft.telephone}
+                            onChange={(e) => setCreateDraft((p) => ({ ...p, telephone: normalizeTunisianPhone(e.target.value) }))}
+                            disabled={isLoading} maxLength={12} placeholder="+21698123456" />
+                          <div className="helper-text">Format bloque sur l indicatif tunisien +216.</div>
+                        </label>
+                        <label>
+                          Date d embauche
+                          <input type="date" value={createDraft.hire_date}
+                            onChange={(e) => setCreateDraft((p) => ({ ...p, hire_date: e.target.value }))}
+                            disabled={isLoading} />
+                        </label>
+                      </div>
+                    </section>
+
+                    <section className="create-section">
+                      <div className="create-section-head">
+                        <div className="create-section-icon"><Building2 size={17} /></div>
+                        <div>
+                          <h3>Organisation et localisation</h3>
+                          <p>Role applicatif, service, site et responsable N+1.</p>
+                        </div>
+                      </div>
+                      <div className="form-grid create-form-grid">
+                        <label>
+                          Role *
+                          <select value={createDraft.role}
+                            onChange={(e) => setCreateDraft((p) => ({ ...p, role: e.target.value }))}
+                            disabled={isLoading}>
+                            {ROLES.map((r) => <option key={r.id} value={r.id}>{r.label}</option>)}
+                          </select>
+                        </label>
+                        <label>
+                          Service / Direction
+                          <input value={createDraft.service_direction}
+                            onChange={(e) => setCreateDraft((p) => ({ ...p, service_direction: e.target.value }))}
+                            disabled={isLoading} maxLength={80} placeholder="RH, Finance, HSE..." />
+                        </label>
+                        {createDraft.role === 'demandeur' && (
+                          <label>
+                            Profil catalogue
+                            <select value={createDraft.demandeur_profile}
+                              onChange={(e) => setCreateDraft((p) => ({ ...p, demandeur_profile: e.target.value }))}
+                              disabled={isLoading}>
+                              {CATALOG_PROFILES_CREATE.map((p) => <option key={p.id} value={p.id}>{p.label}</option>)}
+                            </select>
+                            <div className="helper-text">
+                              Choisir "Auto" pour mapper le profil depuis le service/direction.
+                            </div>
+                          </label>
+                        )}
+                        <label>
+                          Site / Localisation
+                          <input list="admin-user-sites" value={createDraft.site_location}
+                            onChange={(e) => setCreateDraft((p) => ({ ...p, site_location: e.target.value }))}
+                            disabled={isLoading} maxLength={100} placeholder="Siege social, Champ petrolier..." />
+                          <datalist id="admin-user-sites">
+                            {SITE_OPTIONS.map((site) => <option key={site} value={site} />)}
+                          </datalist>
+                        </label>
+                        <label>
+                          Responsable hierarchique (N+1)
+                          <select value={createDraft.manager_user_id}
+                            onChange={(e) => setCreateDraft((p) => ({ ...p, manager_user_id: e.target.value }))}
+                            disabled={isLoading}>
+                            <option value="">Aucun responsable rattache</option>
+                            {managerOptions.map((u) => (
+                              <option key={u._id} value={u._id}>{u.username} - {roleLabel(u.role)}</option>
+                            ))}
+                          </select>
+                        </label>
+                      </div>
+                    </section>
+
+                    <section className="create-section">
+                      <div className="create-section-head">
+                        <div className="create-section-icon"><ShieldCheck size={17} /></div>
+                        <div>
+                          <h3>Securite et gouvernance</h3>
+                          <p>Expiration, type de compte et politique d acces initiale.</p>
+                        </div>
+                      </div>
+                      <div className="form-grid create-form-grid">
+                        <label>
+                          Type de compte
+                          <select value={createDraft.account_type}
+                            onChange={(e) => setCreateDraft((p) => ({ ...p, account_type: e.target.value }))}
+                            disabled={isLoading}>
+                            {ACCOUNT_TYPES.map((type) => <option key={type.id} value={type.id}>{type.label}</option>)}
+                          </select>
+                        </label>
+                        <label>
+                          Date d expiration du compte
+                          <input type="date" value={createDraft.account_expires_at}
+                            onChange={(e) => setCreateDraft((p) => ({ ...p, account_expires_at: e.target.value }))}
+                            disabled={isLoading} />
+                        </label>
+                        <label className="span-2">
+                          Mot de passe temporaire *
+                          <div className="password-input-row">
+                            <input type={showCreatePassword ? 'text' : 'password'} value={createDraft.password}
+                              onChange={(e) => setCreateDraft((p) => ({ ...p, password: e.target.value }))}
+                              disabled={isLoading} maxLength={64} placeholder="Temporaire (min 8)" />
+                            <button className="icon-btn" type="button"
+                              onClick={() => setShowCreatePassword((p) => !p)}
+                              disabled={isLoading}
+                              title={showCreatePassword ? 'Masquer le mot de passe' : 'Afficher le mot de passe'}>
+                              {showCreatePassword ? <EyeOff size={16} /> : <Eye size={16} />}
+                            </button>
+                            <button className="admin-btn small" type="button"
+                              onClick={() => setCreateDraft((p) => ({ ...p, password: generateSecurePassword() }))}
+                              disabled={isLoading}>
+                              <Wand2 size={15} /><span>Generer</span>
+                            </button>
+                          </div>
+                          <div className={`pwd-hint ${createDraft.password
+                            ? (isStrongPassword(createDraft.password) ? 'ok' : 'bad') : ''}`}>
+                            {PASSWORD_HINT}
+                          </div>
+                          <div className="helper-text">
+                            Le mot de passe temporaire devra etre change apres la premiere connexion.
+                          </div>
+                        </label>
+                        <label className="create-check-card span-2">
+                          <input type="checkbox" checked={Boolean(createDraft.two_factor_required)}
+                            onChange={(e) => setCreateDraft((p) => ({ ...p, two_factor_required: e.target.checked }))}
+                            disabled={isLoading} />
+                          <span>
+                            <strong>Double authentification obligatoire</strong>
+                            <small>Force la configuration 2FA au premier acces lorsque le module 2FA est active.</small>
+                          </span>
+                        </label>
+                      </div>
+                    </section>
+
+                    <section className="create-section">
+                      <div className="create-section-head">
+                        <div className="create-section-icon"><Languages size={17} /></div>
+                        <div>
+                          <h3>Preferences utilisateur</h3>
+                          <p>Langue et canaux de notification initiaux.</p>
+                        </div>
+                      </div>
+                      <div className="form-grid create-form-grid">
+                        <label>
+                          Langue preferee
+                          <select value={createDraft.preferred_language}
+                            onChange={(e) => setCreateDraft((p) => ({ ...p, preferred_language: e.target.value }))}
+                            disabled={isLoading}>
+                            {LANGUAGE_OPTIONS.map((lang) => <option key={lang.id} value={lang.id}>{lang.label}</option>)}
+                          </select>
+                        </label>
+                        <div className="notification-choice-group">
+                          <label className="create-check-card">
+                            <input type="checkbox" checked={createDraft.notification_channels?.email !== false}
+                              onChange={(e) => updateCreateNotification('email', e.target.checked)}
+                              disabled={isLoading} />
+                            <span><Mail size={15} /> Notifications Email</span>
+                          </label>
+                        </div>
+                      </div>
+                    </section>
+                  </div>
                   <div className="form-grid">
                     <label>
                       Username *
@@ -839,6 +1280,20 @@ export default function AdminUsers({ userName, onLogout }) {
                     <div><span>Rôle</span><strong>{roleLabel(selectedUser.role)}</strong></div>
                     <div><span>Statut</span><strong>{statusLabel(selectedUser.status)}</strong></div>
                     <div><span>Service / Direction</span><strong>{safeStr(selectedUser.service_direction) || '—'}</strong></div>
+                    <div><span>Matricule</span><strong>{selectedUser.employee_id || '-'}</strong></div>
+                    <div><span>Fonction / Poste</span><strong>{selectedUser.job_title || '-'}</strong></div>
+                    <div><span>Site / Localisation</span><strong>{safeStr(selectedUser.site_location) || '-'}</strong></div>
+                    <div><span>Type de compte</span><strong>{selectedUser.account_type === 'externe' ? 'Externe' : 'Interne ETAP'}</strong></div>
+                    <div><span>Expiration compte</span><strong>{selectedUser.account_expires_at ? formatDateTime(selectedUser.account_expires_at) : '-'}</strong></div>
+                    <div><span>Date embauche</span><strong>{selectedUser.hire_date ? formatDateTime(selectedUser.hire_date) : '-'}</strong></div>
+                    <div><span>Responsable N+1</span><strong>{selectedUser.manager_user?.username || '-'}</strong></div>
+                    <div><span>Langue preferee</span><strong>{LANGUAGE_OPTIONS.find((l) => l.id === selectedUser.preferred_language)?.label || 'Francais'}</strong></div>
+                    <div><span>2FA obligatoire</span><strong>{selectedUser.two_factor_required ? 'Oui' : 'Non'}</strong></div>
+                    <div><span>Notifications</span><strong>
+                      {[
+                        selectedUser.notification_channels?.email !== false ? 'Email' : '',
+                      ].filter(Boolean).join(' + ') || 'Aucune'}
+                    </strong></div>
                     <div>
                       <span>Profil catalogue</span>
                       <strong>{selectedUser.role === 'demandeur'
@@ -895,8 +1350,8 @@ export default function AdminUsers({ userName, onLogout }) {
 
           {/* ════ DRAWER : Modifier utilisateur ════ */}
           {editUserId && selectedUser && (
-            <div className="admin-drawer-backdrop" role="dialog" aria-modal="true" onClick={closeDrawer}>
-              <div className="admin-drawer" onClick={(e) => e.stopPropagation()}>
+            <div className="admin-drawer-backdrop admin-create-backdrop" role="dialog" aria-modal="true" onClick={closeDrawer}>
+              <div className="admin-drawer admin-create-drawer" onClick={(e) => e.stopPropagation()}>
                 <div className="drawer-header">
                   <div className="drawer-header-left">
                     <div className="drawer-header-icon drawer-icon--edit">
@@ -910,8 +1365,8 @@ export default function AdminUsers({ userName, onLogout }) {
                   <button className="icon-btn" type="button" onClick={closeDrawer}
                     disabled={isLoading} aria-label="Fermer"><X size={18} /></button>
                 </div>
-                <div className="drawer-body">
-                  <div className="form-grid">
+                <div className="drawer-body create-user-body edit-user-body">
+                  <div className="form-grid edit-user-grid">
                     <label>
                       Service / Direction
                       <input value={editDraft.service_direction}
@@ -921,13 +1376,13 @@ export default function AdminUsers({ userName, onLogout }) {
                         Champ facultatif (2–80). Utilisé pour l'organisation interne.
                       </div>
                     </label>
-                    {selectedUser.role === 'demandeur' ? (
+                    {editDraft.role === 'demandeur' ? (
                       <label>
                         Profil catalogue
                         <select value={editDraft.demandeur_profile}
                           onChange={(e) => setEditDraft((p) => ({ ...p, demandeur_profile: e.target.value }))}
                           disabled={isLoading}>
-                          {CATALOG_PROFILES.map((p) => <option key={p.id} value={p.id}>{p.label}</option>)}
+                          {CATALOG_PROFILES_CREATE.map((p) => <option key={p.id} value={p.id}>{p.label}</option>)}
                         </select>
                         <div className="helper-text">
                           Permet de limiter le catalogue visible pour le demandeur.
@@ -938,13 +1393,154 @@ export default function AdminUsers({ userName, onLogout }) {
                         Le profil catalogue concerne uniquement les demandeurs.
                       </div>
                     )}
+                    <label>
+                      Username *
+                      <input value={editDraft.username}
+                        onChange={(e) => setEditDraft((p) => ({ ...p, username: e.target.value }))}
+                        disabled={isLoading} maxLength={60} />
+                    </label>
+                    <label>
+                      Email *
+                      <input type="email" value={editDraft.email}
+                        onChange={(e) => setEditDraft((p) => ({ ...p, email: e.target.value }))}
+                        disabled={isLoading} maxLength={120} />
+                    </label>
+                    <label>
+                      Telephone *
+                      <input inputMode="tel" value={editDraft.telephone}
+                        onChange={(e) => setEditDraft((p) => ({ ...p, telephone: normalizeTunisianPhone(e.target.value) }))}
+                        disabled={isLoading} maxLength={12} placeholder="+21698123456" />
+                    </label>
+                    <label>
+                      Role *
+                      <select value={editDraft.role}
+                        onChange={(e) => setEditDraft((p) => ({ ...p, role: e.target.value }))}
+                        disabled={isLoading}>
+                        {ROLES.map((r) => <option key={r.id} value={r.id}>{r.label}</option>)}
+                      </select>
+                    </label>
+                    {editDraft.role !== selectedUser.role && (
+                      <label className="span-2">
+                        Motif changement role *
+                        <input value={editDraft.role_reason}
+                          onChange={(e) => setEditDraft((p) => ({ ...p, role_reason: e.target.value }))}
+                          disabled={isLoading} maxLength={200} />
+                      </label>
+                    )}
+                    <label>
+                      Matricule
+                      <input value={editDraft.employee_id}
+                        onChange={(e) => setEditDraft((p) => ({ ...p, employee_id: e.target.value.toUpperCase() }))}
+                        disabled={isLoading} maxLength={24} />
+                    </label>
+                    <label>
+                      Fonction / Poste
+                      <input value={editDraft.job_title}
+                        onChange={(e) => setEditDraft((p) => ({ ...p, job_title: e.target.value }))}
+                        disabled={isLoading} maxLength={80} />
+                    </label>
+                    <label>
+                      Date d embauche
+                      <input type="date" value={editDraft.hire_date}
+                        onChange={(e) => setEditDraft((p) => ({ ...p, hire_date: e.target.value }))}
+                        disabled={isLoading} />
+                    </label>
+                    <label>
+                      Date d expiration du compte
+                      <input type="date" value={editDraft.account_expires_at}
+                        onChange={(e) => setEditDraft((p) => ({ ...p, account_expires_at: e.target.value }))}
+                        disabled={isLoading} />
+                    </label>
+                    <label>
+                      Type de compte
+                      <select value={editDraft.account_type}
+                        onChange={(e) => setEditDraft((p) => ({ ...p, account_type: e.target.value }))}
+                        disabled={isLoading}>
+                        {ACCOUNT_TYPES.map((type) => <option key={type.id} value={type.id}>{type.label}</option>)}
+                      </select>
+                    </label>
+                    <label>
+                      Site / Localisation
+                      <input list="admin-user-sites" value={editDraft.site_location}
+                        onChange={(e) => setEditDraft((p) => ({ ...p, site_location: e.target.value }))}
+                        disabled={isLoading} maxLength={100} />
+                    </label>
+                    <label>
+                      Responsable hierarchique (N+1)
+                      <select value={editDraft.manager_user_id}
+                        onChange={(e) => setEditDraft((p) => ({ ...p, manager_user_id: e.target.value }))}
+                        disabled={isLoading}>
+                        <option value="">Aucun responsable rattache</option>
+                        {managerOptions
+                          .filter((manager) => String(manager._id) !== String(selectedUser._id))
+                          .map((manager) => (
+                            <option key={manager._id} value={manager._id}>
+                              {manager.username} - {roleLabel(manager.role)}
+                            </option>
+                          ))}
+                      </select>
+                    </label>
+                    <label>
+                      Langue preferee
+                      <select value={editDraft.preferred_language}
+                        onChange={(e) => setEditDraft((p) => ({ ...p, preferred_language: e.target.value }))}
+                        disabled={isLoading}>
+                        {LANGUAGE_OPTIONS.map((lang) => <option key={lang.id} value={lang.id}>{lang.label}</option>)}
+                      </select>
+                    </label>
+                    <label className="create-check-card">
+                      <input type="checkbox" checked={Boolean(editDraft.two_factor_required)}
+                        onChange={(e) => setEditDraft((p) => ({ ...p, two_factor_required: e.target.checked }))}
+                        disabled={isLoading} />
+                      <span><ShieldCheck size={15} /> 2FA obligatoire</span>
+                    </label>
+                    <div className="notification-choice-group span-2">
+                      <label className="create-check-card">
+                        <input type="checkbox" checked={editDraft.notification_channels?.email !== false}
+                          onChange={(e) => updateEditNotification('email', e.target.checked)}
+                          disabled={isLoading} />
+                        <span><Mail size={15} /> Notifications Email</span>
+                      </label>
+                    </div>
+                    <label className="span-2">
+                      Nouveau mot de passe temporaire
+                      <div className="password-input-row">
+                        <input type={showEditPassword ? 'text' : 'password'} value={editDraft.password}
+                          onChange={(e) => setEditDraft((p) => ({ ...p, password: e.target.value }))}
+                          disabled={isLoading} maxLength={64}
+                          placeholder="Laisser vide pour conserver le mot de passe actuel" />
+                        <button className="icon-btn" type="button"
+                          onClick={() => setShowEditPassword((p) => !p)}
+                          disabled={isLoading}
+                          title={showEditPassword ? 'Masquer le mot de passe' : 'Afficher le mot de passe'}>
+                          {showEditPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+                        </button>
+                        <button className="admin-btn small" type="button"
+                          onClick={() => setEditDraft((p) => ({ ...p, password: generateSecurePassword() }))}
+                          disabled={isLoading}>
+                          <Wand2 size={15} /><span>Generer</span>
+                        </button>
+                      </div>
+                      <div className={`pwd-hint ${editDraft.password
+                        ? (isStrongPassword(editDraft.password) ? 'ok' : 'bad') : ''}`}>
+                        {editDraft.password ? PASSWORD_HINT : 'Action optionnelle et auditee.'}
+                      </div>
+                    </label>
+                    {editDraft.password && (
+                      <label className="span-2">
+                        Motif reinitialisation mot de passe *
+                        <input value={editDraft.password_reason}
+                          onChange={(e) => setEditDraft((p) => ({ ...p, password_reason: e.target.value }))}
+                          disabled={isLoading} maxLength={200} />
+                      </label>
+                    )}
                   </div>
                 </div>
                 <div className="drawer-footer">
                   <button className="admin-btn" type="button" onClick={closeDrawer} disabled={isLoading}>
                     Annuler
                   </button>
-                  <button className="admin-btn primary" type="button" onClick={saveEdit} disabled={isLoading}>
+                  <button className="admin-btn primary" type="button" onClick={saveFullEdit} disabled={isLoading}>
                     <Pencil size={16} /><span>Enregistrer</span>
                   </button>
                 </div>

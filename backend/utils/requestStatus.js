@@ -1,3 +1,7 @@
+// BLOC 1 - Role du fichier.
+// Ce fichier regroupe des fonctions utilitaires backend autour de requestStatus.
+// Point de vigilance: modifier avec prudence car ce fichier peut etre importe par plusieurs modules.
+
 const LEGACY_REQUEST_STATUS_MAP = Object.freeze({
   accepted: 'validated',
   refused: 'rejected',

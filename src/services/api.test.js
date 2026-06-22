@@ -1,3 +1,7 @@
+// BLOC 1 - Role du fichier.
+// Ce fichier organise les appels API ou la logique frontend partagee pour api.test.
+// Point de vigilance: modifier avec prudence car ce fichier peut etre importe par plusieurs modules.
+
 import { get, post } from "./api";
 
 function jsonResponse(status, data) {
@@ -41,6 +45,39 @@ test("does not call refresh on 401 when no access token exists", async () => {
   ).rejects.toThrow("Mot de passe incorrect");
 
   expect(global.fetch).toHaveBeenCalledTimes(1);
+});
+
+test("extracts a readable message when API error is an object", async () => {
+  global.fetch = jest.fn(async () => (
+    jsonResponse(400, { error: { message: "Identifiant invalide" } })
+  ));
+
+  await expect(
+    post("/auth/login", { identifier: "x", password: "y" })
+  ).rejects.toThrow("Identifiant invalide");
+});
+
+test("does not expose object or backend details for malformed API responses", async () => {
+  global.fetch = jest.fn(async () => ({
+    ok: false,
+    status: 502,
+    headers: {
+      get() {
+        return "text/html";
+      },
+    },
+    text() {
+      return Promise.resolve("<!DOCTYPE html><html><body>Proxy backend down</body></html>");
+    },
+  }));
+
+  await expect(
+    get("/products")
+  ).rejects.toThrow("Operation impossible. Veuillez reessayer.");
+
+  await expect(
+    get("/products")
+  ).rejects.not.toThrow("[object Object]");
 });
 
 test("refreshes token on 401 when access token exists and retries request", async () => {

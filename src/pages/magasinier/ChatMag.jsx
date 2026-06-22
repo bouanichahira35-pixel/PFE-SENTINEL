@@ -1,3 +1,7 @@
+// BLOC 1 - Role du fichier.
+// Ce fichier affiche une page de l'espace magasinier pour ChatMag.
+// Point de vigilance: garder les props, appels API et classes CSS synchronises avec les ecrans existants.
+
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Send, MessageSquare } from 'lucide-react';
 import SidebarMag from '../../components/magasinier/SidebarMag';

@@ -12,6 +12,7 @@ const StockExit = require('../models/StockExit');
 const StockLot = require('../models/StockLot');
 const PurchaseOrder = require('../models/PurchaseOrder');
 const SupplierProduct = require('../models/SupplierProduct');
+const Supplier = require('../models/Supplier');
 const requireAuth = require('../middlewares/requireAuth');
 const requirePermission = require('../middlewares/requirePermission');
 const strictBody = require('../middlewares/strictBody');
@@ -27,6 +28,8 @@ const {
   asTrimmedString,
   isBlank,
   isValidObjectIdLike,
+  normalizeEmail,
+  isValidEmail,
   isSafeText,
 } = require('../utils/validation');
 
@@ -80,7 +83,16 @@ async function getOrCreateCategory({ categoryId, categoryName, userId }) {
   });
 }
 
-async function notifyResponsablesOnNewProduct(product, creatorUser) {
+function escapeHtml(value) {
+  return String(value || '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
+async function notifyResponsablesAboutProduct({ product, actorUser, title, message, type = 'info', emailKind }) {
   try {
     if (!product?._id) return;
 
@@ -89,28 +101,18 @@ async function notifyResponsablesOnNewProduct(product, creatorUser) {
       .lean();
     if (!responsables.length) return;
 
-    const creatorName = creatorUser?.username || creatorUser?.email || 'magasinier';
-    const subject = `Nouveau produit ajoute au catalogue: ${product.name || 'Produit'}`;
-    const text = [
-      `Produit: ${product.name || 'Produit'}`,
-      product.code_product ? `Code: ${product.code_product}` : null,
-      `Ajoute par: ${creatorName}`,
-      product.family ? `Famille: ${product.family}` : null,
-      product.unite ? `Unite: ${product.unite}` : null,
-      Number.isFinite(Number(product.quantity_current)) ? `Quantite initiale: ${Number(product.quantity_current)}` : null,
-      Number.isFinite(Number(product.seuil_minimum)) ? `Seuil minimum: ${Number(product.seuil_minimum)}` : null,
-    ].filter(Boolean).join('\n');
-
-    const targets = responsables.filter((r) => String(r._id) !== String(creatorUser?.id || creatorUser?._id || ''));
+    const actorId = String(actorUser?.id || actorUser?._id || '');
+    const targets = responsables.filter((r) => String(r._id) !== actorId);
     if (!targets.length) return;
 
     await Notification.insertMany(
       targets.map((r) => ({
         user: r._id,
-        title: subject,
-        message: text,
-        type: 'info',
+        title,
+        message,
+        type,
         is_read: false,
+        event_type: emailKind,
       }))
     );
 
@@ -118,15 +120,15 @@ async function notifyResponsablesOnNewProduct(product, creatorUser) {
       if (!r.email) continue;
       try {
         const prefs = await getUserPreferences(r._id);
-        if (!canSendNotificationEmail(prefs, 'stock')) continue;
+        if (!canSendNotificationEmail(prefs, 'catalogue')) continue;
         await enqueueMail({
-          kind: 'product_created',
+          kind: emailKind,
           role: r.role,
           to: r.email,
-          subject,
-          text,
-          html: `<pre style="font-family:monospace;white-space:pre-wrap;">${text}</pre>`,
-          job_id: `product_created_${product._id}_${r._id}_${Date.now()}`,
+          subject: title,
+          text: message,
+          html: `<pre style="font-family:monospace;white-space:pre-wrap;">${escapeHtml(message)}</pre>`,
+          job_id: `${emailKind}_${product._id}_${r._id}_${Date.now()}`,
         });
       } catch {
         // best-effort
@@ -135,6 +137,49 @@ async function notifyResponsablesOnNewProduct(product, creatorUser) {
   } catch {
     // best-effort
   }
+}
+
+async function notifyResponsablesOnNewProduct(product, creatorUser) {
+  const creatorName = creatorUser?.username || creatorUser?.email || 'magasinier';
+  const title = `Nouveau produit ajoute au catalogue: ${product.name || 'Produit'}`;
+  const message = [
+    `Produit: ${product.name || 'Produit'}`,
+    product.code_product ? `Code: ${product.code_product}` : null,
+    `Ajoute par: ${creatorName}`,
+    product.family ? `Famille: ${product.family}` : null,
+    product.unite ? `Unite: ${product.unite}` : null,
+    Number.isFinite(Number(product.quantity_current)) ? `Quantite initiale: ${Number(product.quantity_current)}` : null,
+    Number.isFinite(Number(product.seuil_minimum)) ? `Seuil minimum: ${Number(product.seuil_minimum)}` : null,
+  ].filter(Boolean).join('\n');
+
+  await notifyResponsablesAboutProduct({
+    product,
+    actorUser: creatorUser,
+    title,
+    message,
+    type: 'info',
+    emailKind: 'product_created',
+  });
+}
+
+async function notifyResponsablesOnArchivedProduct(product, actorUser) {
+  const actorName = actorUser?.username || actorUser?.email || 'responsable';
+  const title = `Produit archive: ${product.name || 'Produit'}`;
+  const message = [
+    `Produit: ${product.name || 'Produit'}`,
+    product.code_product ? `Code: ${product.code_product}` : null,
+    `Archive par: ${actorName}`,
+    product.archived_reason ? `Motif: ${product.archived_reason}` : null,
+  ].filter(Boolean).join('\n');
+
+  await notifyResponsablesAboutProduct({
+    product,
+    actorUser,
+    title,
+    message,
+    type: 'warning',
+    emailKind: 'product_archived',
+  });
 }
 
 async function getNextProductCode() {
@@ -558,6 +603,139 @@ router.get('/name-check', requireAuth, async (req, res) => {
   }
 });
 
+// PATCH /api/products/:id/chemical-register
+// Lie ou retire un produit du registre chimique sans supprimer le produit du catalogue magasinier.
+router.patch(
+  '/:id/chemical-register',
+  requireAuth,
+  requirePermission(PERMISSIONS.PRODUCT_UPDATE),
+  strictBody([
+    'included',
+    'excluded',
+    'chemical_class',
+    'physical_state',
+    'supplier_name',
+    'supplier_email',
+  ]),
+  async (req, res) => {
+    try {
+      if (!isValidObjectIdLike(req.params.id)) {
+        return res.status(400).json({ error: 'product id invalide' });
+      }
+
+      const product = await Product.findById(req.params.id);
+      if (!product) return res.status(404).json({ error: 'Product not found' });
+      if (String(product.lifecycle_status || 'active') !== 'active') {
+        return res.status(409).json({ error: 'Produit archive / indisponible' });
+      }
+
+      const errors = [];
+      if (req.body.included !== undefined) {
+        product.chemical_register_included = Boolean(req.body.included);
+        if (Boolean(req.body.included)) product.chemical_register_excluded = false;
+      }
+      if (req.body.excluded !== undefined) {
+        product.chemical_register_excluded = Boolean(req.body.excluded);
+        if (Boolean(req.body.excluded)) product.chemical_register_included = false;
+      }
+
+      if (req.body.chemical_class !== undefined) {
+        const next = asOptionalString(req.body.chemical_class);
+        if (next && !isSafeText(next, { min: 1, max: 80 })) errors.push('chemical_class invalide');
+        else product.chemical_class = next || '';
+      }
+
+      if (req.body.physical_state !== undefined) {
+        const next = asOptionalString(req.body.physical_state);
+        if (next && !isSafeText(next, { min: 1, max: 80 })) errors.push('physical_state invalide');
+        else product.physical_state = next || '';
+      }
+
+      let supplier = null;
+      const supplierName = asTrimmedString(req.body.supplier_name);
+      const supplierEmail = normalizeEmail(req.body.supplier_email);
+      if (req.body.supplier_email !== undefined && supplierEmail && !isValidEmail(supplierEmail)) {
+        errors.push('supplier_email invalide');
+      }
+
+      if (supplierName) {
+        if (!isSafeText(supplierName, { min: 2, max: 140 })) {
+          errors.push('supplier_name invalide');
+        } else {
+          supplier = await Supplier.findOne({ name: new RegExp(`^${escapeRegex(supplierName)}$`, 'i') });
+          if (!supplier) {
+            supplier = await Supplier.create({
+              name: supplierName,
+              email: supplierEmail || undefined,
+              status: 'ACTIF',
+              created_by: req.user.id,
+            });
+          } else if (supplierEmail && !supplier.email) {
+            supplier.email = supplierEmail;
+            await supplier.save();
+          }
+        }
+      }
+
+      if (errors.length) return res.status(400).json({ error: 'Validation failed', details: errors });
+
+      await product.save();
+
+      if (supplier?._id) {
+        await SupplierProduct.updateMany({ product: product._id }, { $set: { is_primary: false } });
+        await SupplierProduct.findOneAndUpdate(
+          { supplier: supplier._id, product: product._id },
+          {
+            $set: {
+              supplier: supplier._id,
+              product: product._id,
+              is_primary: true,
+              availability_status: 'unknown',
+              created_by: req.user.id,
+            },
+          },
+          { upsert: true, returnDocument: 'after' }
+        );
+      }
+
+      await History.create({
+        action_type: 'product_update',
+        user: req.user.id,
+        source: 'ui',
+        description: `Registre chimique mis a jour (${product.code_product})`,
+        actor_role: req.user.role,
+        tags: ['product', 'chemical_register'],
+        context: {
+          product_id: String(product._id),
+          product_name: product.name,
+          included: product.chemical_register_included,
+          excluded: product.chemical_register_excluded,
+          supplier_id: supplier?._id ? String(supplier._id) : null,
+          supplier_name: supplier?.name || null,
+        },
+      }).catch(() => null);
+
+      return res.json({
+        ok: true,
+        product: {
+          _id: product._id,
+          code_product: product.code_product,
+          name: product.name,
+          chemical_register_included: product.chemical_register_included,
+          chemical_register_excluded: product.chemical_register_excluded,
+          chemical_class: product.chemical_class || '',
+          physical_state: product.physical_state || '',
+        },
+        supplier: supplier
+          ? { _id: supplier._id, name: supplier.name, email: supplier.email || '' }
+          : null,
+      });
+    } catch (err) {
+      return res.status(500).json({ error: 'Failed to update chemical register', details: err.message });
+    }
+  }
+);
+
 // BLOC 9 - Creation produit.
 // POST /api/products valide les donnees, cree le produit et notifie les responsables si besoin.
 router.post(
@@ -578,6 +756,8 @@ router.post(
     'chemical_class',
     'physical_state',
     'fds_attachment',
+    'chemical_register_included',
+    'chemical_register_excluded',
     'gas_pressure',
     'gas_purity',
     'quantity_current',
@@ -809,6 +989,8 @@ router.put(
       'chemical_class',
       'physical_state',
       'fds_attachment',
+      'chemical_register_included',
+      'chemical_register_excluded',
       'gas_pressure',
       'gas_purity',
       'qr_code_value',
@@ -874,6 +1056,10 @@ router.put(
       if (field === 'fds_attachment') {
         const next = sanitizeFdsAttachment(req.body[field], errors);
         product[field] = next;
+        return;
+      }
+      if (field === 'chemical_register_included' || field === 'chemical_register_excluded') {
+        product[field] = Boolean(req.body[field]);
         return;
       }
       if (field === 'image_product') {
@@ -1136,6 +1322,9 @@ router.post(
       }
 
       const reason = asOptionalString(req.body?.reason);
+      if (reason && !isSafeText(reason, { min: 0, max: 240 })) {
+        return res.status(400).json({ error: 'reason invalide (max 240, sans < >)' });
+      }
 
       product.lifecycle_status = 'archived';
       product.archived_at = new Date();
@@ -1157,6 +1346,8 @@ router.post(
           archived_at: product.archived_at,
         },
       });
+
+      notifyResponsablesOnArchivedProduct(product, req.user);
 
       return res.json({ ok: true, product });
     } catch (err) {

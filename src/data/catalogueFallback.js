@@ -1,3 +1,7 @@
+// BLOC 1 - Role du fichier.
+// Ce fichier fournit des donnees locales de fallback ou de demonstration pour catalogueFallback.
+// Point de vigilance: modifier avec prudence car ce fichier peut etre importe par plusieurs modules.
+
 export const fallbackSuppliers = [
   {
     _id: 'fallback-supplier-technoquip',

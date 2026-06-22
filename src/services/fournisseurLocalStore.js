@@ -1,3 +1,7 @@
+// BLOC 1 - Role du fichier.
+// Ce fichier organise les appels API ou la logique frontend partagee pour fournisseurLocalStore.
+// Point de vigilance: modifier avec prudence car ce fichier peut etre importe par plusieurs modules.
+
 const DOCS_KEY = 'supplier_docs_v1';
 const EVAL_KEY = 'supplier_eval_v1';
 

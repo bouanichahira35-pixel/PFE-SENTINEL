@@ -1,3 +1,7 @@
+// BLOC 1 - Role du fichier.
+// Ce fichier organise les appels API ou la logique frontend partagee pour stockRulesService.
+// Point de vigilance: modifier avec prudence car ce fichier peut etre importe par plusieurs modules.
+
 import { get, patch, post } from './api';
 
 export const STOCK_RULES_DEFAULT = Object.freeze({

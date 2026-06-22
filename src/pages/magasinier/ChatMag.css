@@ -1,3 +1,9 @@
+/*
+ * BLOC 1 - Role du fichier.
+ * Ce fichier affiche une page de l'espace magasinier pour ChatMag.
+ * Point de vigilance: garder les props, appels API et classes CSS synchronises avec les ecrans existants.
+ */
+
 /* ============================================================
    ChatMag.css — version améliorée
    Logique et JSX 100% inchangés
@@ -387,4 +393,47 @@
   .chat-input {
     padding: 0.75rem 1rem;
   }
+}
+
+/* Correctif structurel: la page chat vit deja sous HeaderPage.
+   La zone messages doit scroller, pas pousser la barre d'envoi hors ecran. */
+.main-content.chat-main {
+  height: calc(100dvh - 64px);
+  min-height: 0;
+  overflow: hidden !important;
+  display: flex;
+}
+
+.chat-container,
+.chat-container.resp {
+  flex: 1;
+  height: 100%;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.chat-contacts,
+.chat-area,
+.chat-messages {
+  min-height: 0;
+}
+
+.chat-area {
+  overflow: hidden;
+}
+
+.chat-messages {
+  flex: 1 1 auto;
+  overflow-y: auto;
+}
+
+.chat-input {
+  flex: 0 0 auto;
+  position: relative;
+  z-index: 2;
+  box-sizing: border-box;
+}
+
+.chat-input input {
+  min-width: 0;
 }

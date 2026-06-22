@@ -1,7 +1,12 @@
+// BLOC 1 - Role du fichier.
+// Ce fichier affiche une page de l'espace magasinier pour ParametresMag.
+// Point de vigilance: garder les props, appels API et classes CSS synchronises avec les ecrans existants.
+
 import { useEffect, useRef, useState } from 'react';
-import { User, Lock, Moon, Sun, Globe, Bell, Camera, Save, Eye, EyeOff } from 'lucide-react';
+import { User, Lock, Moon, Sun, Globe, Bell, Camera, Save, Eye, EyeOff, LifeBuoy } from 'lucide-react';
 import SidebarMag from '../../components/magasinier/SidebarMag';
 import HeaderPage from '../../components/shared/HeaderPage';
+import SupportItTickets from '../../components/parametres/SupportItTickets';
 import useTheme from '../../hooks/useTheme';
 import useProtectedFileUrl from '../../hooks/useProtectedFileUrl';
 import { get, patch, post, uploadFile } from '../../services/api';
@@ -56,6 +61,7 @@ const ParametresMag = ({ userName, onLogout }) => {
     { id: 'apparence', label: ({ fr: 'Apparence', en: 'Appearance', ar: 'المظهر' }[uiLanguage]), icon: Moon },
     { id: 'notifications', label: ({ fr: 'Notifications', en: 'Notifications', ar: 'الإشعارات' }[uiLanguage]), icon: Bell },
     { id: 'langue', label: ({ fr: 'Langue', en: 'Language', ar: 'اللغة' }[uiLanguage]), icon: Globe },
+    { id: 'support', label: ({ fr: 'Support IT', en: 'IT Support', ar: 'Support IT' }[uiLanguage]), icon: LifeBuoy },
   ];
   const i18n = {
     fr: {
@@ -497,6 +503,16 @@ const ParametresMag = ({ userName, onLogout }) => {
                       English
                     </button>
                   </div>
+                </div>
+              )}
+
+              {activeTab === 'support' && (
+                <div className="param-section">
+                  <h2>Support IT magasinier</h2>
+                  <p className="avatar-hint">
+                    Signalez vite un blocage terrain: scanner, imprimante, stock ou bug application.
+                  </p>
+                  <SupportItTickets role="magasinier" />
                 </div>
               )}
             </div>

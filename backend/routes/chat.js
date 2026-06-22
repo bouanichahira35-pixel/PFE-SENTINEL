@@ -1,3 +1,7 @@
+// BLOC 1 - Role du fichier.
+// Ce fichier expose les endpoints REST du domaine chat et controle les regles d'acces cote API.
+// Point de vigilance: verifier l'authentification, les roles et les validations avant toute modification.
+
 const router = require('express').Router();
 const ChatConversation = require('../models/ChatConversation');
 const ChatMessage = require('../models/ChatMessage');
@@ -7,6 +11,7 @@ const Product = require('../models/Product');
 const User = require('../models/User');
 const requireAuth = require('../middlewares/requireAuth');
 const strictBody = require('../middlewares/strictBody');
+const { normalizeRole } = require('../constants/roles');
 const { getUserPreferences } = require('../services/userPreferencesService');
 const { enqueueMail } = require('../services/mailQueueService');
 const { logSecurityEvent } = require('../services/securityAuditService');
@@ -15,8 +20,9 @@ const { isSafeText } = require('../utils/validation');
 const SAFE_USER_FIELDS = '_id username email role status image_profile';
 
 function getCounterpartRole(role) {
-  if (role === 'magasinier') return 'responsable';
-  if (role === 'responsable') return 'magasinier';
+  const normalizedRole = normalizeRole(role);
+  if (normalizedRole === 'magasinier') return 'responsable';
+  if (normalizedRole === 'responsable') return 'magasinier';
   return null;
 }
 
@@ -159,6 +165,11 @@ router.post('/conversations/direct', strictBody(['user_id']), async (req, res) =
     const target = await User.findById(targetId).select(SAFE_USER_FIELDS).lean();
     if (!target || target.status !== 'active') {
       return res.status(404).json({ error: 'Utilisateur cible introuvable' });
+    }
+    const expectedRole = getCounterpartRole(req.user.role);
+    const targetRole = normalizeRole(target.role);
+    if (!expectedRole || targetRole !== expectedRole) {
+      return res.status(403).json({ error: 'Conversation directe non autorisee pour ces roles' });
     }
 
     const conversation = await ensureDirectConversation(req.user.id, targetId);

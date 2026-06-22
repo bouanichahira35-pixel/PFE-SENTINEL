@@ -1,3 +1,7 @@
+// BLOC 1 - Role du fichier.
+// Ce fichier controle les requetes avant les routes pour le sujet idempotencyGuard.
+// Point de vigilance: modifier avec prudence car ce fichier peut etre importe par plusieurs modules.
+
 const crypto = require('crypto');
 const IdempotencyKey = require('../models/IdempotencyKey');
 

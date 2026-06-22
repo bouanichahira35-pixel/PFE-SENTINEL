@@ -1,3 +1,7 @@
+// BLOC 1 - Role du fichier.
+// Ce fichier fournit un composant React partage pour SplashScreen.
+// Point de vigilance: garder les props, appels API et classes CSS synchronises avec les ecrans existants.
+
 import { useEffect, useState } from 'react';
 import logoETAP from '../../assets/logoETAP.png';
 import './SplashScreen.css';

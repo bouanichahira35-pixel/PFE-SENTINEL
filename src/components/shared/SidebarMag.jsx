@@ -1,3 +1,7 @@
+// BLOC 1 - Role du fichier.
+// Ce fichier fournit un composant React partage pour SidebarMag.
+// Point de vigilance: garder les props, appels API et classes CSS synchronises avec les ecrans existants.
+
 import { Link, useLocation } from 'react-router-dom';
 import { Package, History, MessageCircle, Settings, ChevronLeft, ChevronRight, LogOut, FileText } from 'lucide-react';
 import './SidebarMag.css';

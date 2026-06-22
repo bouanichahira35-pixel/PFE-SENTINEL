@@ -1,3 +1,9 @@
+/*
+ * BLOC 1 - Role du fichier.
+ * Ce fichier affiche une page de l'espace responsable pour InventairesAValiderResp.
+ * Point de vigilance: garder les props, appels API et classes CSS synchronises avec les ecrans existants.
+ */
+
 .inv-resp-grid {
   display: grid;
   grid-template-columns: 360px 1fr;

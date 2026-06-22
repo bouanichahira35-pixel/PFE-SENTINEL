@@ -1,3 +1,7 @@
+// BLOC 1 - Role du fichier.
+// Ce fichier contient la logique metier reutilisable du domaine purchaseOrderReminderJob, appelee par les routes ou les jobs.
+// Point de vigilance: preserver les contrats appeles par plusieurs routes.
+
 const PurchaseOrder = require('../models/PurchaseOrder');
 const Notification = require('../models/Notification');
 const User = require('../models/User');

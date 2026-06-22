@@ -1,3 +1,7 @@
+# BLOC 1 - Role du fichier.
+# Ce fichier participe au pipeline IA Python pour 00_build_features.
+# Point de vigilance: ne pas deplacer les donnees d'entrainement et garder les formats CSV/JSONL compatibles.
+
 import os
 from typing import Any, Dict, List
 

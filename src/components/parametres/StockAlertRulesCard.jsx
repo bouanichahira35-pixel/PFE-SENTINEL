@@ -1,3 +1,7 @@
+// BLOC 1 - Role du fichier.
+// Ce fichier fournit un composant React specialise pour StockAlertRulesCard.
+// Point de vigilance: garder les props, appels API et classes CSS synchronises avec les ecrans existants.
+
 import { AlertTriangle, BellRing } from 'lucide-react';
 
 function ToggleRow({ label, desc, checked, onChange, disabled }) {
@@ -57,7 +61,7 @@ export default function StockAlertRulesCard({ config, onChange, disabled = false
           />
           <ToggleRow
             label="Alerte produit inactif"
-            desc="Produit inactif si aucun mouvement depuis N jours (approximation backend)."
+            desc="Produit inactif si aucun mouvement depuis N jours (estimation systeme)."
             checked={config?.alerteProduitInactif}
             disabled={rowsDisabled}
             onChange={(v) => onChange({ ...config, alerteProduitInactif: v })}
@@ -81,4 +85,3 @@ export default function StockAlertRulesCard({ config, onChange, disabled = false
     </div>
   );
 }
-

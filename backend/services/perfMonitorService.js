@@ -1,3 +1,7 @@
+// BLOC 1 - Role du fichier.
+// Ce fichier contient la logique metier reutilisable du domaine perfMonitorService, appelee par les routes ou les jobs.
+// Point de vigilance: preserver les contrats appeles par plusieurs routes.
+
 const MAX_EVENTS = Math.max(500, Number(process.env.PERF_MONITOR_MAX_EVENTS || 2500));
 const DEFAULT_WINDOW_MS = 15 * 60 * 1000;
 

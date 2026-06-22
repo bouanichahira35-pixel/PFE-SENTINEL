@@ -53,37 +53,44 @@ const HUMANIZED_SUPPLIERS = [
 
 const HUMANIZED_CORE_USERS = [
   {
-    username: 'Mourad Chaabane',
-    email: 'mourad.chaabane@etap.com.tn',
+    username: 'Chahira Bouani Admin',
+    email: 'bouanichahira35@gmail.com',
     telephone: '+216 71 285 410',
     role: 'admin',
     passwordEnv: 'TEST_ADMIN_PASSWORD',
     fallbackPassword: 'ChangeMe_Admin_123',
   },
   {
-    username: 'Nadia Ben Romdhane',
-    email: 'nadia.benromdhane@etap.com.tn',
+    username: 'Chahira Responsable',
+    email: 'chahirabbyyoussef@gmail.com',
     telephone: '+216 71 285 421',
     role: 'responsable',
     passwordEnv: 'TEST_RESPONSABLE_PASSWORD',
     fallbackPassword: 'ChangeMe_Responsable_123',
   },
   {
-    username: 'Sofiene Kacem',
-    email: 'sofiene.kacem@etap.com.tn',
+    username: 'Chahira Magasinier',
+    email: 'chahira772014@gmail.com',
     telephone: '+216 71 285 433',
     role: 'magasinier',
     passwordEnv: 'TEST_MAGASINIER_PASSWORD',
     fallbackPassword: 'ChangeMe_Magasinier_123',
   },
   {
-    username: 'Sarra Ben Youssef',
-    email: 'sarra.benyoussef@etap.com.tn',
+    username: 'Chahira Bouani',
+    email: 'chahirabouani9@gmail.com',
     telephone: '+216 71 285 447',
     role: 'demandeur',
     passwordEnv: 'TEST_DEMANDEUR_PASSWORD',
     fallbackPassword: 'ChangeMe_Demandeur_123',
   },
+];
+
+const LEGACY_CORE_USER_EMAILS = [
+  'mourad.chaabane@etap.com.tn',
+  'nadia.benromdhane@etap.com.tn',
+  'sofiene.kacem@etap.com.tn',
+  'sarra.benyoussef@etap.com.tn',
 ];
 
 const HUMANIZED_USERS = [
@@ -218,6 +225,7 @@ const HUMANIZED_PRODUCTS = [
 
 module.exports = {
   HUMANIZED_CORE_USERS,
+  LEGACY_CORE_USER_EMAILS,
   HUMANIZED_PRODUCTS,
   HUMANIZED_SUPPLIERS,
   HUMANIZED_USERS,

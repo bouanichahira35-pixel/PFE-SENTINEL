@@ -1,3 +1,7 @@
+// BLOC 1 - Role du fichier.
+// Ce fichier affiche une page de l'espace responsable pour AnalyseInventaireResp.
+// Point de vigilance: garder les props, appels API et classes CSS synchronises avec les ecrans existants.
+
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import {
@@ -16,6 +20,7 @@ import HeaderPage from '../../components/shared/HeaderPage';
 import ProtectedPage from '../../components/shared/ProtectedPage';
 import LoadingSpinner from '../../components/shared/LoadingSpinner';
 import { useToast } from '../../components/shared/Toast';
+import { useConfirm } from '../../components/shared/ConfirmDialog';
 import { get, patch, post } from '../../services/api';
 import './AnalyseInventaireResp.css';
 
@@ -117,6 +122,7 @@ function toCsv(lines = []) {
 
 const AnalyseInventaireResp = ({ userName, onLogout }) => {
   const toast = useToast();
+  const confirmAction = useConfirm();
   const navigate = useNavigate();
   const params = useParams();
   const inventoryId = String(params.id || '');
@@ -233,7 +239,13 @@ const AnalyseInventaireResp = ({ userName, onLogout }) => {
   };
 
   const validateInventory = async () => {
-    const ok = window.confirm("Voulez-vous vraiment valider cet inventaire ? Cette action va ajuster définitivement le stock.");
+    const ok = await confirmAction({
+      title: 'Valider cet inventaire',
+      badge: 'Impact stock',
+      message: "Cette action va ajuster definitivement le stock. Verifiez les ecarts avant de continuer.",
+      confirmLabel: 'Valider',
+      variant: 'warning',
+    });
     if (!ok) return;
     setIsLoading(true);
     try {
@@ -289,7 +301,13 @@ const AnalyseInventaireResp = ({ userName, onLogout }) => {
       toast.error('Motif obligatoire (min 5 caractères)');
       return;
     }
-    const ok = window.confirm('Rejeter cet inventaire ? Aucun stock ne sera modifié.');
+    const ok = await confirmAction({
+      title: 'Rejeter cet inventaire',
+      badge: 'Stock preserve',
+      message: 'Aucun stock ne sera modifie. Le motif saisi sera conserve dans le suivi.',
+      confirmLabel: 'Rejeter',
+      variant: 'danger',
+    });
     if (!ok) return;
     setIsLoading(true);
     try {

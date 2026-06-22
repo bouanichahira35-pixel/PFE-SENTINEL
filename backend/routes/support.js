@@ -1,3 +1,7 @@
+// BLOC 1 - Role du fichier.
+// Ce fichier expose les endpoints REST du domaine support et controle les regles d'acces cote API.
+// Point de vigilance: verifier l'authentification, les roles et les validations avant toute modification.
+
 const router = require('express').Router();
 
 const requireAuth = require('../middlewares/requireAuth');
@@ -11,10 +15,12 @@ const { isSafeText } = require('../utils/validation');
 
 router.use(requireAuth);
 
-function ensureResponsable(req, res) {
+const SUPPORT_USER_ROLES = new Set(['responsable', 'magasinier', 'demandeur']);
+
+function ensureSupportUser(req, res) {
   const role = String(req.user?.role || '').toLowerCase();
-  if (role !== 'responsable') {
-    res.status(403).json({ error: 'Acces refuse (responsable uniquement)' });
+  if (!SUPPORT_USER_ROLES.has(role)) {
+    res.status(403).json({ error: 'Acces refuse (support utilisateur)' });
     return false;
   }
   return true;
@@ -57,7 +63,7 @@ router.post(
   strictBody(['title', 'category', 'priority', 'message', 'pageUrl', 'browserInfo', 'attachmentUrl']),
   async (req, res) => {
     try {
-      if (!ensureResponsable(req, res)) return;
+      if (!ensureSupportUser(req, res)) return;
 
       const title = String(req.body?.title || '').trim();
       const message = String(req.body?.message || '').trim();
@@ -114,7 +120,7 @@ router.post(
 
       if (admins.length) {
         const titleNotif = `Nouveau ticket support: ${ticketNumber}`;
-        const msg = `Nouveau ticket support envoyé par ${req.user.username}.\nObjet: ${title}\nCatégorie: ${category}\nPriorité: ${priority}`;
+        const msg = `Nouveau ticket support envoye par ${req.user.username}.\nRole: ${req.user.role}\nObjet: ${title}\nCategorie: ${category}\nPriorite: ${priority}`;
         await Notification.insertMany(
           admins.map((a) => ({
             user: a._id,
@@ -148,7 +154,7 @@ router.post(
 // GET /api/support/my-tickets
 router.get('/my-tickets', async (req, res) => {
   try {
-    if (!ensureResponsable(req, res)) return;
+    if (!ensureSupportUser(req, res)) return;
 
     const limitRaw = Number(req.query?.limit || 12);
     const limit = Number.isFinite(limitRaw) ? Math.max(1, Math.min(30, Math.floor(limitRaw))) : 12;
@@ -174,7 +180,7 @@ router.get('/my-tickets', async (req, res) => {
 // GET /api/support/tickets/:id
 router.get('/tickets/:id', async (req, res) => {
   try {
-    if (!ensureResponsable(req, res)) return;
+    if (!ensureSupportUser(req, res)) return;
 
     const id = String(req.params.id || '').trim();
     const ticket = await SupportTicket.findById(id)
@@ -204,7 +210,7 @@ router.post(
   strictBody(['message']),
   async (req, res) => {
     try {
-      if (!ensureResponsable(req, res)) return;
+      if (!ensureSupportUser(req, res)) return;
 
       const id = String(req.params.id || '').trim();
       const message = String(req.body?.message || '').trim();
@@ -249,7 +255,7 @@ router.post(
 // PATCH /api/support/tickets/:id/resolve
 router.patch('/tickets/:id/resolve', async (req, res) => {
   try {
-    if (!ensureResponsable(req, res)) return;
+    if (!ensureSupportUser(req, res)) return;
 
     const id = String(req.params.id || '').trim();
     const ticket = await SupportTicket.findById(id).select('_id createdBy status resolvedAt').lean();

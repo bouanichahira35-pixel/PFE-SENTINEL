@@ -1,3 +1,7 @@
+// BLOC 1 - Role du fichier.
+// Ce fichier affiche une page du module fournisseurs responsable pour FicheFournisseurPage.
+// Point de vigilance: garder les props, appels API et classes CSS synchronises avec les ecrans existants.
+
 import { useCallback, useEffect, useState } from 'react';
 import { Truck } from 'lucide-react';
 import { useNavigate, useParams } from 'react-router-dom';
@@ -6,6 +10,7 @@ import SidebarResp from '../../../components/responsable/SidebarResp';
 import HeaderPage from '../../../components/shared/HeaderPage';
 import LoadingSpinner from '../../../components/shared/LoadingSpinner';
 import { useToast } from '../../../components/shared/Toast';
+import { useConfirm } from '../../../components/shared/ConfirmDialog';
 
 import FournisseurDetailsHeader from '../../../components/fournisseurs/FournisseurDetailsHeader';
 import FournisseurTabs from '../../../components/fournisseurs/FournisseurTabs';
@@ -24,6 +29,7 @@ import '../FournisseursResp.css';
 
 const FicheFournisseurPage = ({ userName, onLogout }) => {
   const toast = useToast();
+  const confirmAction = useConfirm();
   const { id } = useParams();
   const navigate = useNavigate();
   const [sidebarCollapsed, setSidebarCollapsed] = useState(() => (typeof window !== 'undefined' ? window.innerWidth <= 768 : false));
@@ -66,8 +72,15 @@ const FicheFournisseurPage = ({ userName, onLogout }) => {
     if (!supplier?._id) return;
     const isSuspended = String(supplier?.status || '').toUpperCase() === 'SUSPENDU';
     const nextStatus = isSuspended ? 'ACTIF' : 'SUSPENDU';
-    // eslint-disable-next-line no-alert
-    const ok = window.confirm(isSuspended ? 'Réactiver ce fournisseur ?' : 'Suspendre ce fournisseur ? Il ne pourra plus être utilisé pour une nouvelle commande.');
+    const ok = await confirmAction({
+      title: isSuspended ? 'Reactiver le fournisseur' : 'Suspendre le fournisseur',
+      badge: 'Referentiel fournisseurs',
+      message: isSuspended
+        ? 'Ce fournisseur redeviendra disponible pour les commandes.'
+        : 'Ce fournisseur ne pourra plus etre utilise pour une nouvelle commande.',
+      confirmLabel: isSuspended ? 'Reactiver' : 'Suspendre',
+      variant: isSuspended ? 'success' : 'warning',
+    });
     if (!ok) return;
     try {
       await updateFournisseurStatus(supplier._id, nextStatus);
@@ -163,4 +176,3 @@ const FicheFournisseurPage = ({ userName, onLogout }) => {
 };
 
 export default FicheFournisseurPage;
-

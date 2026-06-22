@@ -1,3 +1,7 @@
+// BLOC 1 - Role du fichier.
+// Ce fichier fournit un composant React specialise pour SidebarDem.
+// Point de vigilance: garder les props, appels API et classes CSS synchronises avec les ecrans existants.
+
 import { Link, useLocation } from 'react-router-dom';
 import { Package, FileText, Settings, ChevronLeft, ChevronRight, LogOut } from 'lucide-react';
 import logoETAP from '../../assets/logoETAP.png';

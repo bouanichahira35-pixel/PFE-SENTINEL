@@ -1,3 +1,7 @@
+// BLOC 1 - Role du fichier.
+// Ce fichier centralise des constantes backend pour errorCodes.
+// Point de vigilance: modifier avec prudence car ce fichier peut etre importe par plusieurs modules.
+
 const ERROR_CODES = Object.freeze({
   VALIDATION_FAILED: 'VALIDATION_FAILED',
   PRODUCT_NOT_FOUND: 'PRODUCT_NOT_FOUND',

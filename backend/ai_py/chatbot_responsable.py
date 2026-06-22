@@ -1,3 +1,7 @@
+# BLOC 1 - Role du fichier.
+# Ce fichier participe au pipeline IA Python pour chatbot_responsable.
+# Point de vigilance: ne pas deplacer les donnees d'entrainement et garder les formats CSV/JSONL compatibles.
+
 import argparse
 import json
 import os

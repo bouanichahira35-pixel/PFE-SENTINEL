@@ -1,6 +1,6 @@
 # Inventaire des fichiers - PFE SENTINEL
 
-Genere le 2026-06-01 12:22
+Genere le 2026-06-22 00:17
 
 Dossiers exclus car generes ou techniques: .git, node_modules, build, .cache, .semgrep, .sixth.
 
@@ -25,105 +25,7 @@ Je n'ai rien supprime automatiquement. Les fichiers ci-dessous demandent une ver
 | `backend/docs/GEMINI_API.md` | Documentation utile pour comprendre le backend. A garder. |
 | `backend/docs/QR_SECURITY.md` | Documentation utile pour comprendre le backend. A garder. |
 | `backend/docs/RELEASE_CHECKLIST.md` | Documentation utile pour comprendre le backend. A garder. |
-| `backend/tmp-list-products.js` | A verifier: script temporaire de diagnostic. Peut etre archive ou supprime apres confirmation. |
-| `backend/tmp-list-users.js` | A verifier: script temporaire de diagnostic. Peut etre archive ou supprime apres confirmation. |
 | `docs/sentinel_dataset_realiste_csv.zip` | Donnee volumineuse. Garder si elle sert aux imports ou au rapport. |
-| `frontend/.gitignore` | A verifier: possible doublon ancien du frontend principal. Ne pas supprimer sans validation. |
-| `frontend/public/favicon.ico` | A verifier: possible doublon ancien du frontend principal. Ne pas supprimer sans validation. |
-| `frontend/public/index.html` | A verifier: possible doublon ancien du frontend principal. Ne pas supprimer sans validation. |
-| `frontend/public/logo192.png` | A verifier: possible doublon ancien du frontend principal. Ne pas supprimer sans validation. |
-| `frontend/public/logo512.png` | A verifier: possible doublon ancien du frontend principal. Ne pas supprimer sans validation. |
-| `frontend/public/manifest.json` | A verifier: possible doublon ancien du frontend principal. Ne pas supprimer sans validation. |
-| `frontend/public/robots.txt` | A verifier: possible doublon ancien du frontend principal. Ne pas supprimer sans validation. |
-| `frontend/src/App.css` | A verifier: possible doublon ancien du frontend principal. Ne pas supprimer sans validation. |
-| `frontend/src/App.js` | A verifier: possible doublon ancien du frontend principal. Ne pas supprimer sans validation. |
-| `frontend/src/App.test.js` | A verifier: possible doublon ancien du frontend principal. Ne pas supprimer sans validation. |
-| `frontend/src/assets/logoETAP.png` | A verifier: possible doublon ancien du frontend principal. Ne pas supprimer sans validation. |
-| `frontend/src/components/data/mockData.js` | A verifier: possible doublon ancien du frontend principal. Ne pas supprimer sans validation. |
-| `frontend/src/components/demandeur/SidebarDem.css` | A verifier: possible doublon ancien du frontend principal. Ne pas supprimer sans validation. |
-| `frontend/src/components/demandeur/SidebarDem.jsx` | A verifier: possible doublon ancien du frontend principal. Ne pas supprimer sans validation. |
-| `frontend/src/components/magasinier/ForgotPassword.css` | A verifier: possible doublon ancien du frontend principal. Ne pas supprimer sans validation. |
-| `frontend/src/components/magasinier/ForgotPassword.jsx` | A verifier: possible doublon ancien du frontend principal. Ne pas supprimer sans validation. |
-| `frontend/src/components/magasinier/LoginMag.css` | A verifier: possible doublon ancien du frontend principal. Ne pas supprimer sans validation. |
-| `frontend/src/components/magasinier/LoginMag.jsx` | A verifier: possible doublon ancien du frontend principal. Ne pas supprimer sans validation. |
-| `frontend/src/components/magasinier/SidebarMag.css` | A verifier: possible doublon ancien du frontend principal. Ne pas supprimer sans validation. |
-| `frontend/src/components/magasinier/SidebarMag.jsx` | A verifier: possible doublon ancien du frontend principal. Ne pas supprimer sans validation. |
-| `frontend/src/components/magasinier/SplashScreen.css` | A verifier: possible doublon ancien du frontend principal. Ne pas supprimer sans validation. |
-| `frontend/src/components/magasinier/SplashScreen.jsx` | A verifier: possible doublon ancien du frontend principal. Ne pas supprimer sans validation. |
-| `frontend/src/components/responsable/SidebarResp.css` | A verifier: possible doublon ancien du frontend principal. Ne pas supprimer sans validation. |
-| `frontend/src/components/responsable/SidebarResp.jsx` | A verifier: possible doublon ancien du frontend principal. Ne pas supprimer sans validation. |
-| `frontend/src/components/shared/ForgotPassword.css` | A verifier: possible doublon ancien du frontend principal. Ne pas supprimer sans validation. |
-| `frontend/src/components/shared/ForgotPassword.jsx` | A verifier: possible doublon ancien du frontend principal. Ne pas supprimer sans validation. |
-| `frontend/src/components/shared/HeaderMag.css` | A verifier: possible doublon ancien du frontend principal. Ne pas supprimer sans validation. |
-| `frontend/src/components/shared/HeaderMag.jsx` | A verifier: possible doublon ancien du frontend principal. Ne pas supprimer sans validation. |
-| `frontend/src/components/shared/HeaderPage.css` | A verifier: possible doublon ancien du frontend principal. Ne pas supprimer sans validation. |
-| `frontend/src/components/shared/HeaderPage.jsx` | A verifier: possible doublon ancien du frontend principal. Ne pas supprimer sans validation. |
-| `frontend/src/components/shared/HistoryTable.css` | A verifier: possible doublon ancien du frontend principal. Ne pas supprimer sans validation. |
-| `frontend/src/components/shared/HistoryTable.jsx` | A verifier: possible doublon ancien du frontend principal. Ne pas supprimer sans validation. |
-| `frontend/src/components/shared/LoadingSpinner.css` | A verifier: possible doublon ancien du frontend principal. Ne pas supprimer sans validation. |
-| `frontend/src/components/shared/LoadingSpinner.jsx` | A verifier: possible doublon ancien du frontend principal. Ne pas supprimer sans validation. |
-| `frontend/src/components/shared/LoginPage.css` | A verifier: possible doublon ancien du frontend principal. Ne pas supprimer sans validation. |
-| `frontend/src/components/shared/LoginPage.jsx` | A verifier: possible doublon ancien du frontend principal. Ne pas supprimer sans validation. |
-| `frontend/src/components/shared/LogoHeader.css` | A verifier: possible doublon ancien du frontend principal. Ne pas supprimer sans validation. |
-| `frontend/src/components/shared/LogoHeader.jsx` | A verifier: possible doublon ancien du frontend principal. Ne pas supprimer sans validation. |
-| `frontend/src/components/shared/ProduitsMag.css` | A verifier: possible doublon ancien du frontend principal. Ne pas supprimer sans validation. |
-| `frontend/src/components/shared/ProduitsMag.jsx` | A verifier: possible doublon ancien du frontend principal. Ne pas supprimer sans validation. |
-| `frontend/src/components/shared/QrReader.jsx` | A verifier: possible doublon ancien du frontend principal. Ne pas supprimer sans validation. |
-| `frontend/src/components/shared/SidebarMag.css` | A verifier: possible doublon ancien du frontend principal. Ne pas supprimer sans validation. |
-| `frontend/src/components/shared/SidebarMag.jsx` | A verifier: possible doublon ancien du frontend principal. Ne pas supprimer sans validation. |
-| `frontend/src/components/shared/SplashScreen.css` | A verifier: possible doublon ancien du frontend principal. Ne pas supprimer sans validation. |
-| `frontend/src/components/shared/SplashScreen.jsx` | A verifier: possible doublon ancien du frontend principal. Ne pas supprimer sans validation. |
-| `frontend/src/components/shared/StockModal.css` | A verifier: possible doublon ancien du frontend principal. Ne pas supprimer sans validation. |
-| `frontend/src/components/shared/StockModal.jsx` | A verifier: possible doublon ancien du frontend principal. Ne pas supprimer sans validation. |
-| `frontend/src/components/shared/Toast.css` | A verifier: possible doublon ancien du frontend principal. Ne pas supprimer sans validation. |
-| `frontend/src/components/shared/Toast.jsx` | A verifier: possible doublon ancien du frontend principal. Ne pas supprimer sans validation. |
-| `frontend/src/ErrorBoundary.jsx` | A verifier: possible doublon ancien du frontend principal. Ne pas supprimer sans validation. |
-| `frontend/src/hooks/useTheme.js` | A verifier: possible doublon ancien du frontend principal. Ne pas supprimer sans validation. |
-| `frontend/src/index.css` | A verifier: possible doublon ancien du frontend principal. Ne pas supprimer sans validation. |
-| `frontend/src/index.js` | A verifier: possible doublon ancien du frontend principal. Ne pas supprimer sans validation. |
-| `frontend/src/logo.svg` | A verifier: possible doublon ancien du frontend principal. Ne pas supprimer sans validation. |
-| `frontend/src/main.jsx` | A verifier: possible doublon ancien du frontend principal. Ne pas supprimer sans validation. |
-| `frontend/src/pages/demandeur/MesDemandes.css` | A verifier: possible doublon ancien du frontend principal. Ne pas supprimer sans validation. |
-| `frontend/src/pages/demandeur/MesDemandes.jsx` | A verifier: possible doublon ancien du frontend principal. Ne pas supprimer sans validation. |
-| `frontend/src/pages/demandeur/ProduitsDem.css` | A verifier: possible doublon ancien du frontend principal. Ne pas supprimer sans validation. |
-| `frontend/src/pages/demandeur/ProduitsDem.jsx` | A verifier: possible doublon ancien du frontend principal. Ne pas supprimer sans validation. |
-| `frontend/src/pages/magasinier/AjouterProduit.css` | A verifier: possible doublon ancien du frontend principal. Ne pas supprimer sans validation. |
-| `frontend/src/pages/magasinier/AjouterProduit.jsx` | A verifier: possible doublon ancien du frontend principal. Ne pas supprimer sans validation. |
-| `frontend/src/pages/magasinier/ChatMag.css` | A verifier: possible doublon ancien du frontend principal. Ne pas supprimer sans validation. |
-| `frontend/src/pages/magasinier/ChatMag.jsx` | A verifier: possible doublon ancien du frontend principal. Ne pas supprimer sans validation. |
-| `frontend/src/pages/magasinier/EntreeStock.css` | A verifier: possible doublon ancien du frontend principal. Ne pas supprimer sans validation. |
-| `frontend/src/pages/magasinier/EntreeStock.jsx` | A verifier: possible doublon ancien du frontend principal. Ne pas supprimer sans validation. |
-| `frontend/src/pages/magasinier/HistoriqueMag.css` | A verifier: possible doublon ancien du frontend principal. Ne pas supprimer sans validation. |
-| `frontend/src/pages/magasinier/HistoriqueMag.jsx` | A verifier: possible doublon ancien du frontend principal. Ne pas supprimer sans validation. |
-| `frontend/src/pages/magasinier/ListeDemandes.css` | A verifier: possible doublon ancien du frontend principal. Ne pas supprimer sans validation. |
-| `frontend/src/pages/magasinier/ListeDemandes.jsx` | A verifier: possible doublon ancien du frontend principal. Ne pas supprimer sans validation. |
-| `frontend/src/pages/magasinier/ParametresMag.css` | A verifier: possible doublon ancien du frontend principal. Ne pas supprimer sans validation. |
-| `frontend/src/pages/magasinier/ParametresMag.jsx` | A verifier: possible doublon ancien du frontend principal. Ne pas supprimer sans validation. |
-| `frontend/src/pages/magasinier/ProduitsMag.css` | A verifier: possible doublon ancien du frontend principal. Ne pas supprimer sans validation. |
-| `frontend/src/pages/magasinier/ProduitsMag.jsx` | A verifier: possible doublon ancien du frontend principal. Ne pas supprimer sans validation. |
-| `frontend/src/pages/magasinier/SortieStock.css` | A verifier: possible doublon ancien du frontend principal. Ne pas supprimer sans validation. |
-| `frontend/src/pages/magasinier/SortieStock.jsx` | A verifier: possible doublon ancien du frontend principal. Ne pas supprimer sans validation. |
-| `frontend/src/pages/magasinier/VoirDetails.css` | A verifier: possible doublon ancien du frontend principal. Ne pas supprimer sans validation. |
-| `frontend/src/pages/magasinier/VoirDetails.jsx` | A verifier: possible doublon ancien du frontend principal. Ne pas supprimer sans validation. |
-| `frontend/src/pages/NotFound.jsx` | A verifier: possible doublon ancien du frontend principal. Ne pas supprimer sans validation. |
-| `frontend/src/pages/responsable/ChatbotResp.css` | A verifier: possible doublon ancien du frontend principal. Ne pas supprimer sans validation. |
-| `frontend/src/pages/responsable/ChatbotResp.jsx` | A verifier: possible doublon ancien du frontend principal. Ne pas supprimer sans validation. |
-| `frontend/src/pages/responsable/ChatResp.css` | A verifier: possible doublon ancien du frontend principal. Ne pas supprimer sans validation. |
-| `frontend/src/pages/responsable/ChatResp.jsx` | A verifier: possible doublon ancien du frontend principal. Ne pas supprimer sans validation. |
-| `frontend/src/pages/responsable/DashboardResp.css` | A verifier: possible doublon ancien du frontend principal. Ne pas supprimer sans validation. |
-| `frontend/src/pages/responsable/DashboardResp.jsx` | A verifier: possible doublon ancien du frontend principal. Ne pas supprimer sans validation. |
-| `frontend/src/pages/responsable/HistoriqueResp.css` | A verifier: possible doublon ancien du frontend principal. Ne pas supprimer sans validation. |
-| `frontend/src/pages/responsable/HistoriqueResp.jsx` | A verifier: possible doublon ancien du frontend principal. Ne pas supprimer sans validation. |
-| `frontend/src/pages/responsable/ParametresResp.css` | A verifier: possible doublon ancien du frontend principal. Ne pas supprimer sans validation. |
-| `frontend/src/pages/responsable/ParametresResp.jsx` | A verifier: possible doublon ancien du frontend principal. Ne pas supprimer sans validation. |
-| `frontend/src/pages/RoleSelection.css` | A verifier: possible doublon ancien du frontend principal. Ne pas supprimer sans validation. |
-| `frontend/src/pages/RoleSelection.jsx` | A verifier: possible doublon ancien du frontend principal. Ne pas supprimer sans validation. |
-| `frontend/src/reportWebVitals.js` | A verifier: possible doublon ancien du frontend principal. Ne pas supprimer sans validation. |
-| `frontend/src/setupTests.js` | A verifier: possible doublon ancien du frontend principal. Ne pas supprimer sans validation. |
-| `tmp_frontend.err.log` | Candidat nettoyage: log temporaire, supprimable si non utilise pour diagnostic. |
-| `tmp_frontend.log` | Candidat nettoyage: log temporaire, supprimable si non utilise pour diagnostic. |
-| `tmp_frontend_node.err.log` | Candidat nettoyage: log temporaire, supprimable si non utilise pour diagnostic. |
-| `tmp_frontend_node.out.log` | Candidat nettoyage: log temporaire, supprimable si non utilise pour diagnostic. |
 
 ## Inventaire complet
 
@@ -160,712 +62,19 @@ Je n'ai rien supprime automatiquement. Les fichiers ci-dessous demandent une ver
 | Backend | `backend/constants/permissions.js` | code | Constantes backend: roles, permissions, codes erreur ou regles metier. |  |
 | Backend | `backend/constants/roles.js` | code | Constantes backend: roles, permissions, codes erreur ou regles metier. |  |
 | Backend | `backend/constants/stockRules.js` | code | Constantes backend: roles, permissions, codes erreur ou regles metier. |  |
-| Backend | `backend/data/ai/_tmp/manual_in.json` | configuration | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/_tmp/node_in.json` | configuration | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/_tmp/node_in2.json` | configuration | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/_tmp/probe2_in.json` | configuration | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/_tmp/probe2_out.json` | configuration | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/_tmp/probe_in.json` | configuration | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/_tmp/train_all_1777496496507_1573_in.json` | configuration | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/_tmp/train_all_1779092016346_50936_in.json` | configuration | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/_tmp/train_all_1779401332322_27229_in.json` | configuration | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/adaptive_features_v20260220104012.csv` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/adaptive_features_v20260220104012.jsonl` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/adaptive_features_v20260220205056.csv` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/adaptive_features_v20260220205056.jsonl` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/adaptive_features_v20260222201337.csv` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/adaptive_features_v20260222201337.jsonl` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/adaptive_features_v20260223085242.csv` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/adaptive_features_v20260223085242.jsonl` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/adaptive_features_v20260228201802.csv` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/adaptive_features_v20260228201802.jsonl` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/adaptive_features_v20260301134135.csv` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/adaptive_features_v20260301134135.jsonl` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/adaptive_features_v20260303082357.csv` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/adaptive_features_v20260303082357.jsonl` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/adaptive_features_v20260313140112.csv` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/adaptive_features_v20260313140112.jsonl` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/adaptive_features_v20260314084211.csv` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/adaptive_features_v20260314084211.jsonl` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/adaptive_features_v20260315200618.csv` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/adaptive_features_v20260315200618.jsonl` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/adaptive_features_v20260325092141.csv` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/adaptive_features_v20260325092141.jsonl` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/adaptive_features_v20260326103705.csv` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/adaptive_features_v20260326103705.jsonl` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/adaptive_features_v20260326182212.csv` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/adaptive_features_v20260326182212.jsonl` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/adaptive_features_v20260327092603.csv` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/adaptive_features_v20260327092603.jsonl` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/adaptive_features_v20260328211503.csv` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/adaptive_features_v20260328211503.jsonl` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/adaptive_features_v20260329211524.csv` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/adaptive_features_v20260329211524.jsonl` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/adaptive_features_v20260331220700.csv` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/adaptive_features_v20260331220700.jsonl` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/adaptive_features_v20260401104333.csv` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/adaptive_features_v20260401104333.jsonl` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/adaptive_features_v20260402220936.csv` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/adaptive_features_v20260402220936.jsonl` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/adaptive_features_v20260403130948.csv` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/adaptive_features_v20260403130948.jsonl` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/adaptive_features_v20260404171318.csv` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/adaptive_features_v20260404171318.jsonl` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/adaptive_features_v20260406081630.csv` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/adaptive_features_v20260406081630.jsonl` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/adaptive_features_v20260409215007.csv` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/adaptive_features_v20260409215007.jsonl` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/adaptive_features_v20260409230523.csv` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/adaptive_features_v20260409230523.jsonl` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/adaptive_features_v20260409230825.csv` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/adaptive_features_v20260409230825.jsonl` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/adaptive_features_v20260409231016.csv` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/adaptive_features_v20260409231016.jsonl` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/adaptive_features_v20260409231142.csv` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/adaptive_features_v20260409231142.jsonl` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/adaptive_features_v20260410085724.csv` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/adaptive_features_v20260410085724.jsonl` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/adaptive_features_v20260410091449.csv` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/adaptive_features_v20260410091449.jsonl` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/adaptive_features_v20260410092630.csv` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/adaptive_features_v20260410092630.jsonl` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/adaptive_features_v20260410215540.csv` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/adaptive_features_v20260410215540.jsonl` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/adaptive_features_v20260414094126.csv` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/adaptive_features_v20260414094126.jsonl` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/adaptive_features_v20260414194143.csv` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/adaptive_features_v20260414194143.jsonl` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/adaptive_features_v20260415094048.csv` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/adaptive_features_v20260415094048.jsonl` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/adaptive_features_v20260416085427.csv` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/adaptive_features_v20260416085427.jsonl` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/adaptive_features_v20260416212217.csv` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/adaptive_features_v20260416212217.jsonl` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/adaptive_features_v20260417084606.csv` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/adaptive_features_v20260417084606.jsonl` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/adaptive_features_v20260417201612.csv` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/adaptive_features_v20260417201612.jsonl` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/adaptive_features_v20260418144645.csv` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/adaptive_features_v20260418144645.jsonl` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/adaptive_features_v20260418205805.csv` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/adaptive_features_v20260418205805.jsonl` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/adaptive_features_v20260419110044.csv` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/adaptive_features_v20260419110044.jsonl` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/adaptive_features_v20260419192725.csv` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/adaptive_features_v20260419192725.jsonl` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/adaptive_features_v20260420092435.csv` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/adaptive_features_v20260420092435.jsonl` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/adaptive_features_v20260421082718.csv` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/adaptive_features_v20260421082718.jsonl` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/adaptive_features_v20260422093605.csv` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/adaptive_features_v20260422093605.jsonl` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/adaptive_features_v20260423080933.csv` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/adaptive_features_v20260423080933.jsonl` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/adaptive_features_v20260423140949.csv` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/adaptive_features_v20260423140949.jsonl` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/adaptive_features_v20260423211354.csv` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/adaptive_features_v20260423211354.jsonl` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/adaptive_features_v20260424205136.csv` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/adaptive_features_v20260424205136.jsonl` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/adaptive_features_v20260428205412.csv` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/adaptive_features_v20260428205412.jsonl` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/adaptive_features_v20260429090549.csv` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/adaptive_features_v20260429090549.jsonl` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/adaptive_features_v20260429220803.csv` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/adaptive_features_v20260429220803.jsonl` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/adaptive_features_v20260430090344.csv` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/adaptive_features_v20260430090344.jsonl` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/adaptive_features_v20260430150618.csv` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/adaptive_features_v20260430150618.jsonl` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/adaptive_features_v20260430224304.csv` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/adaptive_features_v20260430224304.jsonl` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/adaptive_features_v20260501192804.csv` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/adaptive_features_v20260501192804.jsonl` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/adaptive_features_v20260505095504.csv` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/adaptive_features_v20260505095504.jsonl` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/adaptive_features_v20260505222254.csv` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/adaptive_features_v20260505222254.jsonl` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/adaptive_features_v20260506100927.csv` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/adaptive_features_v20260506100927.jsonl` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/adaptive_features_v20260506194932.csv` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/adaptive_features_v20260506194932.jsonl` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/adaptive_features_v20260507185531.csv` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/adaptive_features_v20260507185531.jsonl` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/adaptive_features_v20260508075800.csv` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/adaptive_features_v20260508075800.jsonl` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/adaptive_features_v20260512111401.csv` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/adaptive_features_v20260512111401.jsonl` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/adaptive_features_v20260512215633.csv` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/adaptive_features_v20260512215633.jsonl` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/adaptive_features_v20260513090542.csv` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/adaptive_features_v20260513090542.jsonl` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/adaptive_features_v20260513190730.csv` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/adaptive_features_v20260513190730.jsonl` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/adaptive_features_v20260515124737.csv` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/adaptive_features_v20260515124737.jsonl` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/adaptive_features_v20260516193907.csv` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/adaptive_features_v20260516193907.jsonl` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/adaptive_features_v20260517092719.csv` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/adaptive_features_v20260517092719.jsonl` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/adaptive_features_v20260517210816.csv` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/adaptive_features_v20260517210816.jsonl` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/adaptive_features_v20260518081112.csv` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/adaptive_features_v20260518081112.jsonl` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/adaptive_features_v20260518081336.csv` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/adaptive_features_v20260518081336.jsonl` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/adaptive_features_v20260518141444.csv` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/adaptive_features_v20260518141444.jsonl` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/adaptive_features_v20260519084907.csv` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/adaptive_features_v20260519084907.jsonl` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/adaptive_features_v20260519150556.csv` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/adaptive_features_v20260519150556.jsonl` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/adaptive_features_v20260519154804.csv` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/adaptive_features_v20260519154804.jsonl` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/adaptive_features_v20260519213851.csv` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/adaptive_features_v20260519213851.jsonl` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/adaptive_features_v20260522101040.csv` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/adaptive_features_v20260522101040.jsonl` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/adaptive_features_v20260522205811.csv` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/adaptive_features_v20260522205811.jsonl` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/adaptive_features_v20260523185752.csv` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/adaptive_features_v20260523185752.jsonl` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/adaptive_features_v20260524083833.csv` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/adaptive_features_v20260524083833.jsonl` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/adaptive_features_v20260524193642.csv` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/adaptive_features_v20260524193642.jsonl` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/anomaly_dataset_v20260220104012.csv` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/anomaly_dataset_v20260220104012.jsonl` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/anomaly_dataset_v20260220205056.csv` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/anomaly_dataset_v20260220205056.jsonl` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/anomaly_dataset_v20260222201337.csv` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/anomaly_dataset_v20260222201337.jsonl` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/anomaly_dataset_v20260223085242.csv` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/anomaly_dataset_v20260223085242.jsonl` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/anomaly_dataset_v20260228201802.csv` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/anomaly_dataset_v20260228201802.jsonl` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/anomaly_dataset_v20260301134135.csv` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/anomaly_dataset_v20260301134135.jsonl` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/anomaly_dataset_v20260303082357.csv` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/anomaly_dataset_v20260303082357.jsonl` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/anomaly_dataset_v20260313140112.csv` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/anomaly_dataset_v20260313140112.jsonl` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/anomaly_dataset_v20260314084211.csv` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/anomaly_dataset_v20260314084211.jsonl` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/anomaly_dataset_v20260315200618.csv` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/anomaly_dataset_v20260315200618.jsonl` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/anomaly_dataset_v20260325092141.csv` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/anomaly_dataset_v20260325092141.jsonl` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/anomaly_dataset_v20260326103705.csv` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/anomaly_dataset_v20260326103705.jsonl` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/anomaly_dataset_v20260326182212.csv` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/anomaly_dataset_v20260326182212.jsonl` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/anomaly_dataset_v20260327092603.csv` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/anomaly_dataset_v20260327092603.jsonl` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/anomaly_dataset_v20260328211503.csv` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/anomaly_dataset_v20260328211503.jsonl` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/anomaly_dataset_v20260329211524.csv` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/anomaly_dataset_v20260329211524.jsonl` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/anomaly_dataset_v20260331220700.csv` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/anomaly_dataset_v20260331220700.jsonl` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/anomaly_dataset_v20260401104333.csv` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/anomaly_dataset_v20260401104333.jsonl` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/anomaly_dataset_v20260402220936.csv` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/anomaly_dataset_v20260402220936.jsonl` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/anomaly_dataset_v20260403130948.csv` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/anomaly_dataset_v20260403130948.jsonl` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/anomaly_dataset_v20260404171318.csv` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/anomaly_dataset_v20260404171318.jsonl` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/anomaly_dataset_v20260406081630.csv` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/anomaly_dataset_v20260406081630.jsonl` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/anomaly_dataset_v20260409215007.csv` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/anomaly_dataset_v20260409215007.jsonl` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/anomaly_dataset_v20260409230523.csv` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/anomaly_dataset_v20260409230523.jsonl` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/anomaly_dataset_v20260409230825.csv` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/anomaly_dataset_v20260409230825.jsonl` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/anomaly_dataset_v20260409231016.csv` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/anomaly_dataset_v20260409231016.jsonl` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/anomaly_dataset_v20260409231142.csv` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/anomaly_dataset_v20260409231142.jsonl` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/anomaly_dataset_v20260410085724.csv` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/anomaly_dataset_v20260410085724.jsonl` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/anomaly_dataset_v20260410091449.csv` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/anomaly_dataset_v20260410091449.jsonl` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/anomaly_dataset_v20260410092630.csv` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/anomaly_dataset_v20260410092630.jsonl` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/anomaly_dataset_v20260410215540.csv` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/anomaly_dataset_v20260410215540.jsonl` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/anomaly_dataset_v20260414094126.csv` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/anomaly_dataset_v20260414094126.jsonl` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/anomaly_dataset_v20260414194143.csv` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/anomaly_dataset_v20260414194143.jsonl` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/anomaly_dataset_v20260415094048.csv` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/anomaly_dataset_v20260415094048.jsonl` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/anomaly_dataset_v20260416085427.csv` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/anomaly_dataset_v20260416085427.jsonl` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/anomaly_dataset_v20260416212217.csv` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/anomaly_dataset_v20260416212217.jsonl` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/anomaly_dataset_v20260417084606.csv` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/anomaly_dataset_v20260417084606.jsonl` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/anomaly_dataset_v20260417201612.csv` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/anomaly_dataset_v20260417201612.jsonl` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/anomaly_dataset_v20260418144645.csv` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/anomaly_dataset_v20260418144645.jsonl` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/anomaly_dataset_v20260418205805.csv` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/anomaly_dataset_v20260418205805.jsonl` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/anomaly_dataset_v20260419110044.csv` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/anomaly_dataset_v20260419110044.jsonl` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/anomaly_dataset_v20260419192725.csv` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/anomaly_dataset_v20260419192725.jsonl` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/anomaly_dataset_v20260420092435.csv` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/anomaly_dataset_v20260420092435.jsonl` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/anomaly_dataset_v20260421082718.csv` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/anomaly_dataset_v20260421082718.jsonl` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/anomaly_dataset_v20260422093605.csv` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/anomaly_dataset_v20260422093605.jsonl` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/anomaly_dataset_v20260423080933.csv` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/anomaly_dataset_v20260423080933.jsonl` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/anomaly_dataset_v20260423140949.csv` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/anomaly_dataset_v20260423140949.jsonl` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/anomaly_dataset_v20260423211354.csv` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/anomaly_dataset_v20260423211354.jsonl` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/anomaly_dataset_v20260424205136.csv` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/anomaly_dataset_v20260424205136.jsonl` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/anomaly_dataset_v20260428205412.csv` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/anomaly_dataset_v20260428205412.jsonl` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/anomaly_dataset_v20260429090549.csv` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/anomaly_dataset_v20260429090549.jsonl` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/anomaly_dataset_v20260429220803.csv` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/anomaly_dataset_v20260429220803.jsonl` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/anomaly_dataset_v20260430090344.csv` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/anomaly_dataset_v20260430090344.jsonl` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/anomaly_dataset_v20260430150618.csv` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/anomaly_dataset_v20260430150618.jsonl` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/anomaly_dataset_v20260430224304.csv` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/anomaly_dataset_v20260430224304.jsonl` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/anomaly_dataset_v20260501192804.csv` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/anomaly_dataset_v20260501192804.jsonl` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/anomaly_dataset_v20260505095504.csv` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/anomaly_dataset_v20260505095504.jsonl` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/anomaly_dataset_v20260505222254.csv` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/anomaly_dataset_v20260505222254.jsonl` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/anomaly_dataset_v20260506100927.csv` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/anomaly_dataset_v20260506100927.jsonl` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/anomaly_dataset_v20260506194932.csv` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/anomaly_dataset_v20260506194932.jsonl` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/anomaly_dataset_v20260507185531.csv` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/anomaly_dataset_v20260507185531.jsonl` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/anomaly_dataset_v20260508075800.csv` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/anomaly_dataset_v20260508075800.jsonl` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/anomaly_dataset_v20260512111401.csv` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/anomaly_dataset_v20260512111401.jsonl` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/anomaly_dataset_v20260512215633.csv` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/anomaly_dataset_v20260512215633.jsonl` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/anomaly_dataset_v20260513090542.csv` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/anomaly_dataset_v20260513090542.jsonl` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/anomaly_dataset_v20260513190730.csv` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/anomaly_dataset_v20260513190730.jsonl` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/anomaly_dataset_v20260515124737.csv` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/anomaly_dataset_v20260515124737.jsonl` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/anomaly_dataset_v20260516193907.csv` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/anomaly_dataset_v20260516193907.jsonl` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/anomaly_dataset_v20260517092719.csv` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/anomaly_dataset_v20260517092719.jsonl` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/anomaly_dataset_v20260517210816.csv` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/anomaly_dataset_v20260517210816.jsonl` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/anomaly_dataset_v20260518081112.csv` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/anomaly_dataset_v20260518081112.jsonl` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/anomaly_dataset_v20260518081336.csv` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/anomaly_dataset_v20260518081336.jsonl` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/anomaly_dataset_v20260518141444.csv` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/anomaly_dataset_v20260518141444.jsonl` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/anomaly_dataset_v20260519084907.csv` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/anomaly_dataset_v20260519084907.jsonl` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/anomaly_dataset_v20260519150556.csv` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/anomaly_dataset_v20260519150556.jsonl` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/anomaly_dataset_v20260519154804.csv` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/anomaly_dataset_v20260519154804.jsonl` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/anomaly_dataset_v20260519213851.csv` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/anomaly_dataset_v20260519213851.jsonl` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/anomaly_dataset_v20260522101040.csv` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/anomaly_dataset_v20260522101040.jsonl` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/anomaly_dataset_v20260522205811.csv` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/anomaly_dataset_v20260522205811.jsonl` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/anomaly_dataset_v20260523185752.csv` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/anomaly_dataset_v20260523185752.jsonl` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/anomaly_dataset_v20260524083833.csv` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/anomaly_dataset_v20260524083833.jsonl` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/anomaly_dataset_v20260524193642.csv` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/anomaly_dataset_v20260524193642.jsonl` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
+| Backend | `backend/data/ai/adaptive_features_v20260621220643.csv` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
+| Backend | `backend/data/ai/adaptive_features_v20260621220643.jsonl` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
+| Backend | `backend/data/ai/anomaly_dataset_v20260621220643.csv` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
+| Backend | `backend/data/ai/anomaly_dataset_v20260621220643.jsonl` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
 | Backend | `backend/data/ai/consumption_dataset_20260218.csv` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
 | Backend | `backend/data/ai/consumption_dataset_20260218.jsonl` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/consumption_dataset_v20260218085748.csv` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/consumption_dataset_v20260218085748.jsonl` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/consumption_dataset_v20260218093205.csv` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/consumption_dataset_v20260218093205.jsonl` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/consumption_dataset_v20260218094543.csv` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/consumption_dataset_v20260218094543.jsonl` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/consumption_dataset_v20260218095317.csv` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/consumption_dataset_v20260218095317.jsonl` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/consumption_dataset_v20260218100542.csv` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/consumption_dataset_v20260218100542.jsonl` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/consumption_dataset_v20260218161557.csv` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/consumption_dataset_v20260218161557.jsonl` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/consumption_dataset_v20260219075941.csv` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/consumption_dataset_v20260219075941.jsonl` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/consumption_dataset_v20260219192853.csv` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/consumption_dataset_v20260219192853.jsonl` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/consumption_dataset_v20260220084059.csv` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/consumption_dataset_v20260220084059.jsonl` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/consumption_dataset_v20260220104012.csv` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/consumption_dataset_v20260220104012.jsonl` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/consumption_dataset_v20260220205056.csv` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/consumption_dataset_v20260220205056.jsonl` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/consumption_dataset_v20260222201337.csv` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/consumption_dataset_v20260222201337.jsonl` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/consumption_dataset_v20260223085242.csv` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/consumption_dataset_v20260223085242.jsonl` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/consumption_dataset_v20260228201802.csv` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/consumption_dataset_v20260228201802.jsonl` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/consumption_dataset_v20260301134135.csv` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/consumption_dataset_v20260301134135.jsonl` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/consumption_dataset_v20260303082357.csv` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/consumption_dataset_v20260303082357.jsonl` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/consumption_dataset_v20260313140112.csv` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/consumption_dataset_v20260313140112.jsonl` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/consumption_dataset_v20260314084211.csv` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/consumption_dataset_v20260314084211.jsonl` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/consumption_dataset_v20260315200618.csv` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/consumption_dataset_v20260315200618.jsonl` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/consumption_dataset_v20260325092141.csv` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/consumption_dataset_v20260325092141.jsonl` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/consumption_dataset_v20260326103705.csv` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/consumption_dataset_v20260326103705.jsonl` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/consumption_dataset_v20260326182212.csv` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/consumption_dataset_v20260326182212.jsonl` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/consumption_dataset_v20260327092603.csv` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/consumption_dataset_v20260327092603.jsonl` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/consumption_dataset_v20260328211503.csv` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/consumption_dataset_v20260328211503.jsonl` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/consumption_dataset_v20260329211524.csv` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/consumption_dataset_v20260329211524.jsonl` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/consumption_dataset_v20260331220700.csv` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/consumption_dataset_v20260331220700.jsonl` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/consumption_dataset_v20260401104333.csv` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/consumption_dataset_v20260401104333.jsonl` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/consumption_dataset_v20260402220936.csv` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/consumption_dataset_v20260402220936.jsonl` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/consumption_dataset_v20260403130948.csv` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/consumption_dataset_v20260403130948.jsonl` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/consumption_dataset_v20260404171318.csv` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/consumption_dataset_v20260404171318.jsonl` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/consumption_dataset_v20260406081630.csv` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/consumption_dataset_v20260406081630.jsonl` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/consumption_dataset_v20260409215007.csv` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/consumption_dataset_v20260409215007.jsonl` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/consumption_dataset_v20260409230523.csv` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/consumption_dataset_v20260409230523.jsonl` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/consumption_dataset_v20260409230825.csv` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/consumption_dataset_v20260409230825.jsonl` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/consumption_dataset_v20260409231016.csv` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/consumption_dataset_v20260409231016.jsonl` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/consumption_dataset_v20260409231142.csv` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/consumption_dataset_v20260409231142.jsonl` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/consumption_dataset_v20260410085724.csv` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/consumption_dataset_v20260410085724.jsonl` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/consumption_dataset_v20260410091449.csv` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/consumption_dataset_v20260410091449.jsonl` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/consumption_dataset_v20260410092630.csv` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/consumption_dataset_v20260410092630.jsonl` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/consumption_dataset_v20260410215540.csv` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/consumption_dataset_v20260410215540.jsonl` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/consumption_dataset_v20260414094126.csv` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/consumption_dataset_v20260414094126.jsonl` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/consumption_dataset_v20260414194143.csv` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/consumption_dataset_v20260414194143.jsonl` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/consumption_dataset_v20260415094048.csv` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/consumption_dataset_v20260415094048.jsonl` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/consumption_dataset_v20260416085427.csv` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/consumption_dataset_v20260416085427.jsonl` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/consumption_dataset_v20260416212217.csv` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/consumption_dataset_v20260416212217.jsonl` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/consumption_dataset_v20260417084606.csv` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/consumption_dataset_v20260417084606.jsonl` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/consumption_dataset_v20260417201612.csv` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/consumption_dataset_v20260417201612.jsonl` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/consumption_dataset_v20260418144645.csv` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/consumption_dataset_v20260418144645.jsonl` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/consumption_dataset_v20260418205805.csv` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/consumption_dataset_v20260418205805.jsonl` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/consumption_dataset_v20260419110044.csv` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/consumption_dataset_v20260419110044.jsonl` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/consumption_dataset_v20260419192725.csv` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/consumption_dataset_v20260419192725.jsonl` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/consumption_dataset_v20260420092435.csv` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/consumption_dataset_v20260420092435.jsonl` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/consumption_dataset_v20260421082718.csv` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/consumption_dataset_v20260421082718.jsonl` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/consumption_dataset_v20260422093605.csv` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/consumption_dataset_v20260422093605.jsonl` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/consumption_dataset_v20260423080933.csv` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/consumption_dataset_v20260423080933.jsonl` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/consumption_dataset_v20260423140949.csv` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/consumption_dataset_v20260423140949.jsonl` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/consumption_dataset_v20260423211354.csv` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/consumption_dataset_v20260423211354.jsonl` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/consumption_dataset_v20260424205136.csv` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/consumption_dataset_v20260424205136.jsonl` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/consumption_dataset_v20260428205412.csv` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/consumption_dataset_v20260428205412.jsonl` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/consumption_dataset_v20260429090549.csv` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/consumption_dataset_v20260429090549.jsonl` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/consumption_dataset_v20260429220803.csv` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/consumption_dataset_v20260429220803.jsonl` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/consumption_dataset_v20260430090344.csv` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/consumption_dataset_v20260430090344.jsonl` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/consumption_dataset_v20260430150618.csv` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/consumption_dataset_v20260430150618.jsonl` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/consumption_dataset_v20260430224304.csv` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/consumption_dataset_v20260430224304.jsonl` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/consumption_dataset_v20260501192804.csv` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/consumption_dataset_v20260501192804.jsonl` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/consumption_dataset_v20260505095504.csv` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/consumption_dataset_v20260505095504.jsonl` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/consumption_dataset_v20260505222254.csv` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/consumption_dataset_v20260505222254.jsonl` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/consumption_dataset_v20260506100927.csv` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/consumption_dataset_v20260506100927.jsonl` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/consumption_dataset_v20260506194932.csv` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/consumption_dataset_v20260506194932.jsonl` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/consumption_dataset_v20260507185531.csv` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/consumption_dataset_v20260507185531.jsonl` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/consumption_dataset_v20260508075800.csv` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/consumption_dataset_v20260508075800.jsonl` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/consumption_dataset_v20260512111401.csv` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/consumption_dataset_v20260512111401.jsonl` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/consumption_dataset_v20260512215633.csv` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/consumption_dataset_v20260512215633.jsonl` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/consumption_dataset_v20260513090542.csv` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/consumption_dataset_v20260513090542.jsonl` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/consumption_dataset_v20260513190730.csv` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/consumption_dataset_v20260513190730.jsonl` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/consumption_dataset_v20260515124737.csv` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/consumption_dataset_v20260515124737.jsonl` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/consumption_dataset_v20260516193907.csv` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/consumption_dataset_v20260516193907.jsonl` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/consumption_dataset_v20260517092719.csv` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/consumption_dataset_v20260517092719.jsonl` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/consumption_dataset_v20260517210816.csv` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/consumption_dataset_v20260517210816.jsonl` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/consumption_dataset_v20260518081112.csv` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/consumption_dataset_v20260518081112.jsonl` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/consumption_dataset_v20260518081336.csv` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/consumption_dataset_v20260518081336.jsonl` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/consumption_dataset_v20260518141444.csv` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/consumption_dataset_v20260518141444.jsonl` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/consumption_dataset_v20260519084907.csv` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/consumption_dataset_v20260519084907.jsonl` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/consumption_dataset_v20260519150556.csv` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/consumption_dataset_v20260519150556.jsonl` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/consumption_dataset_v20260519154804.csv` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/consumption_dataset_v20260519154804.jsonl` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/consumption_dataset_v20260519213851.csv` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/consumption_dataset_v20260519213851.jsonl` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/consumption_dataset_v20260522101040.csv` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/consumption_dataset_v20260522101040.jsonl` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/consumption_dataset_v20260522205811.csv` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/consumption_dataset_v20260522205811.jsonl` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/consumption_dataset_v20260523185752.csv` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/consumption_dataset_v20260523185752.jsonl` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/consumption_dataset_v20260524083833.csv` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/consumption_dataset_v20260524083833.jsonl` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/consumption_dataset_v20260524193642.csv` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/consumption_dataset_v20260524193642.jsonl` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
+| Backend | `backend/data/ai/consumption_dataset_v20260621220643.csv` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
+| Backend | `backend/data/ai/consumption_dataset_v20260621220643.jsonl` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
 | Backend | `backend/data/ai/stockout_dataset_20260218.csv` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
 | Backend | `backend/data/ai/stockout_dataset_20260218.jsonl` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/stockout_dataset_v20260218085748.csv` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/stockout_dataset_v20260218085748.jsonl` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/stockout_dataset_v20260218093205.csv` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/stockout_dataset_v20260218093205.jsonl` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/stockout_dataset_v20260218094543.csv` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/stockout_dataset_v20260218094543.jsonl` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/stockout_dataset_v20260218095317.csv` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/stockout_dataset_v20260218095317.jsonl` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/stockout_dataset_v20260218100542.csv` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/stockout_dataset_v20260218100542.jsonl` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/stockout_dataset_v20260218161557.csv` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/stockout_dataset_v20260218161557.jsonl` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/stockout_dataset_v20260219075941.csv` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/stockout_dataset_v20260219075941.jsonl` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/stockout_dataset_v20260219192853.csv` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/stockout_dataset_v20260219192853.jsonl` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/stockout_dataset_v20260220084059.csv` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/stockout_dataset_v20260220084059.jsonl` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/stockout_dataset_v20260220104012.csv` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/stockout_dataset_v20260220104012.jsonl` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/stockout_dataset_v20260220205056.csv` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/stockout_dataset_v20260220205056.jsonl` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/stockout_dataset_v20260222201337.csv` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/stockout_dataset_v20260222201337.jsonl` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/stockout_dataset_v20260223085242.csv` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/stockout_dataset_v20260223085242.jsonl` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/stockout_dataset_v20260228201802.csv` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/stockout_dataset_v20260228201802.jsonl` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/stockout_dataset_v20260301134135.csv` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/stockout_dataset_v20260301134135.jsonl` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/stockout_dataset_v20260303082357.csv` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/stockout_dataset_v20260303082357.jsonl` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/stockout_dataset_v20260313140112.csv` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/stockout_dataset_v20260313140112.jsonl` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/stockout_dataset_v20260314084211.csv` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/stockout_dataset_v20260314084211.jsonl` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/stockout_dataset_v20260315200618.csv` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/stockout_dataset_v20260315200618.jsonl` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/stockout_dataset_v20260325092141.csv` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/stockout_dataset_v20260325092141.jsonl` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/stockout_dataset_v20260326103705.csv` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/stockout_dataset_v20260326103705.jsonl` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/stockout_dataset_v20260326182212.csv` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/stockout_dataset_v20260326182212.jsonl` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/stockout_dataset_v20260327092603.csv` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/stockout_dataset_v20260327092603.jsonl` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/stockout_dataset_v20260328211503.csv` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/stockout_dataset_v20260328211503.jsonl` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/stockout_dataset_v20260329211524.csv` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/stockout_dataset_v20260329211524.jsonl` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/stockout_dataset_v20260331220700.csv` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/stockout_dataset_v20260331220700.jsonl` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/stockout_dataset_v20260401104333.csv` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/stockout_dataset_v20260401104333.jsonl` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/stockout_dataset_v20260402220936.csv` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/stockout_dataset_v20260402220936.jsonl` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/stockout_dataset_v20260403130948.csv` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/stockout_dataset_v20260403130948.jsonl` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/stockout_dataset_v20260404171318.csv` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/stockout_dataset_v20260404171318.jsonl` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/stockout_dataset_v20260406081630.csv` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/stockout_dataset_v20260406081630.jsonl` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/stockout_dataset_v20260409215007.csv` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/stockout_dataset_v20260409215007.jsonl` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/stockout_dataset_v20260409230523.csv` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/stockout_dataset_v20260409230523.jsonl` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/stockout_dataset_v20260409230825.csv` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/stockout_dataset_v20260409230825.jsonl` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/stockout_dataset_v20260409231016.csv` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/stockout_dataset_v20260409231016.jsonl` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/stockout_dataset_v20260409231142.csv` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/stockout_dataset_v20260409231142.jsonl` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/stockout_dataset_v20260410085724.csv` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/stockout_dataset_v20260410085724.jsonl` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/stockout_dataset_v20260410091449.csv` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/stockout_dataset_v20260410091449.jsonl` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/stockout_dataset_v20260410092630.csv` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/stockout_dataset_v20260410092630.jsonl` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/stockout_dataset_v20260410215540.csv` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/stockout_dataset_v20260410215540.jsonl` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/stockout_dataset_v20260414094126.csv` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/stockout_dataset_v20260414094126.jsonl` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/stockout_dataset_v20260414194143.csv` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/stockout_dataset_v20260414194143.jsonl` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/stockout_dataset_v20260415094048.csv` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/stockout_dataset_v20260415094048.jsonl` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/stockout_dataset_v20260416085427.csv` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/stockout_dataset_v20260416085427.jsonl` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/stockout_dataset_v20260416212217.csv` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/stockout_dataset_v20260416212217.jsonl` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/stockout_dataset_v20260417084606.csv` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/stockout_dataset_v20260417084606.jsonl` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/stockout_dataset_v20260417201612.csv` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/stockout_dataset_v20260417201612.jsonl` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/stockout_dataset_v20260418144645.csv` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/stockout_dataset_v20260418144645.jsonl` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/stockout_dataset_v20260418205805.csv` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/stockout_dataset_v20260418205805.jsonl` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/stockout_dataset_v20260419110044.csv` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/stockout_dataset_v20260419110044.jsonl` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/stockout_dataset_v20260419192725.csv` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/stockout_dataset_v20260419192725.jsonl` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/stockout_dataset_v20260420092435.csv` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/stockout_dataset_v20260420092435.jsonl` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/stockout_dataset_v20260421082718.csv` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/stockout_dataset_v20260421082718.jsonl` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/stockout_dataset_v20260422093605.csv` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/stockout_dataset_v20260422093605.jsonl` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/stockout_dataset_v20260423080933.csv` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/stockout_dataset_v20260423080933.jsonl` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/stockout_dataset_v20260423140949.csv` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/stockout_dataset_v20260423140949.jsonl` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/stockout_dataset_v20260423211354.csv` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/stockout_dataset_v20260423211354.jsonl` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/stockout_dataset_v20260424205136.csv` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/stockout_dataset_v20260424205136.jsonl` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/stockout_dataset_v20260428205412.csv` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/stockout_dataset_v20260428205412.jsonl` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/stockout_dataset_v20260429090549.csv` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/stockout_dataset_v20260429090549.jsonl` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/stockout_dataset_v20260429220803.csv` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/stockout_dataset_v20260429220803.jsonl` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/stockout_dataset_v20260430090344.csv` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/stockout_dataset_v20260430090344.jsonl` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/stockout_dataset_v20260430150618.csv` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/stockout_dataset_v20260430150618.jsonl` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/stockout_dataset_v20260430224304.csv` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/stockout_dataset_v20260430224304.jsonl` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/stockout_dataset_v20260501192804.csv` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/stockout_dataset_v20260501192804.jsonl` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/stockout_dataset_v20260505095504.csv` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/stockout_dataset_v20260505095504.jsonl` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/stockout_dataset_v20260505222254.csv` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/stockout_dataset_v20260505222254.jsonl` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/stockout_dataset_v20260506100927.csv` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/stockout_dataset_v20260506100927.jsonl` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/stockout_dataset_v20260506194932.csv` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/stockout_dataset_v20260506194932.jsonl` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/stockout_dataset_v20260507185531.csv` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/stockout_dataset_v20260507185531.jsonl` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/stockout_dataset_v20260508075800.csv` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/stockout_dataset_v20260508075800.jsonl` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/stockout_dataset_v20260512111401.csv` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/stockout_dataset_v20260512111401.jsonl` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/stockout_dataset_v20260512215633.csv` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/stockout_dataset_v20260512215633.jsonl` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/stockout_dataset_v20260513090542.csv` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/stockout_dataset_v20260513090542.jsonl` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/stockout_dataset_v20260513190730.csv` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/stockout_dataset_v20260513190730.jsonl` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/stockout_dataset_v20260515124737.csv` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/stockout_dataset_v20260515124737.jsonl` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/stockout_dataset_v20260516193907.csv` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/stockout_dataset_v20260516193907.jsonl` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/stockout_dataset_v20260517092719.csv` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/stockout_dataset_v20260517092719.jsonl` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/stockout_dataset_v20260517210816.csv` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/stockout_dataset_v20260517210816.jsonl` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/stockout_dataset_v20260518081112.csv` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/stockout_dataset_v20260518081112.jsonl` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/stockout_dataset_v20260518081336.csv` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/stockout_dataset_v20260518081336.jsonl` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/stockout_dataset_v20260518141444.csv` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/stockout_dataset_v20260518141444.jsonl` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/stockout_dataset_v20260519084907.csv` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/stockout_dataset_v20260519084907.jsonl` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/stockout_dataset_v20260519150556.csv` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/stockout_dataset_v20260519150556.jsonl` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/stockout_dataset_v20260519154804.csv` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/stockout_dataset_v20260519154804.jsonl` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/stockout_dataset_v20260519213851.csv` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/stockout_dataset_v20260519213851.jsonl` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/stockout_dataset_v20260521220852.csv` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/stockout_dataset_v20260522101040.csv` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/stockout_dataset_v20260522101040.jsonl` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/stockout_dataset_v20260522205811.csv` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/stockout_dataset_v20260522205811.jsonl` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/stockout_dataset_v20260523185752.csv` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/stockout_dataset_v20260523185752.jsonl` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/stockout_dataset_v20260524083833.csv` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/stockout_dataset_v20260524083833.jsonl` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/stockout_dataset_v20260524193642.csv` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
-| Backend | `backend/data/ai/stockout_dataset_v20260524193642.jsonl` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
+| Backend | `backend/data/ai/stockout_dataset_v20260621220643.csv` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
+| Backend | `backend/data/ai/stockout_dataset_v20260621220643.jsonl` | donnee ou document | Dataset IA utilise pour entrainement, test ou export des modeles. |  |
+| Backend | `backend/data/humanizedCatalogue.js` | code | Fichier du projet a garder sauf verification contraire. |  |
 | Backend | `backend/db.js` | code | Connexion MongoDB via Mongoose et fonctions d'attente de disponibilite de la base. |  |
 | Backend | `backend/docker-compose.yml` | configuration | Orchestration Docker specifique backend ou base de donnees. |  |
 | Backend | `backend/Dockerfile` | docker | Image Docker du serveur backend. |  |
@@ -956,25 +165,25 @@ Je n'ai rien supprime automatiquement. Les fichiers ci-dessous demandent une ver
 | Backend | `backend/scripts/ai-setup-check.js` | code | Script backend de maintenance, test, seed, migration ou import de donnees. |  |
 | Backend | `backend/scripts/backfill-request-fields.js` | code | Script backend de maintenance, test, seed, migration ou import de donnees. |  |
 | Backend | `backend/scripts/backfill-user-timestamps.js` | code | Script backend de maintenance, test, seed, migration ou import de donnees. |  |
+| Backend | `backend/scripts/cleanup-demo-data.js` | code | Script backend de maintenance, test, seed, migration ou import de donnees. |  |
 | Backend | `backend/scripts/demo-setup.js` | code | Script backend de maintenance, test, seed, migration ou import de donnees. |  |
 | Backend | `backend/scripts/export-ai-dataset.js` | code | Script backend de maintenance, test, seed, migration ou import de donnees. |  |
 | Backend | `backend/scripts/generate-catalogue-etap-etendu.js` | code | Script backend de maintenance, test, seed, migration ou import de donnees. |  |
 | Backend | `backend/scripts/import-catalogue-etap.js` | code | Script backend de maintenance, test, seed, migration ou import de donnees. |  |
 | Backend | `backend/scripts/import-realistic-sentinel-dataset.js` | code | Script backend de maintenance, test, seed, migration ou import de donnees. |  |
 | Backend | `backend/scripts/migrate-request-statuses.js` | code | Script backend de maintenance, test, seed, migration ou import de donnees. |  |
-| Backend | `backend/scripts/seed-critical-anomalies.js` | code | Script backend de maintenance, test, seed, migration ou import de donnees. |  |
 | Backend | `backend/scripts/seed-inventory-demo.js` | code | Script backend de maintenance, test, seed, migration ou import de donnees. |  |
 | Backend | `backend/scripts/seed-magasinier-large-data.js` | code | Script backend de maintenance, test, seed, migration ou import de donnees. |  |
 | Backend | `backend/scripts/test-ai-chatbot-config.js` | code | Script backend de maintenance, test, seed, migration ou import de donnees. |  |
 | Backend | `backend/scripts/test-auth-recovery-flow.js` | code | Script backend de maintenance, test, seed, migration ou import de donnees. |  |
 | Backend | `backend/scripts/test-critical-flow.js` | code | Script backend de maintenance, test, seed, migration ou import de donnees. |  |
 | Backend | `backend/scripts/test-guardrails.js` | code | Script backend de maintenance, test, seed, migration ou import de donnees. |  |
+| Backend | `backend/scripts/test-stock-product-flow.js` | code | Script backend de maintenance, test, seed, migration ou import de donnees. |  |
+| Backend | `backend/scripts/verify-humanized-data.js` | code | Script backend de maintenance, test, seed, migration ou import de donnees. |  |
 | Backend | `backend/seed-human-users.js` | code | Fichier du projet a garder sauf verification contraire. |  |
 | Backend | `backend/seed-roles-real.js` | code | Fichier du projet a garder sauf verification contraire. |  |
 | Backend | `backend/seed-user.js` | code | Fichier du projet a garder sauf verification contraire. |  |
-| Backend | `backend/server.err.log` | autre | Fichier du projet a garder sauf verification contraire. |  |
 | Backend | `backend/server.js` | code | Point d'entree du backend Express. Configure securite, middlewares, routes REST et demarrage serveur. |  |
-| Backend | `backend/server.out.log` | autre | Fichier du projet a garder sauf verification contraire. |  |
 | Backend | `backend/services/adminIncidentService.js` | code | Service backend. Contient une logique metier reutilisable par plusieurs routes. |  |
 | Backend | `backend/services/adminMailDigestService.js` | code | Service backend. Contient une logique metier reutilisable par plusieurs routes. |  |
 | Backend | `backend/services/aiGovernanceService.js` | code | Service backend. Contient une logique metier reutilisable par plusieurs routes. |  |
@@ -997,12 +206,7 @@ Je n'ai rien supprime automatiquement. Les fichiers ci-dessous demandent une ver
 | Backend | `backend/services/supplierPortalTokenService.js` | code | Service backend. Contient une logique metier reutilisable par plusieurs routes. |  |
 | Backend | `backend/services/supplierRegistryService.js` | code | Service backend. Contient une logique metier reutilisable par plusieurs routes. |  |
 | Backend | `backend/services/transactionService.js` | code | Service backend. Contient une logique metier reutilisable par plusieurs routes. |  |
-| Backend | `backend/services/twilioService.js` | code | Service backend. Contient une logique metier reutilisable par plusieurs routes. |  |
 | Backend | `backend/services/userPreferencesService.js` | code | Service backend. Contient une logique metier reutilisable par plusieurs routes. |  |
-| Backend | `backend/tmp-list-products.js` | code | Fichier du projet a garder sauf verification contraire. | A verifier: script temporaire de diagnostic. Peut etre archive ou supprime apres confirmation. |
-| Backend | `backend/tmp-list-users.js` | code | Fichier du projet a garder sauf verification contraire. | A verifier: script temporaire de diagnostic. Peut etre archive ou supprime apres confirmation. |
-| Backend | `backend/tmp-server-err.log` | autre | Fichier du projet a garder sauf verification contraire. |  |
-| Backend | `backend/tmp-server-out.log` | autre | Fichier du projet a garder sauf verification contraire. |  |
 | Backend | `backend/update-email.js` | code | Fichier du projet a garder sauf verification contraire. |  |
 | Backend | `backend/uploads/1771327158617-24c23b43-b3cb-4f6b-b225-61f15d662ad8.jpg` | image ou icone | Fichier du projet a garder sauf verification contraire. |  |
 | Backend | `backend/uploads/1771337623922-10ecf959-50df-460c-95dd-c4e7a785fb51.jpeg` | image ou icone | Fichier du projet a garder sauf verification contraire. |  |
@@ -1017,8 +221,11 @@ Je n'ai rien supprime automatiquement. Les fichiers ci-dessous demandent une ver
 | Backend | `backend/uploads/1778234986718-3c100568-172c-4ca6-a499-3fb2323d6dd4.pdf` | donnee ou document | Fichier du projet a garder sauf verification contraire. |  |
 | Backend | `backend/uploads/1778590140250-b26cdb87-34da-4ab9-abf8-1d015ccb6e43.pdf` | donnee ou document | Fichier du projet a garder sauf verification contraire. |  |
 | Backend | `backend/uploads/1779566228438-300059d9-0e18-4cca-8aa3-8415cfc8122c.pdf` | donnee ou document | Fichier du projet a garder sauf verification contraire. |  |
+| Backend | `backend/uploads/1782064300086-db1750ef-e91f-45cb-a5ea-163b57e7c66b.pdf` | donnee ou document | Fichier du projet a garder sauf verification contraire. |  |
 | Backend | `backend/uploads/avatar-1779459485505-b3495089-b8fc-4f7f-ada3-1172cf387aec.png` | image ou icone | Asset visuel. |  |
 | Backend | `backend/uploads/avatar-1779693823697-04ac5610-84ed-418a-a1b9-9f9d97e2a22e.png` | image ou icone | Asset visuel. |  |
+| Backend | `backend/uploads/avatar-1781695821576-c87ab15a-9ae9-49fc-b9d2-32f12699d600.png` | image ou icone | Asset visuel. |  |
+| Backend | `backend/uploads/avatar-1781859098845-53bf141b-9f8f-4211-9bb8-9973fffc8ac5.png` | image ou icone | Asset visuel. |  |
 | Backend | `backend/utils/fileSecurity.js` | code | Utilitaire backend. Fournit de petites fonctions partagees. |  |
 | Backend | `backend/utils/logger.js` | code | Utilitaire backend. Fournit de petites fonctions partagees. |  |
 | Backend | `backend/utils/privacy.js` | code | Utilitaire backend. Fournit de petites fonctions partagees. |  |
@@ -1026,6 +233,8 @@ Je n'ai rien supprime automatiquement. Les fichiers ci-dessous demandent une ver
 | Backend | `backend/utils/sessionPolicy.js` | code | Utilitaire backend. Fournit de petites fonctions partagees. |  |
 | Backend | `backend/utils/validation.js` | code | Utilitaire backend. Fournit de petites fonctions partagees. |  |
 | Docker | `docker/nginx/default.conf` | configuration | Configuration Docker ou Nginx. |  |
+| Documentation | `docs/catalogue_produits_petrolier_etap_humanise.csv` | donnee ou document | Documentation ou artefact de rapport du projet. |  |
+| Documentation | `docs/guide-comprehension-3-jours.md` | documentation | Documentation ou artefact de rapport du projet. |  |
 | Documentation | `docs/inventaire-fichiers-pfe-sentinel.md` | documentation | Documentation ou artefact de rapport du projet. |  |
 | Documentation | `docs/inventaire-fichiers-pfe-sentinel.pdf` | donnee ou document | Documentation ou artefact de rapport du projet. |  |
 | Documentation | `docs/sentinel_dataset_realiste_csv.zip` | donnee ou document | Documentation ou artefact de rapport du projet. | Donnee volumineuse. Garder si elle sert aux imports ou au rapport. |
@@ -1036,7 +245,6 @@ Je n'ai rien supprime automatiquement. Les fichiers ci-dessous demandent une ver
 | Frontend principal | `src/assets/logoETAP.png` | image ou icone | Ressource visuelle importee dans React. |  |
 | Frontend principal | `src/components/admin/SidebarAdmin.css` | style | Composant React propre a l'administration. |  |
 | Frontend principal | `src/components/admin/SidebarAdmin.jsx` | code | Composant React propre a l'administration. |  |
-| Frontend principal | `src/components/data/mockData.js` | code | Fichier du projet a garder sauf verification contraire. |  |
 | Frontend principal | `src/components/demandeur/SidebarDem.css` | style | Composant React propre au demandeur. |  |
 | Frontend principal | `src/components/demandeur/SidebarDem.jsx` | code | Composant React propre au demandeur. |  |
 | Frontend principal | `src/components/fournisseurs/FournisseurAlertCenter.jsx` | code | Composant React du module fournisseurs. |  |
@@ -1071,11 +279,14 @@ Je n'ai rien supprime automatiquement. Les fichiers ci-dessous demandent une ver
 | Frontend principal | `src/components/parametres/StockRulesSettings.jsx` | code | Composant React des parametres et regles de stock. |  |
 | Frontend principal | `src/components/parametres/StockRulesSimulationModal.jsx` | code | Composant React des parametres et regles de stock. |  |
 | Frontend principal | `src/components/parametres/StockValidationRulesCard.jsx` | code | Composant React des parametres et regles de stock. |  |
+| Frontend principal | `src/components/parametres/SupportItTickets.css` | style | Composant React des parametres et regles de stock. |  |
 | Frontend principal | `src/components/parametres/SupportItTickets.jsx` | code | Composant React des parametres et regles de stock. |  |
 | Frontend principal | `src/components/responsable/SidebarResp.css` | style | Composant React propre au responsable. |  |
 | Frontend principal | `src/components/responsable/SidebarResp.jsx` | code | Composant React propre au responsable. |  |
 | Frontend principal | `src/components/shared/AppTable.css` | style | Composant React partage entre plusieurs pages. |  |
 | Frontend principal | `src/components/shared/AppTable.jsx` | code | Composant React partage entre plusieurs pages. |  |
+| Frontend principal | `src/components/shared/ConfirmDialog.css` | style | Composant React partage entre plusieurs pages. |  |
+| Frontend principal | `src/components/shared/ConfirmDialog.jsx` | code | Composant React partage entre plusieurs pages. |  |
 | Frontend principal | `src/components/shared/ForgotPassword.css` | style | Composant React partage entre plusieurs pages. |  |
 | Frontend principal | `src/components/shared/ForgotPassword.jsx` | code | Composant React partage entre plusieurs pages. |  |
 | Frontend principal | `src/components/shared/HeaderMag.css` | style | Composant React partage entre plusieurs pages. |  |
@@ -1111,8 +322,7 @@ Je n'ai rien supprime automatiquement. Les fichiers ci-dessous demandent une ver
 | Frontend principal | `src/components/shared/Toast.jsx` | code | Composant React partage entre plusieurs pages. |  |
 | Frontend principal | `src/constants/permissions.js` | code | Constantes frontend: roles, permissions ou valeurs fixes. |  |
 | Frontend principal | `src/constants/roles.js` | code | Constantes frontend: roles, permissions ou valeurs fixes. |  |
-| Frontend principal | `src/data/mockApprovisionnement.js` | code | Donnees mock ou donnees locales de demonstration. |  |
-| Frontend principal | `src/data/mockFournisseurs.js` | code | Donnees mock ou donnees locales de demonstration. |  |
+| Frontend principal | `src/data/catalogueFallback.js` | code | Donnees mock ou donnees locales de demonstration. |  |
 | Frontend principal | `src/ErrorBoundary.jsx` | code | Fichier du projet a garder sauf verification contraire. |  |
 | Frontend principal | `src/hooks/useIsMobile.js` | code | Hook React reutilisable. |  |
 | Frontend principal | `src/hooks/useProtectedFileUrl.js` | code | Hook React reutilisable. |  |
@@ -1172,10 +382,14 @@ Je n'ai rien supprime automatiquement. Les fichiers ci-dessous demandent une ver
 | Frontend principal | `src/pages/magasinier/VoirDetails.css` | style | Page React pour l'espace magasinier. |  |
 | Frontend principal | `src/pages/magasinier/VoirDetails.jsx` | code | Page React pour l'espace magasinier. |  |
 | Frontend principal | `src/pages/NotFound.jsx` | code | Fichier du projet a garder sauf verification contraire. |  |
+| Frontend principal | `src/pages/responsable/AlertesIA.css` | style | Page React pour l'espace responsable. |  |
+| Frontend principal | `src/pages/responsable/AlertesIA.jsx` | code | Page React pour l'espace responsable. |  |
 | Frontend principal | `src/pages/responsable/AnalyseInventaireResp.css` | style | Page React pour l'espace responsable. |  |
 | Frontend principal | `src/pages/responsable/AnalyseInventaireResp.jsx` | code | Page React pour l'espace responsable. |  |
 | Frontend principal | `src/pages/responsable/AnalyseResp.css` | style | Page React pour l'espace responsable. |  |
 | Frontend principal | `src/pages/responsable/AnalyseResp.jsx` | code | Page React pour l'espace responsable. |  |
+| Frontend principal | `src/pages/responsable/BeneficiairePanel.css` | style | Page React pour l'espace responsable. |  |
+| Frontend principal | `src/pages/responsable/BeneficiairePanel.jsx` | code | Page React pour l'espace responsable. |  |
 | Frontend principal | `src/pages/responsable/CategoriesResp.css` | style | Page React pour l'espace responsable. |  |
 | Frontend principal | `src/pages/responsable/CategoriesResp.jsx` | code | Page React pour l'espace responsable. |  |
 | Frontend principal | `src/pages/responsable/ChatbotResp.css` | style | Page React pour l'espace responsable. |  |
@@ -1188,6 +402,8 @@ Je n'ai rien supprime automatiquement. Les fichiers ci-dessous demandent une ver
 | Frontend principal | `src/pages/responsable/ConsommationResp.jsx` | code | Page React pour l'espace responsable. |  |
 | Frontend principal | `src/pages/responsable/DashboardResp.css` | style | Page React pour l'espace responsable. |  |
 | Frontend principal | `src/pages/responsable/DashboardResp.jsx` | code | Page React pour l'espace responsable. |  |
+| Frontend principal | `src/pages/responsable/DemandesAValider.css` | style | Page React pour l'espace responsable. |  |
+| Frontend principal | `src/pages/responsable/DemandesAValider.jsx` | code | Page React pour l'espace responsable. |  |
 | Frontend principal | `src/pages/responsable/FluxResp.css` | style | Page React pour l'espace responsable. |  |
 | Frontend principal | `src/pages/responsable/FluxResp.jsx` | code | Page React pour l'espace responsable. |  |
 | Frontend principal | `src/pages/responsable/fournisseurs/FicheFournisseurPage.jsx` | code | Page React du module fournisseurs responsable. |  |
@@ -1240,106 +456,17 @@ Je n'ai rien supprime automatiquement. Les fichiers ci-dessous demandent une ver
 | Frontend principal | `src/services/stockRulesImpactService.js` | code | Service frontend. Appelle l'API ou organise une logique partagee cote React. |  |
 | Frontend principal | `src/services/stockRulesService.js` | code | Service frontend. Appelle l'API ou organise une logique partagee cote React. |  |
 | Frontend principal | `src/services/uiError.js` | code | Service frontend. Appelle l'API ou organise une logique partagee cote React. |  |
+| Frontend principal | `src/services/uiError.test.js` | code | Service frontend. Appelle l'API ou organise une logique partagee cote React. |  |
 | Frontend principal | `src/setupTests.js` | code | Fichier du projet a garder sauf verification contraire. |  |
+| Frontend principal | `src/styles/darkModeCompatibility.css` | style | Fichier CSS qui gere le style visuel d'une page ou d'un composant. |  |
 | Frontend principal | `src/utils/chemicalRegister.js` | code | Utilitaire frontend partage. |  |
+| Frontend principal | `src/utils/demandeurI18n.js` | code | Utilitaire frontend partage. |  |
 | Frontend principal | `src/utils/formGuards.js` | code | Utilitaire frontend partage. |  |
 | Frontend principal | `src/utils/jwt.js` | code | Utilitaire frontend partage. |  |
 | Frontend principal | `src/utils/jwt.test.js` | code | Utilitaire frontend partage. |  |
 | Frontend principal | `src/utils/recentInputs.js` | code | Utilitaire frontend partage. |  |
 | Frontend principal | `src/utils/requestStatus.js` | code | Utilitaire frontend partage. |  |
 | Frontend principal | `src/utils/uiLanguage.js` | code | Utilitaire frontend partage. |  |
-| Frontend secondaire ou ancien | `frontend/.gitignore` | autre | Ancienne ou deuxieme copie frontend. A verifier avant suppression car elle peut servir d'archive ou de reference. | A verifier: possible doublon ancien du frontend principal. Ne pas supprimer sans validation. |
-| Frontend secondaire ou ancien | `frontend/public/favicon.ico` | image ou icone | Ancienne ou deuxieme copie frontend. A verifier avant suppression car elle peut servir d'archive ou de reference. | A verifier: possible doublon ancien du frontend principal. Ne pas supprimer sans validation. |
-| Frontend secondaire ou ancien | `frontend/public/index.html` | autre | Ancienne ou deuxieme copie frontend. A verifier avant suppression car elle peut servir d'archive ou de reference. | A verifier: possible doublon ancien du frontend principal. Ne pas supprimer sans validation. |
-| Frontend secondaire ou ancien | `frontend/public/logo192.png` | image ou icone | Ancienne ou deuxieme copie frontend. A verifier avant suppression car elle peut servir d'archive ou de reference. | A verifier: possible doublon ancien du frontend principal. Ne pas supprimer sans validation. |
-| Frontend secondaire ou ancien | `frontend/public/logo512.png` | image ou icone | Ancienne ou deuxieme copie frontend. A verifier avant suppression car elle peut servir d'archive ou de reference. | A verifier: possible doublon ancien du frontend principal. Ne pas supprimer sans validation. |
-| Frontend secondaire ou ancien | `frontend/public/manifest.json` | configuration | Ancienne ou deuxieme copie frontend. A verifier avant suppression car elle peut servir d'archive ou de reference. | A verifier: possible doublon ancien du frontend principal. Ne pas supprimer sans validation. |
-| Frontend secondaire ou ancien | `frontend/public/robots.txt` | documentation | Ancienne ou deuxieme copie frontend. A verifier avant suppression car elle peut servir d'archive ou de reference. | A verifier: possible doublon ancien du frontend principal. Ne pas supprimer sans validation. |
-| Frontend secondaire ou ancien | `frontend/src/App.css` | style | Ancienne ou deuxieme copie frontend. A verifier avant suppression car elle peut servir d'archive ou de reference. | A verifier: possible doublon ancien du frontend principal. Ne pas supprimer sans validation. |
-| Frontend secondaire ou ancien | `frontend/src/App.js` | code | Ancienne ou deuxieme copie frontend. A verifier avant suppression car elle peut servir d'archive ou de reference. | A verifier: possible doublon ancien du frontend principal. Ne pas supprimer sans validation. |
-| Frontend secondaire ou ancien | `frontend/src/App.test.js` | code | Ancienne ou deuxieme copie frontend. A verifier avant suppression car elle peut servir d'archive ou de reference. | A verifier: possible doublon ancien du frontend principal. Ne pas supprimer sans validation. |
-| Frontend secondaire ou ancien | `frontend/src/assets/logoETAP.png` | image ou icone | Ancienne ou deuxieme copie frontend. A verifier avant suppression car elle peut servir d'archive ou de reference. | A verifier: possible doublon ancien du frontend principal. Ne pas supprimer sans validation. |
-| Frontend secondaire ou ancien | `frontend/src/components/data/mockData.js` | code | Ancienne ou deuxieme copie frontend. A verifier avant suppression car elle peut servir d'archive ou de reference. | A verifier: possible doublon ancien du frontend principal. Ne pas supprimer sans validation. |
-| Frontend secondaire ou ancien | `frontend/src/components/demandeur/SidebarDem.css` | style | Ancienne ou deuxieme copie frontend. A verifier avant suppression car elle peut servir d'archive ou de reference. | A verifier: possible doublon ancien du frontend principal. Ne pas supprimer sans validation. |
-| Frontend secondaire ou ancien | `frontend/src/components/demandeur/SidebarDem.jsx` | code | Ancienne ou deuxieme copie frontend. A verifier avant suppression car elle peut servir d'archive ou de reference. | A verifier: possible doublon ancien du frontend principal. Ne pas supprimer sans validation. |
-| Frontend secondaire ou ancien | `frontend/src/components/magasinier/ForgotPassword.css` | style | Ancienne ou deuxieme copie frontend. A verifier avant suppression car elle peut servir d'archive ou de reference. | A verifier: possible doublon ancien du frontend principal. Ne pas supprimer sans validation. |
-| Frontend secondaire ou ancien | `frontend/src/components/magasinier/ForgotPassword.jsx` | code | Ancienne ou deuxieme copie frontend. A verifier avant suppression car elle peut servir d'archive ou de reference. | A verifier: possible doublon ancien du frontend principal. Ne pas supprimer sans validation. |
-| Frontend secondaire ou ancien | `frontend/src/components/magasinier/LoginMag.css` | style | Ancienne ou deuxieme copie frontend. A verifier avant suppression car elle peut servir d'archive ou de reference. | A verifier: possible doublon ancien du frontend principal. Ne pas supprimer sans validation. |
-| Frontend secondaire ou ancien | `frontend/src/components/magasinier/LoginMag.jsx` | code | Ancienne ou deuxieme copie frontend. A verifier avant suppression car elle peut servir d'archive ou de reference. | A verifier: possible doublon ancien du frontend principal. Ne pas supprimer sans validation. |
-| Frontend secondaire ou ancien | `frontend/src/components/magasinier/SidebarMag.css` | style | Ancienne ou deuxieme copie frontend. A verifier avant suppression car elle peut servir d'archive ou de reference. | A verifier: possible doublon ancien du frontend principal. Ne pas supprimer sans validation. |
-| Frontend secondaire ou ancien | `frontend/src/components/magasinier/SidebarMag.jsx` | code | Ancienne ou deuxieme copie frontend. A verifier avant suppression car elle peut servir d'archive ou de reference. | A verifier: possible doublon ancien du frontend principal. Ne pas supprimer sans validation. |
-| Frontend secondaire ou ancien | `frontend/src/components/magasinier/SplashScreen.css` | style | Ancienne ou deuxieme copie frontend. A verifier avant suppression car elle peut servir d'archive ou de reference. | A verifier: possible doublon ancien du frontend principal. Ne pas supprimer sans validation. |
-| Frontend secondaire ou ancien | `frontend/src/components/magasinier/SplashScreen.jsx` | code | Ancienne ou deuxieme copie frontend. A verifier avant suppression car elle peut servir d'archive ou de reference. | A verifier: possible doublon ancien du frontend principal. Ne pas supprimer sans validation. |
-| Frontend secondaire ou ancien | `frontend/src/components/responsable/SidebarResp.css` | style | Ancienne ou deuxieme copie frontend. A verifier avant suppression car elle peut servir d'archive ou de reference. | A verifier: possible doublon ancien du frontend principal. Ne pas supprimer sans validation. |
-| Frontend secondaire ou ancien | `frontend/src/components/responsable/SidebarResp.jsx` | code | Ancienne ou deuxieme copie frontend. A verifier avant suppression car elle peut servir d'archive ou de reference. | A verifier: possible doublon ancien du frontend principal. Ne pas supprimer sans validation. |
-| Frontend secondaire ou ancien | `frontend/src/components/shared/ForgotPassword.css` | style | Ancienne ou deuxieme copie frontend. A verifier avant suppression car elle peut servir d'archive ou de reference. | A verifier: possible doublon ancien du frontend principal. Ne pas supprimer sans validation. |
-| Frontend secondaire ou ancien | `frontend/src/components/shared/ForgotPassword.jsx` | code | Ancienne ou deuxieme copie frontend. A verifier avant suppression car elle peut servir d'archive ou de reference. | A verifier: possible doublon ancien du frontend principal. Ne pas supprimer sans validation. |
-| Frontend secondaire ou ancien | `frontend/src/components/shared/HeaderMag.css` | style | Ancienne ou deuxieme copie frontend. A verifier avant suppression car elle peut servir d'archive ou de reference. | A verifier: possible doublon ancien du frontend principal. Ne pas supprimer sans validation. |
-| Frontend secondaire ou ancien | `frontend/src/components/shared/HeaderMag.jsx` | code | Ancienne ou deuxieme copie frontend. A verifier avant suppression car elle peut servir d'archive ou de reference. | A verifier: possible doublon ancien du frontend principal. Ne pas supprimer sans validation. |
-| Frontend secondaire ou ancien | `frontend/src/components/shared/HeaderPage.css` | style | Ancienne ou deuxieme copie frontend. A verifier avant suppression car elle peut servir d'archive ou de reference. | A verifier: possible doublon ancien du frontend principal. Ne pas supprimer sans validation. |
-| Frontend secondaire ou ancien | `frontend/src/components/shared/HeaderPage.jsx` | code | Ancienne ou deuxieme copie frontend. A verifier avant suppression car elle peut servir d'archive ou de reference. | A verifier: possible doublon ancien du frontend principal. Ne pas supprimer sans validation. |
-| Frontend secondaire ou ancien | `frontend/src/components/shared/HistoryTable.css` | style | Ancienne ou deuxieme copie frontend. A verifier avant suppression car elle peut servir d'archive ou de reference. | A verifier: possible doublon ancien du frontend principal. Ne pas supprimer sans validation. |
-| Frontend secondaire ou ancien | `frontend/src/components/shared/HistoryTable.jsx` | code | Ancienne ou deuxieme copie frontend. A verifier avant suppression car elle peut servir d'archive ou de reference. | A verifier: possible doublon ancien du frontend principal. Ne pas supprimer sans validation. |
-| Frontend secondaire ou ancien | `frontend/src/components/shared/LoadingSpinner.css` | style | Ancienne ou deuxieme copie frontend. A verifier avant suppression car elle peut servir d'archive ou de reference. | A verifier: possible doublon ancien du frontend principal. Ne pas supprimer sans validation. |
-| Frontend secondaire ou ancien | `frontend/src/components/shared/LoadingSpinner.jsx` | code | Ancienne ou deuxieme copie frontend. A verifier avant suppression car elle peut servir d'archive ou de reference. | A verifier: possible doublon ancien du frontend principal. Ne pas supprimer sans validation. |
-| Frontend secondaire ou ancien | `frontend/src/components/shared/LoginPage.css` | style | Ancienne ou deuxieme copie frontend. A verifier avant suppression car elle peut servir d'archive ou de reference. | A verifier: possible doublon ancien du frontend principal. Ne pas supprimer sans validation. |
-| Frontend secondaire ou ancien | `frontend/src/components/shared/LoginPage.jsx` | code | Ancienne ou deuxieme copie frontend. A verifier avant suppression car elle peut servir d'archive ou de reference. | A verifier: possible doublon ancien du frontend principal. Ne pas supprimer sans validation. |
-| Frontend secondaire ou ancien | `frontend/src/components/shared/LogoHeader.css` | style | Ancienne ou deuxieme copie frontend. A verifier avant suppression car elle peut servir d'archive ou de reference. | A verifier: possible doublon ancien du frontend principal. Ne pas supprimer sans validation. |
-| Frontend secondaire ou ancien | `frontend/src/components/shared/LogoHeader.jsx` | code | Ancienne ou deuxieme copie frontend. A verifier avant suppression car elle peut servir d'archive ou de reference. | A verifier: possible doublon ancien du frontend principal. Ne pas supprimer sans validation. |
-| Frontend secondaire ou ancien | `frontend/src/components/shared/ProduitsMag.css` | style | Ancienne ou deuxieme copie frontend. A verifier avant suppression car elle peut servir d'archive ou de reference. | A verifier: possible doublon ancien du frontend principal. Ne pas supprimer sans validation. |
-| Frontend secondaire ou ancien | `frontend/src/components/shared/ProduitsMag.jsx` | code | Ancienne ou deuxieme copie frontend. A verifier avant suppression car elle peut servir d'archive ou de reference. | A verifier: possible doublon ancien du frontend principal. Ne pas supprimer sans validation. |
-| Frontend secondaire ou ancien | `frontend/src/components/shared/QrReader.jsx` | code | Ancienne ou deuxieme copie frontend. A verifier avant suppression car elle peut servir d'archive ou de reference. | A verifier: possible doublon ancien du frontend principal. Ne pas supprimer sans validation. |
-| Frontend secondaire ou ancien | `frontend/src/components/shared/SidebarMag.css` | style | Ancienne ou deuxieme copie frontend. A verifier avant suppression car elle peut servir d'archive ou de reference. | A verifier: possible doublon ancien du frontend principal. Ne pas supprimer sans validation. |
-| Frontend secondaire ou ancien | `frontend/src/components/shared/SidebarMag.jsx` | code | Ancienne ou deuxieme copie frontend. A verifier avant suppression car elle peut servir d'archive ou de reference. | A verifier: possible doublon ancien du frontend principal. Ne pas supprimer sans validation. |
-| Frontend secondaire ou ancien | `frontend/src/components/shared/SplashScreen.css` | style | Ancienne ou deuxieme copie frontend. A verifier avant suppression car elle peut servir d'archive ou de reference. | A verifier: possible doublon ancien du frontend principal. Ne pas supprimer sans validation. |
-| Frontend secondaire ou ancien | `frontend/src/components/shared/SplashScreen.jsx` | code | Ancienne ou deuxieme copie frontend. A verifier avant suppression car elle peut servir d'archive ou de reference. | A verifier: possible doublon ancien du frontend principal. Ne pas supprimer sans validation. |
-| Frontend secondaire ou ancien | `frontend/src/components/shared/StockModal.css` | style | Ancienne ou deuxieme copie frontend. A verifier avant suppression car elle peut servir d'archive ou de reference. | A verifier: possible doublon ancien du frontend principal. Ne pas supprimer sans validation. |
-| Frontend secondaire ou ancien | `frontend/src/components/shared/StockModal.jsx` | code | Ancienne ou deuxieme copie frontend. A verifier avant suppression car elle peut servir d'archive ou de reference. | A verifier: possible doublon ancien du frontend principal. Ne pas supprimer sans validation. |
-| Frontend secondaire ou ancien | `frontend/src/components/shared/Toast.css` | style | Ancienne ou deuxieme copie frontend. A verifier avant suppression car elle peut servir d'archive ou de reference. | A verifier: possible doublon ancien du frontend principal. Ne pas supprimer sans validation. |
-| Frontend secondaire ou ancien | `frontend/src/components/shared/Toast.jsx` | code | Ancienne ou deuxieme copie frontend. A verifier avant suppression car elle peut servir d'archive ou de reference. | A verifier: possible doublon ancien du frontend principal. Ne pas supprimer sans validation. |
-| Frontend secondaire ou ancien | `frontend/src/ErrorBoundary.jsx` | code | Ancienne ou deuxieme copie frontend. A verifier avant suppression car elle peut servir d'archive ou de reference. | A verifier: possible doublon ancien du frontend principal. Ne pas supprimer sans validation. |
-| Frontend secondaire ou ancien | `frontend/src/hooks/useTheme.js` | code | Ancienne ou deuxieme copie frontend. A verifier avant suppression car elle peut servir d'archive ou de reference. | A verifier: possible doublon ancien du frontend principal. Ne pas supprimer sans validation. |
-| Frontend secondaire ou ancien | `frontend/src/index.css` | style | Ancienne ou deuxieme copie frontend. A verifier avant suppression car elle peut servir d'archive ou de reference. | A verifier: possible doublon ancien du frontend principal. Ne pas supprimer sans validation. |
-| Frontend secondaire ou ancien | `frontend/src/index.js` | code | Ancienne ou deuxieme copie frontend. A verifier avant suppression car elle peut servir d'archive ou de reference. | A verifier: possible doublon ancien du frontend principal. Ne pas supprimer sans validation. |
-| Frontend secondaire ou ancien | `frontend/src/logo.svg` | image ou icone | Ancienne ou deuxieme copie frontend. A verifier avant suppression car elle peut servir d'archive ou de reference. | A verifier: possible doublon ancien du frontend principal. Ne pas supprimer sans validation. |
-| Frontend secondaire ou ancien | `frontend/src/main.jsx` | code | Ancienne ou deuxieme copie frontend. A verifier avant suppression car elle peut servir d'archive ou de reference. | A verifier: possible doublon ancien du frontend principal. Ne pas supprimer sans validation. |
-| Frontend secondaire ou ancien | `frontend/src/pages/demandeur/MesDemandes.css` | style | Ancienne ou deuxieme copie frontend. A verifier avant suppression car elle peut servir d'archive ou de reference. | A verifier: possible doublon ancien du frontend principal. Ne pas supprimer sans validation. |
-| Frontend secondaire ou ancien | `frontend/src/pages/demandeur/MesDemandes.jsx` | code | Ancienne ou deuxieme copie frontend. A verifier avant suppression car elle peut servir d'archive ou de reference. | A verifier: possible doublon ancien du frontend principal. Ne pas supprimer sans validation. |
-| Frontend secondaire ou ancien | `frontend/src/pages/demandeur/ProduitsDem.css` | style | Ancienne ou deuxieme copie frontend. A verifier avant suppression car elle peut servir d'archive ou de reference. | A verifier: possible doublon ancien du frontend principal. Ne pas supprimer sans validation. |
-| Frontend secondaire ou ancien | `frontend/src/pages/demandeur/ProduitsDem.jsx` | code | Ancienne ou deuxieme copie frontend. A verifier avant suppression car elle peut servir d'archive ou de reference. | A verifier: possible doublon ancien du frontend principal. Ne pas supprimer sans validation. |
-| Frontend secondaire ou ancien | `frontend/src/pages/magasinier/AjouterProduit.css` | style | Ancienne ou deuxieme copie frontend. A verifier avant suppression car elle peut servir d'archive ou de reference. | A verifier: possible doublon ancien du frontend principal. Ne pas supprimer sans validation. |
-| Frontend secondaire ou ancien | `frontend/src/pages/magasinier/AjouterProduit.jsx` | code | Ancienne ou deuxieme copie frontend. A verifier avant suppression car elle peut servir d'archive ou de reference. | A verifier: possible doublon ancien du frontend principal. Ne pas supprimer sans validation. |
-| Frontend secondaire ou ancien | `frontend/src/pages/magasinier/ChatMag.css` | style | Ancienne ou deuxieme copie frontend. A verifier avant suppression car elle peut servir d'archive ou de reference. | A verifier: possible doublon ancien du frontend principal. Ne pas supprimer sans validation. |
-| Frontend secondaire ou ancien | `frontend/src/pages/magasinier/ChatMag.jsx` | code | Ancienne ou deuxieme copie frontend. A verifier avant suppression car elle peut servir d'archive ou de reference. | A verifier: possible doublon ancien du frontend principal. Ne pas supprimer sans validation. |
-| Frontend secondaire ou ancien | `frontend/src/pages/magasinier/EntreeStock.css` | style | Ancienne ou deuxieme copie frontend. A verifier avant suppression car elle peut servir d'archive ou de reference. | A verifier: possible doublon ancien du frontend principal. Ne pas supprimer sans validation. |
-| Frontend secondaire ou ancien | `frontend/src/pages/magasinier/EntreeStock.jsx` | code | Ancienne ou deuxieme copie frontend. A verifier avant suppression car elle peut servir d'archive ou de reference. | A verifier: possible doublon ancien du frontend principal. Ne pas supprimer sans validation. |
-| Frontend secondaire ou ancien | `frontend/src/pages/magasinier/HistoriqueMag.css` | style | Ancienne ou deuxieme copie frontend. A verifier avant suppression car elle peut servir d'archive ou de reference. | A verifier: possible doublon ancien du frontend principal. Ne pas supprimer sans validation. |
-| Frontend secondaire ou ancien | `frontend/src/pages/magasinier/HistoriqueMag.jsx` | code | Ancienne ou deuxieme copie frontend. A verifier avant suppression car elle peut servir d'archive ou de reference. | A verifier: possible doublon ancien du frontend principal. Ne pas supprimer sans validation. |
-| Frontend secondaire ou ancien | `frontend/src/pages/magasinier/ListeDemandes.css` | style | Ancienne ou deuxieme copie frontend. A verifier avant suppression car elle peut servir d'archive ou de reference. | A verifier: possible doublon ancien du frontend principal. Ne pas supprimer sans validation. |
-| Frontend secondaire ou ancien | `frontend/src/pages/magasinier/ListeDemandes.jsx` | code | Ancienne ou deuxieme copie frontend. A verifier avant suppression car elle peut servir d'archive ou de reference. | A verifier: possible doublon ancien du frontend principal. Ne pas supprimer sans validation. |
-| Frontend secondaire ou ancien | `frontend/src/pages/magasinier/ParametresMag.css` | style | Ancienne ou deuxieme copie frontend. A verifier avant suppression car elle peut servir d'archive ou de reference. | A verifier: possible doublon ancien du frontend principal. Ne pas supprimer sans validation. |
-| Frontend secondaire ou ancien | `frontend/src/pages/magasinier/ParametresMag.jsx` | code | Ancienne ou deuxieme copie frontend. A verifier avant suppression car elle peut servir d'archive ou de reference. | A verifier: possible doublon ancien du frontend principal. Ne pas supprimer sans validation. |
-| Frontend secondaire ou ancien | `frontend/src/pages/magasinier/ProduitsMag.css` | style | Ancienne ou deuxieme copie frontend. A verifier avant suppression car elle peut servir d'archive ou de reference. | A verifier: possible doublon ancien du frontend principal. Ne pas supprimer sans validation. |
-| Frontend secondaire ou ancien | `frontend/src/pages/magasinier/ProduitsMag.jsx` | code | Ancienne ou deuxieme copie frontend. A verifier avant suppression car elle peut servir d'archive ou de reference. | A verifier: possible doublon ancien du frontend principal. Ne pas supprimer sans validation. |
-| Frontend secondaire ou ancien | `frontend/src/pages/magasinier/SortieStock.css` | style | Ancienne ou deuxieme copie frontend. A verifier avant suppression car elle peut servir d'archive ou de reference. | A verifier: possible doublon ancien du frontend principal. Ne pas supprimer sans validation. |
-| Frontend secondaire ou ancien | `frontend/src/pages/magasinier/SortieStock.jsx` | code | Ancienne ou deuxieme copie frontend. A verifier avant suppression car elle peut servir d'archive ou de reference. | A verifier: possible doublon ancien du frontend principal. Ne pas supprimer sans validation. |
-| Frontend secondaire ou ancien | `frontend/src/pages/magasinier/VoirDetails.css` | style | Ancienne ou deuxieme copie frontend. A verifier avant suppression car elle peut servir d'archive ou de reference. | A verifier: possible doublon ancien du frontend principal. Ne pas supprimer sans validation. |
-| Frontend secondaire ou ancien | `frontend/src/pages/magasinier/VoirDetails.jsx` | code | Ancienne ou deuxieme copie frontend. A verifier avant suppression car elle peut servir d'archive ou de reference. | A verifier: possible doublon ancien du frontend principal. Ne pas supprimer sans validation. |
-| Frontend secondaire ou ancien | `frontend/src/pages/NotFound.jsx` | code | Ancienne ou deuxieme copie frontend. A verifier avant suppression car elle peut servir d'archive ou de reference. | A verifier: possible doublon ancien du frontend principal. Ne pas supprimer sans validation. |
-| Frontend secondaire ou ancien | `frontend/src/pages/responsable/ChatbotResp.css` | style | Ancienne ou deuxieme copie frontend. A verifier avant suppression car elle peut servir d'archive ou de reference. | A verifier: possible doublon ancien du frontend principal. Ne pas supprimer sans validation. |
-| Frontend secondaire ou ancien | `frontend/src/pages/responsable/ChatbotResp.jsx` | code | Ancienne ou deuxieme copie frontend. A verifier avant suppression car elle peut servir d'archive ou de reference. | A verifier: possible doublon ancien du frontend principal. Ne pas supprimer sans validation. |
-| Frontend secondaire ou ancien | `frontend/src/pages/responsable/ChatResp.css` | style | Ancienne ou deuxieme copie frontend. A verifier avant suppression car elle peut servir d'archive ou de reference. | A verifier: possible doublon ancien du frontend principal. Ne pas supprimer sans validation. |
-| Frontend secondaire ou ancien | `frontend/src/pages/responsable/ChatResp.jsx` | code | Ancienne ou deuxieme copie frontend. A verifier avant suppression car elle peut servir d'archive ou de reference. | A verifier: possible doublon ancien du frontend principal. Ne pas supprimer sans validation. |
-| Frontend secondaire ou ancien | `frontend/src/pages/responsable/DashboardResp.css` | style | Ancienne ou deuxieme copie frontend. A verifier avant suppression car elle peut servir d'archive ou de reference. | A verifier: possible doublon ancien du frontend principal. Ne pas supprimer sans validation. |
-| Frontend secondaire ou ancien | `frontend/src/pages/responsable/DashboardResp.jsx` | code | Ancienne ou deuxieme copie frontend. A verifier avant suppression car elle peut servir d'archive ou de reference. | A verifier: possible doublon ancien du frontend principal. Ne pas supprimer sans validation. |
-| Frontend secondaire ou ancien | `frontend/src/pages/responsable/HistoriqueResp.css` | style | Ancienne ou deuxieme copie frontend. A verifier avant suppression car elle peut servir d'archive ou de reference. | A verifier: possible doublon ancien du frontend principal. Ne pas supprimer sans validation. |
-| Frontend secondaire ou ancien | `frontend/src/pages/responsable/HistoriqueResp.jsx` | code | Ancienne ou deuxieme copie frontend. A verifier avant suppression car elle peut servir d'archive ou de reference. | A verifier: possible doublon ancien du frontend principal. Ne pas supprimer sans validation. |
-| Frontend secondaire ou ancien | `frontend/src/pages/responsable/ParametresResp.css` | style | Ancienne ou deuxieme copie frontend. A verifier avant suppression car elle peut servir d'archive ou de reference. | A verifier: possible doublon ancien du frontend principal. Ne pas supprimer sans validation. |
-| Frontend secondaire ou ancien | `frontend/src/pages/responsable/ParametresResp.jsx` | code | Ancienne ou deuxieme copie frontend. A verifier avant suppression car elle peut servir d'archive ou de reference. | A verifier: possible doublon ancien du frontend principal. Ne pas supprimer sans validation. |
-| Frontend secondaire ou ancien | `frontend/src/pages/RoleSelection.css` | style | Ancienne ou deuxieme copie frontend. A verifier avant suppression car elle peut servir d'archive ou de reference. | A verifier: possible doublon ancien du frontend principal. Ne pas supprimer sans validation. |
-| Frontend secondaire ou ancien | `frontend/src/pages/RoleSelection.jsx` | code | Ancienne ou deuxieme copie frontend. A verifier avant suppression car elle peut servir d'archive ou de reference. | A verifier: possible doublon ancien du frontend principal. Ne pas supprimer sans validation. |
-| Frontend secondaire ou ancien | `frontend/src/reportWebVitals.js` | code | Ancienne ou deuxieme copie frontend. A verifier avant suppression car elle peut servir d'archive ou de reference. | A verifier: possible doublon ancien du frontend principal. Ne pas supprimer sans validation. |
-| Frontend secondaire ou ancien | `frontend/src/setupTests.js` | code | Ancienne ou deuxieme copie frontend. A verifier avant suppression car elle peut servir d'archive ou de reference. | A verifier: possible doublon ancien du frontend principal. Ne pas supprimer sans validation. |
 | GitHub | `.github/modernize/code-migration/.gitignore` | autre | Configuration GitHub: workflows, automatisations ou regles du depot. |  |
 | GitHub | `.github/modernize/code-migration/20260519192059/plan.md` | documentation | Configuration GitHub: workflows, automatisations ou regles du depot. |  |
 | GitHub | `.github/modernize/code-migration/20260519192059/progress.md` | documentation | Configuration GitHub: workflows, automatisations ou regles du depot. |  |
@@ -1413,16 +540,15 @@ Je n'ai rien supprime automatiquement. Les fichiers ci-dessous demandent une ver
 | Public | `public/logo512.png` | image ou icone | Fichier public servi directement par le frontend. |  |
 | Public | `public/manifest.json` | configuration | Fichier public servi directement par le frontend. |  |
 | Public | `public/robots.txt` | documentation | Fichier public servi directement par le frontend. |  |
+| Public | `public/sentinel-etap-icon.png` | image ou icone | Fichier public servi directement par le frontend. |  |
 | Racine | `.dockerignore` | autre | Liste des fichiers ignores pendant la construction Docker. |  |
 | Racine | `.env` | configuration sensible | Variables locales sensibles: secrets, ports, connexions. Ne pas publier. |  |
+| Racine | `.env.docker.example` | autre | Fichier du projet a garder sauf verification contraire. |  |
 | Racine | `.env.example` | autre | Exemple de variables d'environnement sans secrets reels. |  |
 | Racine | `.gitignore` | autre | Liste des fichiers ignores par Git. |  |
+| Racine | `.vscode/settings.json` | configuration | Fichier du projet a garder sauf verification contraire. |  |
 | Racine | `docker-compose.yml` | configuration | Orchestration Docker globale pour lancer les services du projet. |  |
 | Racine | `Dockerfile.web` | docker | Image Docker pour construire ou servir l'application web. |  |
 | Racine | `package-lock.json` | configuration | Fichier du projet a garder sauf verification contraire. |  |
 | Racine | `package.json` | configuration | Configuration npm principale du frontend: scripts, dependances et proxy backend. |  |
-| Racine | `rapport00.pdf` | donnee ou document | Fichier du projet a garder sauf verification contraire. |  |
-| Racine | `tmp_frontend.err.log` | autre | Fichier du projet a garder sauf verification contraire. | Candidat nettoyage: log temporaire, supprimable si non utilise pour diagnostic. |
-| Racine | `tmp_frontend.log` | autre | Fichier du projet a garder sauf verification contraire. | Candidat nettoyage: log temporaire, supprimable si non utilise pour diagnostic. |
-| Racine | `tmp_frontend_node.err.log` | autre | Fichier du projet a garder sauf verification contraire. | Candidat nettoyage: log temporaire, supprimable si non utilise pour diagnostic. |
-| Racine | `tmp_frontend_node.out.log` | autre | Fichier du projet a garder sauf verification contraire. | Candidat nettoyage: log temporaire, supprimable si non utilise pour diagnostic. |
+| Racine | `README.md` | documentation | Documentation texte. |  |

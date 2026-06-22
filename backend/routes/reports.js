@@ -1,3 +1,7 @@
+// BLOC 1 - Role du fichier.
+// Ce fichier expose les endpoints REST du domaine reports et controle les regles d'acces cote API.
+// Point de vigilance: verifier l'authentification, les roles et les validations avant toute modification.
+
 const router = require('express').Router();
 const Product = require('../models/Product');
 const StockEntry = require('../models/StockEntry');
@@ -172,7 +176,14 @@ router.get('/chemical-register', requireAuth, requirePermission(PERMISSIONS.HIST
     const prevStart = new Date(year, month - 2, 1);
     const prevEnd = new Date(year, month - 1, 0, 23, 59, 59, 999);
 
-    const products = await Product.find({ family: 'produit_chimique', lifecycle_status: 'active' }).lean();
+    const products = await Product.find({
+      lifecycle_status: 'active',
+      chemical_register_excluded: { $ne: true },
+      $or: [
+        { family: 'produit_chimique' },
+        { chemical_register_included: true },
+      ],
+    }).lean();
     const productIds = (products || []).map((p) => p?._id).filter(Boolean);
 
     if (!productIds.length) {
@@ -209,7 +220,7 @@ router.get('/chemical-register', requireAuth, requirePermission(PERMISSIONS.HIST
         { $group: { _id: '$product', qty: { $sum: '$quantity' } } },
       ]),
       SupplierProduct.find({ product: { $in: productIds }, is_primary: true })
-        .populate('supplier', 'name status')
+        .populate('supplier', 'name email status')
         .select('supplier product is_primary')
         .lean(),
       StockEntry.aggregate([
@@ -250,7 +261,16 @@ router.get('/chemical-register', requireAuth, requirePermission(PERMISSIONS.HIST
     const supplierByProduct = new Map(
       (supplierLinks || [])
         .filter((link) => link?.product)
-        .map((link) => [String(link.product), link?.supplier?.name || null])
+        .map((link) => [
+          String(link.product),
+          link?.supplier
+            ? {
+                id: link.supplier?._id ? String(link.supplier._id) : '',
+                name: link.supplier?.name || null,
+                email: link.supplier?.email || '',
+              }
+            : null,
+        ])
     );
     const lastEntryByProduct = new Map((lastEntryAgg || []).map((x) => [String(x._id), x?.last_entry_at || null]));
     const lastExitByProduct = new Map((lastExitAgg || []).map((x) => [String(x._id), x?.last_exit_at || null]));
@@ -277,6 +297,7 @@ router.get('/chemical-register', requireAuth, requirePermission(PERMISSIONS.HIST
       })();
 
       const lotStats = lotsByProduct.get(pid) || { next_expiry_date: null, lots_expiring_30d: 0 };
+      const supplier = supplierByProduct.get(pid) || null;
       const fds = p?.fds_attachment && p?.fds_attachment?.file_url
         ? { file_name: p.fds_attachment.file_name || 'FDS', file_url: p.fds_attachment.file_url }
         : null;
@@ -294,7 +315,9 @@ router.get('/chemical-register', requireAuth, requirePermission(PERMISSIONS.HIST
         seuil_minimum: Number(p.seuil_minimum || 0),
         unite: p.unite || 'Unite',
         emplacement: p.emplacement || null,
-        fournisseur: supplierByProduct.get(pid) || null,
+        fournisseur: supplier?.name || null,
+        supplier_id: supplier?.id || null,
+        supplier_email: supplier?.email || null,
         fds,
         last_movement_at: lastMovementAt,
         next_expiry_date: lotStats.next_expiry_date,

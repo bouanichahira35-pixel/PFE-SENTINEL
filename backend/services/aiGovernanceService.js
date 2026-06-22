@@ -1,3 +1,7 @@
+// BLOC 1 - Role du fichier.
+// Ce fichier contient la logique metier reutilisable du domaine aiGovernanceService, appelee par les routes ou les jobs.
+// Point de vigilance: preserver les contrats appeles par plusieurs routes.
+
 const AppSetting = require('../models/AppSetting');
 const { trainAndBuildDatasets, getPythonRuntimeStatus } = require('./aiModelService');
 const logger = require('../utils/logger');

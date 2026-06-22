@@ -1,3 +1,7 @@
+// BLOC 1 - Role du fichier.
+// Ce fichier fournit un composant React specialise pour FournisseurStatsCards.
+// Point de vigilance: garder les props, appels API et classes CSS synchronises avec les ecrans existants.
+
 import { AlertTriangle, CheckCircle2, FileWarning, ShieldAlert, ShieldCheck, Users } from 'lucide-react';
 import './fournisseurs.css';
 

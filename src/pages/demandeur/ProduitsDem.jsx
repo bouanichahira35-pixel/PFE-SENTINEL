@@ -1,3 +1,7 @@
+// BLOC 1 - Role du fichier.
+// Ce fichier affiche une page de l'espace demandeur pour ProduitsDem.
+// Point de vigilance: garder les props, appels API et classes CSS synchronises avec les ecrans existants.
+
 import { useState, useMemo, useCallback, useEffect } from 'react';
 import { Package, Send, X, Monitor, Wrench, FlaskConical, FileText } from 'lucide-react';
 import SidebarDem from '../../components/demandeur/SidebarDem';

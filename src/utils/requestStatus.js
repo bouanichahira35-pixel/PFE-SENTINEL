@@ -1,3 +1,7 @@
+// BLOC 1 - Role du fichier.
+// Ce fichier regroupe des fonctions utilitaires frontend autour de requestStatus.
+// Point de vigilance: modifier avec prudence car ce fichier peut etre importe par plusieurs modules.
+
 export const CANONICAL_REQUEST_STATUSES = Object.freeze([
   'pending',
   'validated',

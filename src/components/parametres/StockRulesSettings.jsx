@@ -1,3 +1,7 @@
+// BLOC 1 - Role du fichier.
+// Ce fichier fournit un composant React specialise pour StockRulesSettings.
+// Point de vigilance: garder les props, appels API et classes CSS synchronises avec les ecrans existants.
+
 import { useEffect, useMemo, useState } from 'react';
 import { RefreshCw, Save, Settings, Sparkles } from 'lucide-react';
 import { useToast } from '../shared/Toast';

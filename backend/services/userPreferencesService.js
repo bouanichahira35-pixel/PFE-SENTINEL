@@ -1,3 +1,7 @@
+// BLOC 1 - Role du fichier.
+// Ce fichier contient la logique metier reutilisable du domaine userPreferencesService, appelee par les routes ou les jobs.
+// Point de vigilance: preserver les contrats appeles par plusieurs routes.
+
 const AppSetting = require('../models/AppSetting');
 
 const USER_PREFS_DEFAULT = Object.freeze({
@@ -11,10 +15,7 @@ const USER_PREFS_DEFAULT = Object.freeze({
   },
 });
 
-async function getUserPreferences(userId) {
-  const settingKey = `user_prefs_${userId}`;
-  const item = await AppSetting.findOne({ setting_key: settingKey }).lean();
-  const prefs = item?.setting_value || USER_PREFS_DEFAULT;
+function normalizeUserPreferences(prefs) {
   return {
     language: prefs?.language || USER_PREFS_DEFAULT.language,
     dark_mode: Boolean(prefs?.dark_mode),
@@ -27,16 +28,26 @@ async function getUserPreferences(userId) {
   };
 }
 
+async function getUserPreferences(userId) {
+  const settingKey = `user_prefs_${userId}`;
+  const item = await AppSetting.findOne({ setting_key: settingKey }).lean();
+  const prefs = item?.setting_value || USER_PREFS_DEFAULT;
+  return normalizeUserPreferences(prefs);
+}
+
 function canSendNotificationEmail(preferences, category = 'generic') {
   const notif = preferences?.notifications || {};
   if (!notif.email) return false;
   if (category === 'stock') return notif.stockAlerts !== false;
+  if (category === 'catalogue') return notif.stockAlerts !== false;
+  if (category === 'inventory') return notif.stockAlerts !== false;
   if (category === 'demandes') return notif.demandesAlerts !== false;
   return true;
 }
 
 module.exports = {
   USER_PREFS_DEFAULT,
+  normalizeUserPreferences,
   getUserPreferences,
   canSendNotificationEmail,
 };

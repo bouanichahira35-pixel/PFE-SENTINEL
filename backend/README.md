@@ -65,17 +65,39 @@ En CI, les credentials de test doivent etre fournis via variables d'environnemen
 
 ## Docker
 
-Build + run:
+Depuis la racine du projet, utiliser le compose principal pour lancer toute
+l'application (web + backend + MongoDB + Redis):
 
 ```bash
 docker compose up --build
 ```
 
-Services inclus dans `docker-compose.yml`:
+URL principale:
+
+- Frontend: `http://localhost:8080`
+- Backend: `http://localhost:5000`
+- Healthcheck: `http://localhost:5000/api/health`
+
+Depuis le dossier `backend`, le fichier `backend/docker-compose.yml` sert
+uniquement a lancer le backend avec MongoDB et Redis, sans le frontend:
+
+```bash
+docker compose up --build
+```
+
+Services inclus dans le compose backend:
 
 - `backend`
 - `mongo`
 - `redis`
+
+Par defaut, la queue mail doit rester desactivee tant que SMTP n'est pas
+configure. Redis peut demarrer sans que la queue mail soit active. Pour
+personnaliser Docker, preferer un fichier `.env.docker` a la racine et lancer:
+
+```bash
+docker compose --env-file .env.docker up --build
+```
 
 Note IA:
 - Le container `backend` installe `python3` pour executer les scripts dans `ai_py/`.

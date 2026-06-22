@@ -1,3 +1,7 @@
+// BLOC 1 - Role du fichier.
+// Ce fichier decrit le modele MongoDB User, ses champs, index et regles de validation.
+// Point de vigilance: eviter de changer un champ sans verifier les migrations, seeds, routes et tests.
+
 const mongoose = require('../db');
 
 // Définition du schéma pour la collection 'users'
@@ -49,6 +53,52 @@ const userSchema = new mongoose.Schema(
       type: String,
       required: true,
       trim: true,
+    },
+    employee_id: {
+      type: String,
+      trim: true,
+      sparse: true,
+      unique: true,
+    },
+    job_title: {
+      type: String,
+      trim: true,
+      default: '',
+    },
+    hire_date: {
+      type: Date,
+      default: null,
+    },
+    account_expires_at: {
+      type: Date,
+      default: null,
+    },
+    account_type: {
+      type: String,
+      enum: ['interne', 'externe'],
+      default: 'interne',
+    },
+    two_factor_required: {
+      type: Boolean,
+      default: false,
+    },
+    site_location: {
+      type: String,
+      trim: true,
+      default: '',
+    },
+    manager_user: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'User',
+      default: null,
+    },
+    preferred_language: {
+      type: String,
+      enum: ['fr', 'ar', 'en'],
+      default: 'fr',
+    },
+    notification_channels: {
+      email: { type: Boolean, default: true },
     },
     image_profile: {
       type: String, // Lien vers l'image du profil

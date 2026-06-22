@@ -1,3 +1,7 @@
+// BLOC 1 - Role du fichier.
+// Ce fichier decrit le modele MongoDB Product, ses champs, index et regles de validation.
+// Point de vigilance: eviter de changer un champ sans verifier les migrations, seeds, routes et tests.
+
 const mongoose = require('../db');
 
 const productSchema = new mongoose.Schema(
@@ -26,6 +30,8 @@ const productSchema = new mongoose.Schema(
       file_name: String,
       file_url: String,
     },
+    chemical_register_included: { type: Boolean, default: false },
+    chemical_register_excluded: { type: Boolean, default: false },
     gas_pressure: String,
     gas_purity: String,
     quantity_current: { type: Number, default: 0 },

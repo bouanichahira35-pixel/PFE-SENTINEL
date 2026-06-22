@@ -1,3 +1,7 @@
+// BLOC 1 - Role du fichier.
+// Ce fichier participe au fonctionnement du module RoleSelection.
+// Point de vigilance: garder les props, appels API et classes CSS synchronises avec les ecrans existants.
+
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Package, LayoutDashboard, GraduationCap } from 'lucide-react';

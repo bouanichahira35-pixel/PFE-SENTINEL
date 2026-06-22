@@ -1,3 +1,7 @@
+// BLOC 1 - Role du fichier.
+// Ce fichier organise les appels API ou la logique frontend partagee pour fournisseurAuditService.
+// Point de vigilance: modifier avec prudence car ce fichier peut etre importe par plusieurs modules.
+
 import { getFournisseurHistory } from './fournisseurService';
 
 const LOCAL_AUDIT_KEY = 'supplier_local_audit_v1';

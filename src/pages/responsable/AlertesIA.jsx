@@ -1,3 +1,7 @@
+// BLOC 1 - Role du fichier.
+// Ce fichier affiche une page de l'espace responsable pour AlertesIA.
+// Point de vigilance: garder les props, appels API et classes CSS synchronises avec les ecrans existants.
+
 import { useCallback, useMemo, useState } from 'react';
 import { Search, FileText, BarChart3, HelpCircle, TrendingUp, CheckCircle } from 'lucide-react';
 import jsPDF from 'jspdf';

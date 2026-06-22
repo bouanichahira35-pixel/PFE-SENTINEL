@@ -1,3 +1,7 @@
+// BLOC 1 - Role du fichier.
+// Ce fichier contient la logique metier reutilisable du domaine securityAuditService, appelee par les routes ou les jobs.
+// Point de vigilance: preserver les contrats appeles par plusieurs routes.
+
 const SecurityAudit = require('../models/SecurityAudit');
 const { sendAdminCriticalFailureDigestIfDue } = require('./adminMailDigestService');
 const { hmacSha256, maskEmail } = require('../utils/privacy');

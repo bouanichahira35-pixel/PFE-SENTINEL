@@ -1,3 +1,7 @@
+// BLOC 1 - Role du fichier.
+// Ce fichier affiche une page de l'espace responsable pour ChatResp.
+// Point de vigilance: garder les props, appels API et classes CSS synchronises avec les ecrans existants.
+
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Send, User, Search } from 'lucide-react';
 import SidebarResp from '../../components/responsable/SidebarResp';

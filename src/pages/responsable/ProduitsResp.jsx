@@ -1,3 +1,7 @@
+// BLOC 1 - Role du fichier.
+// Ce fichier affiche une page de l'espace responsable pour ProduitsResp.
+// Point de vigilance: garder les props, appels API et classes CSS synchronises avec les ecrans existants.
+
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import {
@@ -22,6 +26,7 @@ import LoadingSpinner from '../../components/shared/LoadingSpinner';
 import { get, post, put } from '../../services/api';
 import { recommendFournisseurs } from '../../services/fournisseurRecommendationService';
 import { useToast } from '../../components/shared/Toast';
+import { useConfirm, usePrompt } from '../../components/shared/ConfirmDialog';
 import './ProduitsResp.css';
 
 const FAMILY_LABEL = {
@@ -99,6 +104,8 @@ const ProduitsResp = ({ userName, onLogout }) => {
   const navigate = useNavigate();
   const location = useLocation();
   const toast = useToast();
+  const confirmAction = useConfirm();
+  const promptAction = usePrompt();
 
   const [sidebarCollapsed, setSidebarCollapsed] = useState(() => (typeof window !== 'undefined' ? window.innerWidth <= 768 : false));
   const [loading, setLoading] = useState(false);
@@ -641,11 +648,26 @@ const ProduitsResp = ({ userName, onLogout }) => {
     const name = p?.name || 'Produit';
     const reasonLabel = INACTIVE_REASON_LABEL[String(p?.inactive_reason || '')] || 'Inactivité';
 
-    const confirmed = window.confirm(`Archiver le produit ${code ? `${code} — ` : ''}${name} ?`);
+    const confirmed = await confirmAction({
+      title: 'Archiver le produit',
+      badge: 'Referentiel produits',
+      message: `Archiver le produit ${code ? `${code} - ` : ''}${name} ?`,
+      confirmLabel: 'Archiver',
+      variant: 'warning',
+    });
     if (!confirmed) return;
 
     const suggested = `${reasonLabel} (depuis ${inactiveDays}j)`;
-    const reason = window.prompt("Raison de l'archivage (optionnel) :", suggested) ?? '';
+    const reason = await promptAction({
+      title: 'Raison de l archivage',
+      badge: 'Trace operationnelle',
+      message: 'La raison restera visible dans l historique du produit.',
+      label: 'Raison optionnelle',
+      defaultValue: suggested,
+      confirmLabel: 'Continuer',
+      variant: 'warning',
+      required: false,
+    }) ?? '';
 
     setSubmitting(true);
     try {
@@ -657,7 +679,7 @@ const ProduitsResp = ({ userName, onLogout }) => {
     } finally {
       setSubmitting(false);
     }
-  }, [inactiveDays, load, toast]);
+  }, [confirmAction, inactiveDays, load, promptAction, toast]);
 
   const title = inactiveOnly ? 'Produits inactifs' : 'Référentiel produits';
   const subtitle = inactiveOnly
@@ -1048,7 +1070,7 @@ const ProduitsResp = ({ userName, onLogout }) => {
                         <span>Score {quickSupplier.score ? quickSupplier.score.toFixed(1) : '-'} / 100 • délai {quickSupplier.leadTimeDays || 7}j</span>
                       </>
                     ) : (
-                      'Aucun fournisseur recommandé. Le backend choisira un fournisseur actif si possible.'
+                      'Aucun fournisseur recommande. Le systeme choisira un fournisseur actif si possible.'
                     )}
                   </div>
                 </div>

@@ -1,3 +1,7 @@
+// BLOC 1 - Role du fichier.
+// Ce fichier affiche une page de l'espace magasinier pour SortieStock.
+// Point de vigilance: garder les props, appels API et classes CSS synchronises avec les ecrans existants.
+
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import {
@@ -625,7 +629,7 @@ const SortieStock = ({ userName, onLogout }) => {
                           disabled={!productInfo || !formData.quantite || isGeneratingBond}>
                           <QrCode size={14} /> Générer QR
                         </button>
-                        <span className="ss-hint">Le bon contient produit + quantité + bénéficiaire, avec signature backend.</span>
+                        <span className="ss-hint">Le bon contient produit + quantite + beneficiaire, avec signature securisee.</span>
                       </div>
 
                       {/* Résultat bon interne */}

@@ -1,3 +1,7 @@
+// BLOC 1 - Role du fichier.
+// Ce fichier sert de script de maintenance, seed, test ou migration pour seed-magasinier-large-data.
+// Point de vigilance: ne pas lancer en production sans confirmer les variables .env et la base cible.
+
 require('../loadEnv');
 
 const bcrypt = require('bcryptjs');
@@ -14,6 +18,7 @@ const History = require('../models/History');
 const Supplier = require('../models/Supplier');
 const {
   HUMANIZED_CORE_USERS,
+  LEGACY_CORE_USER_EMAILS,
   HUMANIZED_PRODUCTS,
   HUMANIZED_SUPPLIERS,
   HUMANIZED_USERS,
@@ -96,6 +101,7 @@ async function ensureUser({ role, username, email, telephone, password }) {
 
 async function ensureCoreUsers() {
   const byRole = new Map(HUMANIZED_CORE_USERS.map((user) => [user.role, user]));
+  const activeCoreEmails = new Set(HUMANIZED_CORE_USERS.map((user) => String(user.email || '').trim().toLowerCase()));
 
   const responsableSeed = byRole.get('responsable');
   const responsable = await ensureUser({
@@ -123,6 +129,16 @@ async function ensureCoreUsers() {
       role: 'demandeur',
       password: process.env.TEST_DEMANDEUR_PASSWORD || 'ChangeMe_Demandeur_123',
     }));
+  }
+
+  const obsoleteCoreEmails = LEGACY_CORE_USER_EMAILS
+    .map((email) => String(email || '').trim().toLowerCase())
+    .filter((email) => email && !activeCoreEmails.has(email));
+  if (obsoleteCoreEmails.length > 0) {
+    await User.updateMany(
+      { email: { $in: obsoleteCoreEmails } },
+      { $set: { status: 'blocked' } }
+    );
   }
 
   return { responsable, magasinier, demandeurs };

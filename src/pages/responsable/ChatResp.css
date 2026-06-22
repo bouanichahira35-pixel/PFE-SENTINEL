@@ -1,3 +1,9 @@
+/*
+ * BLOC 1 - Role du fichier.
+ * Ce fichier affiche une page de l'espace responsable pour ChatResp.
+ * Point de vigilance: garder les props, appels API et classes CSS synchronises avec les ecrans existants.
+ */
+
  .chat-main {
    padding: 0 !important;
  }
@@ -279,5 +285,97 @@
 
    .chat-contacts {
      display: none;
+   }
+ }
+
+ /* Correctif structurel commun aux chats magasinier/responsable.
+    Le conteneur reste dans la hauteur disponible sous HeaderPage et seule
+    la liste des messages scrolle. */
+ .main-content.chat-main {
+   height: calc(100dvh - 64px);
+   min-height: 0;
+   overflow: hidden !important;
+   display: flex;
+ }
+
+ .chat-container,
+ .chat-container.resp {
+   flex: 1;
+   height: 100%;
+   min-height: 0;
+   overflow: hidden;
+ }
+
+ .chat-container {
+   display: grid;
+   grid-template-columns: 300px minmax(0, 1fr);
+   background: var(--color-bg-primary);
+ }
+
+ .chat-container.resp {
+   grid-template-columns: 300px minmax(0, 1fr);
+ }
+
+ .chat-contacts,
+ .chat-area,
+ .chat-messages {
+   min-height: 0;
+ }
+
+ .chat-area {
+   overflow: hidden;
+ }
+
+ .chat-messages {
+   flex: 1 1 auto;
+   overflow-y: auto;
+ }
+
+ .chat-input {
+   flex: 0 0 auto;
+   position: relative;
+   z-index: 2;
+   box-sizing: border-box;
+ }
+
+ .chat-input input {
+   min-width: 0;
+ }
+
+ .chat-container:not(.resp) .message.sent .message-bubble,
+ .chat-container:not(.resp) .chat-input button {
+   background: var(--color-primary);
+ }
+
+ .chat-container.resp .message.sent .message-bubble,
+ .chat-container.resp .chat-input button,
+ .chat-container.resp .chat-input button.resp {
+   background: var(--color-accent);
+ }
+
+ .chat-container:not(.resp) .chat-input button:hover:not(:disabled) {
+   background: var(--color-primary-dark);
+ }
+
+ .chat-container.resp .chat-input button:hover:not(:disabled),
+ .chat-container.resp .chat-input button.resp:hover:not(:disabled) {
+   background: #047857;
+ }
+
+ .chat-container.resp .contact-item.active {
+   background: rgba(5, 150, 105, 0.1);
+   border-left: 3px solid var(--color-accent);
+   padding-left: calc(1.5rem - 3px);
+ }
+
+ .chat-container.resp .chat-input input:focus {
+   border-color: var(--color-accent);
+   box-shadow: 0 0 0 3px rgba(5, 150, 105, 0.12);
+ }
+
+ @media (max-width: 768px) {
+   .chat-container,
+   .chat-container.resp {
+     grid-template-columns: 1fr;
    }
  }

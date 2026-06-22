@@ -1,3 +1,7 @@
+// BLOC 1 - Role du fichier.
+// Ce fichier contient la logique metier reutilisable du domaine stockRulesService, appelee par les routes ou les jobs.
+// Point de vigilance: preserver les contrats appeles par plusieurs routes.
+
 const AppSetting = require('../models/AppSetting');
 const { STOCK_RULES_DEFAULT, sanitizeStockRulesConfig } = require('../constants/stockRules');
 

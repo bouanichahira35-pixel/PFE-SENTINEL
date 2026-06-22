@@ -1,3 +1,7 @@
+// BLOC 1 - Role du fichier.
+// Ce fichier sert de script de maintenance, seed, test ou migration pour export-ai-dataset.
+// Point de vigilance: ne pas lancer en production sans confirmer les variables .env et la base cible.
+
 require('../loadEnv');
 const mongoose = require('../db');
 const AppSetting = require('../models/AppSetting');

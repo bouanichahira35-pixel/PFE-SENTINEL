@@ -1,17 +1,26 @@
+// BLOC 1 - Role du fichier.
+// Ce fichier contient la logique metier reutilisable du domaine mobileSyncService, appelee par les routes ou les jobs.
+// Point de vigilance: preserver les contrats appeles par plusieurs routes.
+
 const Product = require('../models/Product');
+const Category = require('../models/Category');
+const Request = require('../models/Request');
 const StockEntry = require('../models/StockEntry');
 const StockExit = require('../models/StockExit');
 const StockLot = require('../models/StockLot');
 const InventorySession = require('../models/InventorySession');
 const InventoryCount = require('../models/InventoryCount');
 const History = require('../models/History');
+const Notification = require('../models/Notification');
 const Sequence = require('../models/Sequence');
 const SyncEvent = require('../models/SyncEvent');
+const User = require('../models/User');
 const { Inventory } = require('../models/Inventory');
 const { PERMISSIONS } = require('../constants/permissions');
 const { getRolePermissions } = require('./rbacPolicyService');
 const { runInTransaction } = require('./transactionService');
 const { evaluateProductAlerts } = require('./alertService');
+const { normalizeRequestStatus } = require('../utils/requestStatus');
 const {
   asDate,
   asNonNegativeNumber,
@@ -28,6 +37,10 @@ const EVENT_PERMISSIONS = {
   stock_exit_create: PERMISSIONS.STOCK_EXIT_CREATE,
   delivery_signed: PERMISSIONS.STOCK_EXIT_CREATE,
   inventory_count: PERMISSIONS.INVENTORY_MANAGE,
+  request_create: PERMISSIONS.REQUEST_CREATE,
+  request_update: PERMISSIONS.REQUEST_UPDATE_OWN,
+  request_cancel: PERMISSIONS.REQUEST_UPDATE_OWN,
+  request_confirm_receipt: PERMISSIONS.REQUEST_UPDATE_OWN,
 };
 
 class SyncBusinessError extends Error {
@@ -128,6 +141,10 @@ async function dispatchEvent({ user, event, session }) {
   if (event.type === 'stock_exit_create') return processStockExit({ user, event, session });
   if (event.type === 'delivery_signed') return processDeliverySignature({ event });
   if (event.type === 'inventory_count') return processInventoryCount({ user, event, session });
+  if (event.type === 'request_create') return processRequestCreate({ user, event, session });
+  if (event.type === 'request_update') return processRequestUpdate({ user, event, session });
+  if (event.type === 'request_cancel') return processRequestCancel({ user, event, session });
+  if (event.type === 'request_confirm_receipt') return processRequestConfirmReceipt({ user, event, session });
   throw new SyncBusinessError('type evenement non supporte', { code: 'unsupported_event' });
 }
 
@@ -403,6 +420,218 @@ async function processInventoryCount({ user, event, session }) {
   return { entity: 'inventory_session', id: String(sessionDoc._id), reference, lines: savedLines };
 }
 
+async function processRequestCreate({ user, event, session }) {
+  if (user.role !== 'demandeur') {
+    throw new SyncBusinessError('Creation demande reservee au demandeur', { code: 'permission_denied', status: 403 });
+  }
+
+  const payload = event.payload || {};
+  const productId = String(payload.productId || payload.product_id || payload.product || '').trim();
+  if (!isValidObjectIdLike(productId)) {
+    throw new SyncBusinessError('productId invalide', { code: 'invalid_product' });
+  }
+
+  const quantityRequested = asPositiveNumber(payload.quantityRequested ?? payload.quantity_requested ?? payload.quantity);
+  if (Number.isNaN(quantityRequested) || quantityRequested === undefined) {
+    throw new SyncBusinessError('Quantite demandee invalide', { code: 'invalid_quantity' });
+  }
+
+  const directionLaboratory = cleanText(payload.directionLaboratory || payload.direction_laboratory, 80);
+  if (!directionLaboratory || !isSafeText(directionLaboratory, { min: 2, max: 80 })) {
+    throw new SyncBusinessError('Direction / laboratoire obligatoire', { code: 'invalid_direction' });
+  }
+
+  const product = await Product.findById(productId).select('_id category lifecycle_status name code_product').session(session).lean();
+  if (!product) throw new SyncBusinessError('Produit introuvable', { code: 'product_not_found', status: 404 });
+  if (String(product.lifecycle_status || 'active') !== 'active') {
+    throw new SyncBusinessError('Produit archive / indisponible', { code: 'product_archived', status: 409 });
+  }
+
+  const profile = String(user?.demandeur_profile || 'bureautique');
+  const allowedCategories = await Category.find({
+    $or: [{ audiences: { $exists: false } }, { audiences: { $size: 0 } }, { audiences: profile }],
+  }).select('_id').session(session).lean();
+  const allowedIds = new Set(allowedCategories.map((c) => String(c._id)));
+  if (product.category && !allowedIds.has(String(product.category))) {
+    throw new SyncBusinessError('Categorie non autorisee pour ce demandeur', { code: 'category_forbidden', status: 403 });
+  }
+
+  const requestPayload = {
+    product: product._id,
+    quantity_requested: quantityRequested,
+    direction_laboratory: directionLaboratory,
+    beneficiary: user.username,
+    note: cleanText(payload.note, 600),
+    demandeur: user.id,
+    status: 'pending',
+    date_request: event.eventTimeDevice || new Date(),
+    priority: normalizeRequestPriority(payload.priority),
+  };
+
+  const created = await createOne(Request, requestPayload, session);
+  await createOne(History, {
+    action_type: 'request',
+    user: user.id,
+    product: created.product,
+    request: created._id,
+    quantity: created.quantity_requested,
+    source: 'ui',
+    description: 'Demande mobile synchronisee',
+    status_after: created.status,
+    actor_role: user.role,
+    correlation_id: event.id,
+    tags: ['mobile_sync', 'request', 'create'],
+    context: {
+      note: created.note || null,
+      direction_laboratory: created.direction_laboratory || null,
+      beneficiary: created.beneficiary || null,
+    },
+    ai_features: {
+      quantity_requested: Number(created.quantity_requested || 0),
+      priority: String(created.priority || 'normal'),
+    },
+  }, session);
+
+  await notifyResponsablesForMobileRequest({ requestDoc: created, product, user, session });
+  return { entity: 'request', id: String(created._id), status: created.status };
+}
+
+async function processRequestUpdate({ user, event, session }) {
+  const reqDoc = await getOwnRequestForMobileMutation({ user, event, session });
+  if (normalizeRequestStatus(reqDoc.status) !== 'pending') {
+    throw new SyncBusinessError('Modification possible uniquement en attente', { code: 'request_not_pending', status: 409 });
+  }
+
+  const payload = event.payload || {};
+  const changes = {};
+
+  if (payload.quantityRequested !== undefined || payload.quantity_requested !== undefined || payload.quantity !== undefined) {
+    const quantityRequested = asPositiveNumber(payload.quantityRequested ?? payload.quantity_requested ?? payload.quantity);
+    if (Number.isNaN(quantityRequested) || quantityRequested === undefined) {
+      throw new SyncBusinessError('Quantite demandee invalide', { code: 'invalid_quantity' });
+    }
+    changes.quantity_requested = { before: Number(reqDoc.quantity_requested || 0), after: quantityRequested };
+    reqDoc.quantity_requested = quantityRequested;
+  }
+
+  if (payload.directionLaboratory !== undefined || payload.direction_laboratory !== undefined) {
+    const directionLaboratory = cleanText(payload.directionLaboratory || payload.direction_laboratory, 80);
+    if (!directionLaboratory || !isSafeText(directionLaboratory, { min: 2, max: 80 })) {
+      throw new SyncBusinessError('Direction / laboratoire obligatoire', { code: 'invalid_direction' });
+    }
+    changes.direction_laboratory = { before: String(reqDoc.direction_laboratory || ''), after: directionLaboratory };
+    reqDoc.direction_laboratory = directionLaboratory;
+  }
+
+  if (payload.note !== undefined) {
+    const nextNote = cleanText(payload.note, 600);
+    changes.note = { before: String(reqDoc.note || ''), after: String(nextNote || '') };
+    reqDoc.note = nextNote || undefined;
+  }
+
+  if (payload.priority !== undefined) {
+    const nextPriority = normalizeRequestPriority(payload.priority, null);
+    if (!nextPriority) throw new SyncBusinessError('Priorite invalide', { code: 'invalid_priority' });
+    changes.priority = { before: String(reqDoc.priority || 'normal'), after: nextPriority };
+    reqDoc.priority = nextPriority;
+  }
+
+  if (Object.keys(changes).length === 0) {
+    throw new SyncBusinessError('Aucune modification', { code: 'empty_update' });
+  }
+
+  await reqDoc.save({ session });
+  await createOne(History, {
+    action_type: 'request',
+    user: user.id,
+    product: reqDoc.product?._id || reqDoc.product,
+    request: reqDoc._id,
+    quantity: reqDoc.quantity_requested,
+    source: 'ui',
+    description: 'Demande mobile modifiee',
+    status_after: reqDoc.status,
+    actor_role: user.role,
+    correlation_id: event.id,
+    tags: ['mobile_sync', 'request', 'update', reqDoc.status],
+    context: { changes },
+  }, session);
+
+  return { entity: 'request', id: String(reqDoc._id), status: normalizeRequestStatus(reqDoc.status) };
+}
+
+async function processRequestCancel({ user, event, session }) {
+  const reqDoc = await getOwnRequestForMobileMutation({ user, event, session });
+  if (normalizeRequestStatus(reqDoc.status) !== 'pending') {
+    throw new SyncBusinessError('Annulation possible uniquement en attente', { code: 'request_not_pending', status: 409 });
+  }
+
+  const statusBefore = reqDoc.status;
+  reqDoc.status = 'cancelled';
+  reqDoc.cancelled_at = new Date();
+  reqDoc.cancelled_by = user.id;
+  const note = cleanText(event.payload?.note, 600);
+  reqDoc.note = note || reqDoc.note;
+  await reqDoc.save({ session });
+
+  await createOne(History, {
+    action_type: 'request',
+    user: user.id,
+    product: reqDoc.product?._id || reqDoc.product,
+    request: reqDoc._id,
+    quantity: reqDoc.quantity_requested,
+    source: 'ui',
+    description: `Demande mobile annulee: ${normalizeRequestStatus(statusBefore)} -> cancelled`,
+    status_before: statusBefore,
+    status_after: reqDoc.status,
+    actor_role: user.role,
+    correlation_id: event.id,
+    tags: ['mobile_sync', 'request', 'cancel'],
+  }, session);
+
+  return { entity: 'request', id: String(reqDoc._id), status: 'cancelled' };
+}
+
+async function processRequestConfirmReceipt({ user, event, session }) {
+  const reqDoc = await getOwnRequestForMobileMutation({ user, event, session });
+  if (normalizeRequestStatus(reqDoc.status) !== 'served') {
+    throw new SyncBusinessError('Confirmation possible uniquement apres service', { code: 'request_not_served', status: 409 });
+  }
+
+  const tokenProvided = cleanText(event.payload?.receiptToken || event.payload?.receipt_token, 40);
+  const stored = cleanText(reqDoc.receipt_token, 40);
+  if (stored && !tokenProvided) throw new SyncBusinessError('Code de retrait requis', { code: 'receipt_token_required', status: 409 });
+  if (stored && tokenProvided && tokenProvided !== stored) {
+    throw new SyncBusinessError('Code de retrait invalide', { code: 'invalid_receipt_token', status: 409 });
+  }
+
+  const statusBefore = reqDoc.status;
+  reqDoc.status = 'received';
+  reqDoc.received_at = new Date();
+  reqDoc.received_by = user.id;
+  await reqDoc.save({ session });
+
+  await createOne(History, {
+    action_type: 'request',
+    user: user.id,
+    product: reqDoc.product?._id || reqDoc.product,
+    request: reqDoc._id,
+    quantity: reqDoc.quantity_requested,
+    source: 'ui',
+    description: `Demande mobile cloturee: ${normalizeRequestStatus(statusBefore)} -> received`,
+    status_before: statusBefore,
+    status_after: reqDoc.status,
+    actor_role: user.role,
+    correlation_id: event.id,
+    tags: ['mobile_sync', 'request', 'confirm_receipt'],
+    context: {
+      received_at: reqDoc.received_at,
+      stock_exit_id: reqDoc.stock_exit || null,
+    },
+  }, session);
+
+  return { entity: 'request', id: String(reqDoc._id), status: 'received' };
+}
+
 async function createOne(Model, payload, session) {
   if (session) {
     const [created] = await Model.create([payload], { session });
@@ -581,6 +810,64 @@ function buildExitNote(payload) {
   if (payload.hse_ack?.riskLevel) parts.push(`Risque HSE: ${cleanText(payload.hse_ack.riskLevel, 40)}`);
   if (payload.photos?.length) parts.push('Photo terrain presente dans evenement mobile');
   return parts.join(' | ') || 'Sortie saisie depuis mobile';
+}
+
+function normalizeRequestPriority(value, fallback = 'normal') {
+  const raw = String(value || '').trim().toLowerCase();
+  if (raw === 'urgent') return 'urgent';
+  if (raw === 'critical' || raw === 'tres_urgent' || raw === 'tres_urgente') return 'critical';
+  if (raw === 'normal') return 'normal';
+  return fallback;
+}
+
+async function getOwnRequestForMobileMutation({ user, event, session }) {
+  if (user.role !== 'demandeur') {
+    throw new SyncBusinessError('Operation reservee au demandeur', { code: 'permission_denied', status: 403 });
+  }
+
+  const requestId = String(event.payload?.requestId || event.payload?.request_id || event.payload?.remoteId || '').trim();
+  if (!isValidObjectIdLike(requestId)) {
+    throw new SyncBusinessError('requestId invalide', { code: 'invalid_request' });
+  }
+
+  const reqDoc = await Request.findById(requestId)
+    .populate('product')
+    .session(session);
+  if (!reqDoc) throw new SyncBusinessError('Demande introuvable', { code: 'request_not_found', status: 404 });
+
+  const demandeurId = String(reqDoc.demandeur?._id || reqDoc.demandeur || '');
+  if (demandeurId !== String(user.id)) {
+    throw new SyncBusinessError('Permission refusee', { code: 'permission_denied', status: 403 });
+  }
+
+  return reqDoc;
+}
+
+async function notifyResponsablesForMobileRequest({ requestDoc, product, user, session }) {
+  const responsables = await User.find({ role: 'responsable', status: 'active' })
+    .select('_id username role')
+    .session(session)
+    .lean();
+  if (!responsables.length) return;
+
+  const priority = String(requestDoc.priority || 'normal').trim().toLowerCase();
+  const urgent = priority === 'urgent' || priority === 'critical';
+  const urgentLabel = priority === 'critical' ? 'TRES URGENT' : priority === 'urgent' ? 'URGENT' : 'NORMAL';
+  const productName = product?.name || 'Produit';
+  const title = urgent ? `[${urgentLabel}] Nouvelle demande mobile` : 'Nouvelle demande mobile';
+  const message = `Nouvelle demande mobile: ${productName}, quantite ${Number(requestDoc.quantity_requested || 0)}, demandeur ${user.username || 'Demandeur'}.`;
+
+  await Notification.insertMany(
+    responsables.map((responsable) => ({
+      user: responsable._id,
+      title,
+      message,
+      type: urgent ? 'alert' : 'info',
+      is_read: false,
+      event_type: 'REQUEST_CREATED_FOR_RESPONSABLE',
+    })),
+    { session }
+  );
 }
 
 module.exports = {

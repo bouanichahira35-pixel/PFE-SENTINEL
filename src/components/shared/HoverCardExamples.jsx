@@ -1,3 +1,7 @@
+// BLOC 1 - Role du fichier.
+// Ce fichier fournit un composant React partage pour HoverCardExamples.
+// Point de vigilance: garder les props, appels API et classes CSS synchronises avec les ecrans existants.
+
 import React from 'react';
 import HoverCard from './HoverCard';
 import './HoverCard.css';

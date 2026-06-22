@@ -1,3 +1,9 @@
+/*
+ * BLOC 1 - Role du fichier.
+ * Ce fichier fournit un composant React partage pour InlineQrScanner.
+ * Point de vigilance: garder les props, appels API et classes CSS synchronises avec les ecrans existants.
+ */
+
 .inline-qr-scanner {
   border: 1px solid var(--border-color, #d9e2ec);
   border-radius: 12px;

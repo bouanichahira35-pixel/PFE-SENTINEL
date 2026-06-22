@@ -1,3 +1,7 @@
+// BLOC 1 - Role du fichier.
+// Ce fichier expose les endpoints REST du domaine inventory et controle les regles d'acces cote API.
+// Point de vigilance: verifier l'authentification, les roles et les validations avant toute modification.
+
 const router = require('express').Router();
 
 const requireAuth = require('../middlewares/requireAuth');
@@ -20,6 +24,8 @@ const StockExit = require('../models/StockExit');
 const Sequence = require('../models/Sequence');
 const History = require('../models/History');
 const { runInTransaction } = require('../services/transactionService');
+const { enqueueMail } = require('../services/mailQueueService');
+const { getUserPreferences, canSendNotificationEmail } = require('../services/userPreferencesService');
 
 const { asDate, asNonNegativeNumber, asOptionalString, asTrimmedString, isSafeText, isValidObjectIdLike } = require('../utils/validation');
 
@@ -84,6 +90,47 @@ const INVENTORY_FAMILIES = [
   { value: 'consommable_laboratoire', label: 'Consommable laboratoire' },
   { value: 'consommable_informatique', label: 'Consommable informatique' },
 ];
+
+function escapeHtml(value) {
+  return String(value || '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
+async function sendInventoryNotificationEmails({ userIds, title, message, eventType, inventoryId }) {
+  try {
+    const ids = [...new Set((userIds || []).map((id) => String(id || '').trim()).filter(Boolean))];
+    if (!ids.length) return;
+
+    const users = await User.find({ _id: { $in: ids }, status: 'active' })
+      .select('_id email role username')
+      .lean();
+
+    for (const user of users) {
+      if (!user.email) continue;
+      try {
+        const prefs = await getUserPreferences(user._id);
+        if (!canSendNotificationEmail(prefs, 'inventory')) continue;
+        await enqueueMail({
+          kind: eventType || 'inventory_notification',
+          role: user.role,
+          to: user.email,
+          subject: title,
+          text: message,
+          html: `<pre style="font-family:monospace;white-space:pre-wrap;">${escapeHtml(message)}</pre>`,
+          job_id: `${eventType || 'inventory'}_${inventoryId || 'na'}_${user._id}_${Date.now()}`,
+        });
+      } catch {
+        // best-effort: inventory state must not depend on email delivery
+      }
+    }
+  } catch {
+    // best-effort
+  }
+}
 
 const MOTIFS_ECART = [
   'CASSE',
@@ -770,6 +817,14 @@ router.post(
         );
       });
 
+      await sendInventoryNotificationEmails({
+        userIds: listAssignedMagasinierIds(inv),
+        title: 'Recomptage demande',
+        message: `Le responsable demande un recomptage pour l'inventaire ${inv.reference}. Motif : ${motif}`,
+        eventType: 'RECOUNT_REQUESTED',
+        inventoryId: inv._id,
+      });
+
       return res.json({ ok: true, inventory: { id: inv._id, status: inv.status }, targets_count: targetIds.length });
     } catch (err) {
       return res.status(400).json({ error: 'Failed to request recount', details: err.message });
@@ -834,6 +889,14 @@ router.post(
           })),
           mongoSession ? { session: mongoSession } : undefined
         );
+      });
+
+      await sendInventoryNotificationEmails({
+        userIds: listAssignedMagasinierIds(inv),
+        title: 'Inventaire rejete',
+        message: `Votre inventaire ${inv.reference} a ete rejete. Motif : ${motif}`,
+        eventType: 'INVENTORY_REJECTED',
+        inventoryId: inv._id,
       });
 
       return res.json({ ok: true, inventory: { id: inv._id, status: inv.status } });
@@ -977,6 +1040,14 @@ router.post('/responsable/inventories/:id/validate', async (req, res) => {
       );
     });
 
+    await sendInventoryNotificationEmails({
+      userIds: listAssignedMagasinierIds(inv),
+      title: 'Inventaire valide',
+      message: `Votre inventaire ${inv.reference} a ete valide par le responsable.`,
+      eventType: 'INVENTORY_VALIDATED',
+      inventoryId: inv._id,
+    });
+
     return res.json({ ok: true, inventory: { id: inv._id, reference: inv.reference, status: inv.status }, adjustments });
   } catch (err) {
     return res.status(500).json({ error: 'Failed to validate inventory', details: err.message });
@@ -991,7 +1062,7 @@ router.get('/magasinier/missions', async (req, res) => {
 
     const q = {
       $or: [{ magasinier_id: req.user.id }, { magasinier_ids: req.user.id }],
-      status: { $in: ['A_FAIRE', 'EN_COURS', 'A_RECOMPTER', 'A_VALIDER', 'VALIDE', 'REJETE'] },
+      status: { $in: ['A_FAIRE', 'EN_COURS', 'A_RECOMPTER', 'A_VALIDER', 'VALIDE', 'REJETE', 'ANNULE'] },
     };
 
     const items = await Inventory.find(q)
@@ -1412,6 +1483,16 @@ router.post('/magasinier/inventories/:id/submit', async (req, res) => {
       );
     });
 
+    await sendInventoryNotificationEmails({
+      userIds: [inv.responsable_id],
+      title: oldStatus === 'A_RECOMPTER' ? 'Recomptage termine' : 'Inventaire en attente de validation',
+      message: oldStatus === 'A_RECOMPTER'
+        ? `Le magasinier a termine le recomptage de l'inventaire ${inv.reference}.`
+        : `Le magasinier a termine le comptage de l'inventaire ${inv.reference}.`,
+      eventType: oldStatus === 'A_RECOMPTER' ? 'RECOUNT_FINISHED' : 'INVENTORY_TO_VALIDATE',
+      inventoryId: inv._id,
+    });
+
     return res.json({ ok: true, inventory: { id: inv._id, reference: inv.reference, status: inv.status } });
   } catch (err) {
     return res.status(500).json({ error: 'Failed to submit inventory', details: err.message });
@@ -1604,6 +1685,14 @@ router.post(
             mongoSession ? { session: mongoSession } : undefined
           );
         }
+      });
+
+      await sendInventoryNotificationEmails({
+        userIds: listAssignedMagasinierIds(inv),
+        title: 'Inventaire annule',
+        message: `L'inventaire ${inv.reference} a ete annule. Motif : ${motif}`,
+        eventType: 'INVENTORY_CANCELLED',
+        inventoryId: inv._id,
       });
 
       return res.json({ ok: true, inventory: { id: inv._id, reference: inv.reference, status: inv.status } });
@@ -1951,8 +2040,24 @@ router.post(
           notificationsCreated = targets.length;
         }
 
-        return { inventory, notifications_created: notificationsCreated, lines_count: lines.length };
+        return {
+          inventory,
+          notifications_created: notificationsCreated,
+          lines_count: lines.length,
+          assigned_user_ids: orderedMagasiniers.map((u) => u._id),
+        };
       });
+
+      if (notificationsActives && Number(result.notifications_created || 0) > 0) {
+        const typeLabel = typeInventaire === 'GLOBAL' ? 'GLOBAL' : 'TOURNANT';
+        await sendInventoryNotificationEmails({
+          userIds: result.assigned_user_ids,
+          title: "Nouvelle mission d'inventaire",
+          message: `Une nouvelle mission d'inventaire ${typeLabel} vous a ete assignee (${reference}).`,
+          eventType: 'NEW_INVENTORY_MISSION',
+          inventoryId: result.inventory?._id,
+        });
+      }
 
       return res.status(201).json({
         ok: true,

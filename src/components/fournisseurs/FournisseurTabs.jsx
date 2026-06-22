@@ -1,3 +1,7 @@
+// BLOC 1 - Role du fichier.
+// Ce fichier fournit un composant React specialise pour FournisseurTabs.
+// Point de vigilance: garder les props, appels API et classes CSS synchronises avec les ecrans existants.
+
 import { FileText, History, LayoutDashboard, ShieldAlert, ShoppingCart, Star, Tag } from 'lucide-react';
 import { NavLink } from 'react-router-dom';
 import './fournisseurs.css';

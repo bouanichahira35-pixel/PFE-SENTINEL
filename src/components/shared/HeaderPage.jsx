@@ -1,3 +1,7 @@
+// BLOC 1 - Role du fichier.
+// Ce fichier fournit un composant React partage pour HeaderPage.
+// Point de vigilance: garder les props, appels API et classes CSS synchronises avec les ecrans existants.
+
 import { useEffect, useRef, useState } from 'react';
 import { Search, Bell, Moon, Sun, User, RefreshCw, Menu } from 'lucide-react';
 import useTheme from '../../hooks/useTheme';
@@ -52,6 +56,8 @@ const HeaderPage = ({
       notifAria: 'Voir les notifications',
       replyMailLabel: 'Email reponses de mes demandes',
       replyMailDesc: 'Recevoir un email seulement quand la demande est traitee',
+      markAllRead: 'Tout marquer comme lu',
+      bySubject: 'Par sujet',
       enabled: 'Active',
       disabled: 'Desactive',
     },
@@ -71,6 +77,8 @@ const HeaderPage = ({
       notifAria: 'Open notifications',
       replyMailLabel: 'Request response emails',
       replyMailDesc: 'Receive email only when your request is processed',
+      markAllRead: 'Mark all as read',
+      bySubject: 'By subject',
       enabled: 'Enabled',
       disabled: 'Disabled',
     },
@@ -156,6 +164,143 @@ const HeaderPage = ({
       // keep panel usable even if mark-read fails
     }
   };
+
+  const markAllNotificationsRead = async () => {
+    if (!unreadCount) return;
+    try {
+      await patch('/notifications/read-all', {});
+      setNotifications((prev) => prev.map((n) => ({ ...n, is_read: true })));
+    } catch {
+      // keep panel usable even if mark-all fails
+    }
+  };
+
+  const formatNotificationDate = (value) => {
+    if (!value) return '';
+    const d = new Date(value);
+    if (Number.isNaN(d.getTime())) return '';
+    return d.toLocaleString(language === 'en' ? 'en-US' : 'fr-FR', {
+      day: '2-digit',
+      month: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit',
+    });
+  };
+
+  const classifyNotification = (notification) => {
+    const event = String(notification?.event_type || '').toLowerCase();
+    const titleText = String(notification?.title || '').toLowerCase();
+    const messageText = String(notification?.message || '').toLowerCase();
+    const raw = `${event} ${titleText} ${messageText}`;
+
+    if (
+      event.includes('inventory_to_validate')
+      || event.includes('recount_finished')
+      || raw.includes('en attente de validation')
+    ) {
+      return { context: 'Inventaire' };
+    }
+
+    if (
+      event.includes('stock_anomaly')
+      || raw.includes('anomalie')
+      || raw.includes('sortie anormale')
+    ) {
+      return { context: 'Anomalies' };
+    }
+
+    if (
+      event.includes('inventory')
+      || event.includes('recount')
+      || raw.includes('inventaire')
+      || raw.includes('recomptage')
+      || raw.includes('mission')
+    ) {
+      return { context: 'Inventaire' };
+    }
+
+    if (
+      event.includes('request_receipt_confirmed')
+      || raw.includes('reception confirmee')
+      || raw.includes('a confirme la reception')
+    ) {
+      return { context: 'Demandes' };
+    }
+
+    if (
+      event.includes('request_served_for_demandeur')
+    ) {
+      return { context: 'Demandes' };
+    }
+
+    if (
+      event.includes('request')
+      || raw.includes('demande')
+      || raw.includes('statut de votre demande')
+      || raw.includes('demande cloturee')
+    ) {
+      return { context: 'Demandes' };
+    }
+
+    if (
+      event.includes('product')
+      || raw.includes('catalogue')
+      || raw.includes('produit archive')
+      || raw.includes('nouveau produit')
+    ) {
+      return { context: 'Catalogue' };
+    }
+
+    if (
+      event.includes('supplier')
+      || event.includes('purchase')
+      || raw.includes('fournisseur')
+      || raw.includes('commande')
+    ) {
+      return { context: 'Achats' };
+    }
+
+    if (
+      raw.includes('stock')
+      || raw.includes('sortie')
+      || raw.includes('rupture')
+      || raw.includes('seuil')
+    ) {
+      return { context: 'Stock' };
+    }
+
+    if (
+      event.includes('user')
+      || event.includes('support')
+      || event.includes('admin')
+      || event.includes('email')
+      || event.includes('login')
+      || event.includes('password')
+    ) {
+      return { context: 'Administration' };
+    }
+
+    return { context: 'General' };
+  };
+
+  const groupedNotifications = ['Demandes', 'Inventaire', 'Anomalies', 'Stock', 'Catalogue', 'Achats', 'Administration', 'General']
+    .map((context) => {
+      const items = notifications
+        .map((n) => ({ ...n, notificationGroup: classifyNotification(n) }))
+        .filter((n) => n.notificationGroup.context === context);
+
+      return {
+        context,
+        label: context,
+        unread: items.filter((n) => !n.is_read).length,
+        items,
+      };
+    })
+    .filter((group) => group.items.length > 0);
+
+  useEffect(() => {
+    loadNotifications();
+  }, []);
 
   useEffect(() => {
     if (!notificationsOpen) return undefined;
@@ -254,6 +399,14 @@ const HeaderPage = ({
             <div className="notif-panel" role="dialog" aria-label="Notifications">
               <div className="notif-panel-header">
                 <strong>{i18n.notifications}</strong>
+                <button
+                  type="button"
+                  className="notif-mark-all"
+                  onClick={markAllNotificationsRead}
+                  disabled={loadingNotifications || unreadCount === 0}
+                >
+                  {i18n.markAllRead || 'Tout marquer comme lu'}
+                </button>
               </div>
               {isDemandeur && (
                 <div className="notif-settings-row">
@@ -280,17 +433,35 @@ const HeaderPage = ({
                 {!loadingNotifications && notifications.length === 0 && (
                   <div className="notif-empty">{i18n.none}</div>
                 )}
-                {!loadingNotifications && notifications.map((n) => (
-                  <button
-                    key={n._id}
-                    className={`notif-item ${n.is_read ? 'read' : 'unread'}`}
-                    onClick={() => markNotificationRead(n._id)}
-                    title={n.message}
-                  >
-                    <div className="notif-title">{n.title || i18n.notifItemTitle}</div>
-                    <div className="notif-message">{n.message || '-'}</div>
-                  </button>
-                ))}
+                {!loadingNotifications && groupedNotifications.length > 0 && (
+                  <div className="notif-groups" aria-label={i18n.bySubject || 'Par sujet'}>
+                    {groupedNotifications.map((group) => (
+                      <section className="notif-group" key={group.context}>
+                        <div className="notif-group-header">
+                          <span>{group.label}</span>
+                          <span>{group.unread > 0 ? `${group.unread}/${group.items.length}` : group.items.length}</span>
+                        </div>
+                        {group.items.map((n) => (
+                          <button
+                            key={n._id}
+                            className={`notif-item ${n.is_read ? 'read' : 'unread'}`}
+                            onClick={() => markNotificationRead(n._id)}
+                            aria-label={`${n.title || i18n.notifItemTitle}. ${n.message || ''}`}
+                          >
+                            <div className="notif-item-top">
+                              <div className="notif-title">{n.title || i18n.notifItemTitle}</div>
+                              {formatNotificationDate(n.createdAt) && (
+                                <span className="notif-date">{formatNotificationDate(n.createdAt)}</span>
+                              )}
+                            </div>
+                            <div className="notif-context">{n.notificationGroup.context}</div>
+                            <div className="notif-message">{n.message || '-'}</div>
+                          </button>
+                        ))}
+                      </section>
+                    ))}
+                  </div>
+                )}
               </div>
             </div>
           )}

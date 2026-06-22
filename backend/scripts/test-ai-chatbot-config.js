@@ -1,3 +1,7 @@
+// BLOC 1 - Role du fichier.
+// Ce fichier sert de script de maintenance, seed, test ou migration pour test-ai-chatbot-config.
+// Point de vigilance: ne pas lancer en production sans confirmer les variables .env et la base cible.
+
 require('../loadEnv');
 
 const { spawn, spawnSync } = require('child_process');
@@ -91,6 +95,7 @@ async function run() {
     AI_AUTO_TRAIN_ON_BOOT: 'false',
     MAIL_QUEUE_ENABLED: 'false',
     GEMINI_API_KEY: '',
+    GROQ_API_KEY: '',
     // Tests run in parallel with local UI sessions; avoid revoking sessions unexpectedly.
     SINGLE_SESSION_MODE: 'false',
   };
@@ -136,6 +141,9 @@ async function run() {
     assert(statusResp?.ok === true, 'assistant status should return ok=true');
     assert(typeof statusResp?.capabilities?.assistant_ask?.enabled === 'boolean', 'assistant_ask capability missing');
     assert(typeof statusResp?.capabilities?.assistant_voice_ask?.enabled === 'boolean', 'assistant_voice_ask capability missing');
+    assert(statusResp?.providers?.groq?.configured === false, 'groq provider should be false without GROQ_API_KEY');
+    assert(statusResp?.providers?.gemini?.configured === false, 'gemini provider should be false without GEMINI_API_KEY');
+    assert(statusResp?.active_text_provider === 'fallback', 'active_text_provider should be fallback without Groq/Gemini');
 
     try {
       await magApi.get('/ai/assistant/status');
@@ -198,6 +206,35 @@ async function run() {
     assert(askResp?.ok === true, 'assistant ask should return ok=true');
     assert(String(askResp?.answer || '').trim().length > 0, 'assistant answer should not be empty');
     assert(Array.isArray(askResp?.partial_warnings), 'assistant partial_warnings should be an array');
+    assert(['groq', 'gemini', 'fallback'].includes(String(askResp?.source || '')), 'assistant source should be explicit');
+
+    const alertAskResp = (await respApi.post('/ai/assistant/ask', {
+      question: 'Analyse cette alerte IA et donne la decision responsable.',
+      history: [],
+      mode: 'chat',
+      alert_context: {
+        source: 'alerte_ia',
+        decision_id: 'ai-alert-test-001',
+        product_code: 'TEST-IA-001',
+        product_name: 'Produit test alerte IA',
+        alert_type: 'rupture',
+        alert_type_label: 'Risque de rupture',
+        risk_level: 'high',
+        risk_label: 'Critique',
+        message: 'Stock inferieur au seuil de securite.',
+        current_stock: 2,
+        min_stock: 10,
+        recommended_qty: 18,
+        cause: {
+          title: 'Couverture insuffisante',
+          detail: 'Le stock courant ne couvre plus la demande recente.',
+          source: 'Test integration',
+        },
+      },
+    })).data;
+    assert(alertAskResp?.ok === true, 'assistant alert-context ask should return ok=true');
+    assert(String(alertAskResp?.answer || '').includes('TEST-IA-001'), 'assistant answer should use alert product context');
+    assert(alertAskResp?.focus_alert?.decision_id === 'ai-alert-test-001', 'assistant response should echo normalized focus_alert');
 
     const statusWhenConsumptionDisabled = (await respApi.get('/ai/assistant/status')).data;
     assert(

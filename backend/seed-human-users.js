@@ -1,8 +1,12 @@
+// BLOC 1 - Role du fichier.
+// Ce fichier participe au fonctionnement du module seed-human-users.
+// Point de vigilance: modifier avec prudence car ce fichier peut etre importe par plusieurs modules.
+
 require('./loadEnv');
 const mongoose = require('./db');
 const bcrypt = require('bcryptjs');
 const User = require('./models/User');
-const { HUMANIZED_CORE_USERS } = require('./data/humanizedCatalogue');
+const { HUMANIZED_CORE_USERS, LEGACY_CORE_USER_EMAILS } = require('./data/humanizedCatalogue');
 
 function getTestEnv(name, fallbackForLocal) {
   const value = String(process.env[name] || '').trim();
@@ -100,6 +104,18 @@ function getTestEnv(name, fallbackForLocal) {
         password_hash: hash,
       });
     }
+  }
+
+  const activeCoreEmails = new Set(users.map((u) => String(u.email || '').trim().toLowerCase()).filter(Boolean));
+  const obsoleteCoreEmails = LEGACY_CORE_USER_EMAILS
+    .map((email) => String(email || '').trim().toLowerCase())
+    .filter((email) => email && !activeCoreEmails.has(email));
+
+  if (obsoleteCoreEmails.length > 0) {
+    await User.updateMany(
+      { email: { $in: obsoleteCoreEmails } },
+      { $set: { status: 'blocked' } }
+    );
   }
 
   console.log('HUMAN_USERS_READY');

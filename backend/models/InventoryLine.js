@@ -1,3 +1,7 @@
+// BLOC 1 - Role du fichier.
+// Ce fichier decrit le modele MongoDB InventoryLine, ses champs, index et regles de validation.
+// Point de vigilance: eviter de changer un champ sans verifier les migrations, seeds, routes et tests.
+
 const mongoose = require('../db');
 
 const inventoryLineSchema = new mongoose.Schema(

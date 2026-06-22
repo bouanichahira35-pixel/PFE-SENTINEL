@@ -1,3 +1,9 @@
+/*
+ * BLOC 1 - Role du fichier.
+ * Ce fichier affiche une page de l'espace demandeur pour MesDemandes.
+ * Point de vigilance: garder les props, appels API et classes CSS synchronises avec les ecrans existants.
+ */
+
 /* ============================================
    DESIGN BLANC/CLEAN - MESDEMANDES
    Inspiré: Stripe, Apple, Figma
@@ -78,6 +84,7 @@
 .stat-item.stat-pending { border-left: 4px solid #f59e0b; }
 .stat-item.stat-valid { border-left: 4px solid #10b981; }
 .stat-item.stat-served { border-left: 4px solid #3b82f6; }
+.stat-item.stat-received { border-left: 4px solid #14b8a6; }
 .stat-item.stat-total { border-left: 4px solid #6b7280; }
 
 /* CREATE BUTTON */
@@ -310,6 +317,76 @@
 .dem-card-body {
   padding: 1.25rem;
   flex: 1;
+}
+
+.dem-status-detail {
+  margin-bottom: 1rem;
+  padding: 0.75rem 0.9rem;
+  border-radius: 6px;
+  font-size: 0.88rem;
+  font-weight: 600;
+  line-height: 1.4;
+}
+
+.dem-status-detail-warning { background: #fffbeb; color: #92400e; }
+.dem-status-detail-info { background: #eff6ff; color: #1e40af; }
+.dem-status-detail-processing { background: #faf5ff; color: #5b21b6; }
+.dem-status-detail-success { background: #ecfdf5; color: #065f46; }
+.dem-status-detail-danger { background: #fef2f2; color: #7f1d1d; }
+.dem-status-detail-default { background: #f9fafb; color: #4b5563; }
+
+.dem-progress {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 0.35rem;
+  margin-bottom: 1.25rem;
+}
+
+.dem-progress-step {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.35rem;
+  color: #9ca3af;
+  font-size: 0.72rem;
+  font-weight: 700;
+  text-align: center;
+}
+
+.dem-progress-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: #e5e7eb;
+  box-shadow: 0 0 0 3px #f9fafb;
+}
+
+.dem-progress-step.done,
+.dem-progress-step.current {
+  color: #047857;
+}
+
+.dem-progress-step.done .dem-progress-dot,
+.dem-progress-step.current .dem-progress-dot {
+  background: #10b981;
+}
+
+.dem-progress-step.current .dem-progress-dot {
+  box-shadow: 0 0 0 4px rgba(16, 185, 129, 0.16);
+}
+
+.dem-progress-step.blocked {
+  color: #b91c1c;
+}
+
+.dem-progress-step.blocked .dem-progress-dot {
+  background: #fecaca;
+}
+
+.dem-progress-label {
+  width: 100%;
+  overflow-wrap: anywhere;
 }
 
 .dem-row {
@@ -696,6 +773,11 @@
   color: #ef4444;
 }
 
+.dem-confirm-icon-success {
+  background: #dcfce7;
+  color: #16a34a;
+}
+
 .dem-modal-confirm h2 {
   margin: 0 0 0.5rem 0;
   color: #1f2937;
@@ -796,6 +878,12 @@
 
   .dem-row {
     grid-template-columns: 1fr;
+  }
+
+  .dem-progress {
+    grid-template-columns: repeat(5, minmax(44px, 1fr));
+    overflow-x: auto;
+    padding-bottom: 0.25rem;
   }
 
   .dem-modal {

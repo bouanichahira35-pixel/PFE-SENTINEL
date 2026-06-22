@@ -1,16 +1,19 @@
+// BLOC 1 - Role du fichier.
+// Ce fichier sert de script de maintenance, seed, test ou migration pour test-auth-recovery-flow.
+// Point de vigilance: ne pas lancer en production sans confirmer les variables .env et la base cible.
+
 require('../loadEnv');
 const mongoose = require('../db');
 
 const { spawn, spawnSync } = require('child_process');
+const net = require('net');
 const axios = require('axios');
-const bcrypt = require('bcryptjs');
 
 const User = require('../models/User');
-const PasswordReset = require('../models/PasswordReset');
 
 const TEST_PORT = Number(process.env.AUTH_RECOVERY_TEST_PORT || 5013);
+const SMTP_TEST_PORT = Number(process.env.AUTH_RECOVERY_SMTP_TEST_PORT || 2526);
 const API_BASE = `http://127.0.0.1:${TEST_PORT}/api`;
-const OTP_CODE = '123456';
 
 function getTestEnv(name, fallbackForLocal) {
   const value = String(process.env[name] || '').trim();
@@ -24,6 +27,12 @@ function getTestEnv(name, fallbackForLocal) {
 }
 
 const ACTORS = [
+  {
+    role: 'admin',
+    legacyRole: 'admin',
+    identifier: getTestEnv('TEST_ADMIN_EMAIL', 'admin@example.local'),
+    basePassword: getTestEnv('TEST_ADMIN_PASSWORD', 'ChangeMe_Admin_123'),
+  },
   {
     role: 'demandeur',
     legacyRole: 'viewer',
@@ -52,6 +61,106 @@ function sleep(ms) {
 
 function assert(condition, message) {
   if (!condition) throw new Error(message);
+}
+
+function createSmtpCollector() {
+  const messages = [];
+  let server = null;
+
+  function start() {
+    server = net.createServer((socket) => {
+      let buffer = '';
+      let dataMode = false;
+      let data = '';
+      let current = { from: '', to: [] };
+
+      const write = (line) => socket.write(`${line}\r\n`);
+      write('220 sentinel-test-smtp ESMTP');
+
+      socket.on('data', (chunk) => {
+        buffer += chunk.toString('utf8');
+
+        while (buffer.includes('\n')) {
+          const idx = buffer.indexOf('\n');
+          const rawLine = buffer.slice(0, idx + 1);
+          buffer = buffer.slice(idx + 1);
+          const line = rawLine.replace(/\r?\n$/, '');
+
+          if (dataMode) {
+            if (line === '.') {
+              messages.push({ ...current, raw: data });
+              dataMode = false;
+              data = '';
+              current = { from: '', to: [] };
+              write('250 Message accepted');
+            } else {
+              data += `${line}\n`;
+            }
+            continue;
+          }
+
+          const upper = line.toUpperCase();
+          if (upper.startsWith('EHLO') || upper.startsWith('HELO')) {
+            socket.write('250-sentinel-test-smtp\r\n250-AUTH PLAIN LOGIN\r\n250 OK\r\n');
+          } else if (upper.startsWith('AUTH')) {
+            write('235 Authentication successful');
+          } else if (upper.startsWith('MAIL FROM:')) {
+            current.from = line.slice('MAIL FROM:'.length).trim();
+            write('250 Sender ok');
+          } else if (upper.startsWith('RCPT TO:')) {
+            current.to.push(line.slice('RCPT TO:'.length).replace(/[<>]/g, '').trim().toLowerCase());
+            write('250 Recipient ok');
+          } else if (upper === 'DATA') {
+            dataMode = true;
+            write('354 End data with <CR><LF>.<CR><LF>');
+          } else if (upper === 'RSET') {
+            current = { from: '', to: [] };
+            write('250 Reset ok');
+          } else if (upper === 'QUIT') {
+            write('221 Bye');
+            socket.end();
+          } else {
+            write('250 OK');
+          }
+        }
+      });
+    });
+
+    return new Promise((resolve, reject) => {
+      server.once('error', reject);
+      server.listen(SMTP_TEST_PORT, '127.0.0.1', () => {
+        server.off('error', reject);
+        resolve();
+      });
+    });
+  }
+
+  function stop() {
+    if (!server) return Promise.resolve();
+    return new Promise((resolve) => server.close(() => resolve()));
+  }
+
+  async function waitForCode(to, previousCount = 0, retries = 40) {
+    const normalizedTo = String(to || '').trim().toLowerCase();
+    for (let i = 0; i < retries; i += 1) {
+      const match = messages
+        .slice(previousCount)
+        .find((message) => message.to.includes(normalizedTo));
+      const code = String(match?.raw || '').match(/\b(\d{6})\b/)?.[1];
+      if (code) return { code, count: messages.length };
+      await sleep(250);
+    }
+    throw new Error(`No OTP email captured for ${normalizedTo}`);
+  }
+
+  return {
+    start,
+    stop,
+    waitForCode,
+    get count() {
+      return messages.length;
+    },
+  };
 }
 
 function seedUsersOrThrow() {
@@ -101,48 +210,29 @@ async function login(client, { identifier, password, role }) {
   return data;
 }
 
-async function runForgotPasswordCycle(client, actor, index) {
+async function runForgotPasswordCycle(client, smtpCollector, actor, index) {
   const email = String(actor.identifier || '').trim().toLowerCase();
+  const beforeMailCount = smtpCollector.count;
 
   const requestResp = await client.post('/auth/forgot-password/request', {
     email,
     role: actor.role,
+    channel: 'email',
   });
 
   assert(requestResp.status === 200, `Forgot request failed for ${actor.role}`);
 
   const requestData = requestResp?.data || {};
-  const otpFromApi = typeof requestData.dev_otp === 'string' ? requestData.dev_otp : '';
+  assert(!Object.prototype.hasOwnProperty.call(requestData, 'dev_otp'), `dev_otp leaked for ${actor.role}`);
 
   const user = await User.findOne({ email }).select('_id email role status').lean();
   assert(user?._id, `User not found for forgot flow: ${actor.role}`);
 
-  let otpForVerify = otpFromApi;
-
-  if (!otpForVerify) {
-    const reset = await PasswordReset.findOne({ user: user._id, status: 'valid' }).sort({ createdAt: -1 });
-    assert(reset?._id, `No valid OTP reset entry for ${actor.role}`);
-
-    const resetHash = await bcrypt.hash(OTP_CODE, 4);
-    await PasswordReset.updateOne(
-      { _id: reset._id },
-      {
-        $set: {
-          reset_code: resetHash,
-          expiration_date: new Date(Date.now() + 10 * 60 * 1000),
-          attempts: 0,
-          verified_at: null,
-          status: 'valid',
-        },
-      }
-    );
-
-    otpForVerify = OTP_CODE;
-  }
+  const captured = await smtpCollector.waitForCode(email, beforeMailCount);
 
   const verifyResp = await client.post('/auth/forgot-password/verify', {
     email,
-    code: otpForVerify,
+    code: captured.code,
     role: actor.role,
   });
 
@@ -185,12 +275,16 @@ async function run() {
     ...process.env,
     PORT: String(TEST_PORT),
     AI_AUTO_TRAIN_ON_BOOT: 'false',
-    // Tests must not depend on external SMTP connectivity.
-    MAIL_HOST: '',
-    MAIL_USER: '',
-    MAIL_PASS: '',
-    RESET_DEV_OTP_ENABLED: 'true',
+    MAIL_HOST: '127.0.0.1',
+    MAIL_PORT: String(SMTP_TEST_PORT),
+    MAIL_SECURE: 'false',
+    MAIL_USER: 'sentinel-test@example.local',
+    MAIL_PASS: 'sentinel-test-password',
+    MAIL_FROM: 'Sentinel Test <sentinel-test@example.local>',
   };
+
+  const smtpCollector = createSmtpCollector();
+  await smtpCollector.start();
 
   const server = spawn(process.execPath, ['server.js'], {
     cwd: process.cwd(),
@@ -218,13 +312,14 @@ async function run() {
     }
 
     for (let i = 0; i < ACTORS.length; i += 1) {
-      await runForgotPasswordCycle(client, ACTORS[i], i);
+      await runForgotPasswordCycle(client, smtpCollector, ACTORS[i], i);
     }
 
     // eslint-disable-next-line no-console
     console.log('AUTH_RECOVERY_OK');
   } finally {
     server.kill('SIGTERM');
+    await smtpCollector.stop();
     try {
       seedUsersOrThrow();
     } catch (restoreErr) {

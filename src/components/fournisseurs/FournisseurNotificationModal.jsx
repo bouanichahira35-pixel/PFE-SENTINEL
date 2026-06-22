@@ -1,3 +1,7 @@
+// BLOC 1 - Role du fichier.
+// Ce fichier fournit un composant React specialise pour FournisseurNotificationModal.
+// Point de vigilance: garder les props, appels API et classes CSS synchronises avec les ecrans existants.
+
 import { useMemo, useState } from 'react';
 import { X } from 'lucide-react';
 import { post } from '../../services/api';

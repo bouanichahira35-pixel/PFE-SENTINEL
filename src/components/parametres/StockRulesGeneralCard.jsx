@@ -1,3 +1,7 @@
+// BLOC 1 - Role du fichier.
+// Ce fichier fournit un composant React specialise pour StockRulesGeneralCard.
+// Point de vigilance: garder les props, appels API et classes CSS synchronises avec les ecrans existants.
+
 import { AlertTriangle, Boxes, ShieldCheck } from 'lucide-react';
 
 function ToggleRow({ label, desc, checked, onChange, disabled }) {

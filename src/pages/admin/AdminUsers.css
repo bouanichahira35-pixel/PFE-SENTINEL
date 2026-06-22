@@ -1,3 +1,9 @@
+/*
+ * BLOC 1 - Role du fichier.
+ * Ce fichier affiche une page de l'espace administrateur pour AdminUsers.
+ * Point de vigilance: garder les props, appels API et classes CSS synchronises avec les ecrans existants.
+ */
+
 /* ═══════════════════════════════════════
    STYLES ORIGINAUX — non modifiés
 ═══════════════════════════════════════ */
@@ -407,6 +413,131 @@
   padding: clamp(18px, 3vw, 36px);
 }
 
+.admin-create-drawer .create-user-body {
+  max-width: 1120px;
+}
+
+.admin-create-drawer .create-user-body > .form-grid:not(.edit-user-grid) {
+  display: none;
+}
+
+.create-user-shell {
+  display: grid;
+  gap: 16px;
+}
+
+.create-section {
+  border: 1px solid #e7ebf3;
+  border-radius: 12px;
+  background: #fff;
+  box-shadow: 0 10px 22px rgba(15, 23, 42, 0.05);
+  overflow: hidden;
+}
+
+.create-section--identity {
+  border-color: rgba(37, 99, 235, 0.18);
+}
+
+.create-section-head {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 14px 16px;
+  border-bottom: 1px solid #eef2f8;
+  background: #fbfdff;
+}
+
+.create-section-icon {
+  width: 34px;
+  height: 34px;
+  border-radius: 9px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: #eff6ff;
+  color: #1d4ed8;
+  flex: 0 0 auto;
+}
+
+.create-section-head h3 {
+  margin: 0;
+  color: #0f172a;
+  font-size: 14px;
+  font-weight: 850;
+}
+
+.create-section-head p {
+  margin: 3px 0 0;
+  color: #64748b;
+  font-size: 12px;
+  font-weight: 650;
+}
+
+.create-form-grid {
+  padding: 16px;
+}
+
+.password-input-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  gap: 8px;
+  align-items: center;
+}
+
+.password-input-row .admin-btn.small {
+  height: 40px;
+  border-radius: 10px;
+}
+
+.create-check-card {
+  border: 1px solid #e7ebf3;
+  border-radius: 10px;
+  padding: 11px 12px;
+  background: #f8fafc;
+  display: flex !important;
+  flex-direction: row !important;
+  align-items: flex-start;
+  gap: 10px !important;
+  cursor: pointer;
+}
+
+.create-check-card input {
+  width: 16px;
+  height: 16px;
+  margin-top: 2px;
+  flex: 0 0 auto;
+}
+
+.create-check-card span {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  flex-wrap: wrap;
+}
+
+.create-check-card strong {
+  display: block;
+  width: 100%;
+  color: #0f172a;
+  font-size: 12px;
+}
+
+.create-check-card small {
+  display: block;
+  width: 100%;
+  color: #64748b;
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1.35;
+}
+
+.notification-choice-group {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  align-self: end;
+}
+
 @keyframes drawer-slide-in {
   from { transform: translateX(100%); opacity: 0; }
   to   { transform: translateX(0);    opacity: 1; }
@@ -788,6 +919,12 @@
   .admin-users-actions { width: 100%; justify-content: stretch; }
   .admin-users-actions .admin-btn { width: 100%; justify-content: center; }
   .form-grid, .detail-block { grid-template-columns: 1fr; }
+  .notification-choice-group { grid-template-columns: 1fr; }
+  .password-input-row { grid-template-columns: minmax(0, 1fr) auto; }
+  .password-input-row .admin-btn.small {
+    grid-column: 1 / -1;
+    justify-content: center;
+  }
   .users-table td:nth-child(2),
   .users-table th:nth-child(2),
   .users-table td:nth-child(5),

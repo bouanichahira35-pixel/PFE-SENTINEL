@@ -1,3 +1,7 @@
+// BLOC 1 - Role du fichier.
+// Ce fichier expose les endpoints REST du domaine settings et controle les regles d'acces cote API.
+// Point de vigilance: verifier l'authentification, les roles et les validations avant toute modification.
+
 const router = require('express').Router(); 
 const bcrypt = require('bcryptjs'); 
 const fs = require('fs');
@@ -14,6 +18,7 @@ const requireAuth = require('../middlewares/requireAuth');
 const strictBody = require('../middlewares/strictBody');
 const { enqueueMail } = require('../services/mailQueueService'); 
 const { logSecurityEvent } = require('../services/securityAuditService');
+const { USER_PREFS_DEFAULT, getUserPreferences } = require('../services/userPreferencesService');
 const { isSafeText, normalizeEmail, isValidEmail, normalizePhone, isValidPhone } = require('../utils/validation');
 const { STOCK_RULES_DEFAULT, sanitizeStockRulesConfig, diffStockRules } = require('../constants/stockRules');
 const { validateFileType, hasBasicMalwareSignature, scanFileWithOptionalAntivirus } = require('../utils/fileSecurity');
@@ -21,19 +26,6 @@ const { validateFileType, hasBasicMalwareSignature, scanFileWithOptionalAntiviru
 const BCRYPT_SALT_ROUNDS = Number(process.env.BCRYPT_SALT_ROUNDS || 12);
 const IS_PROD = String(process.env.NODE_ENV || '').trim().toLowerCase() === 'production';
 const REFRESH_COOKIE_NAME = String(process.env.REFRESH_COOKIE_NAME || 'sentinel_refresh').trim();
-const USER_PREFS_DEFAULT = Object.freeze({
-  language: 'fr',
-  dark_mode: false,
-  notifications: {
-    email: true,
-    push: false,
-    stockAlerts: true,
-    demandesAlerts: true,
-  },
-});
-
-
-
 const AI_SETTINGS_DEFAULT = Object.freeze({
   predictionsEnabled: true,
   alertesAuto: true,
@@ -82,21 +74,6 @@ async function setAppSettingValue(settingKey, value, userId) {
     { $set: { setting_value: value, updated_by: userId } },
     { returnDocument: 'after', upsert: true }
   );
-}
-
-async function getUserPreferences(userId) {
-  const settingKey = `user_prefs_${userId}`;
-  const prefs = await getAppSettingValue(settingKey, USER_PREFS_DEFAULT);
-  return {
-    language: prefs?.language || USER_PREFS_DEFAULT.language,
-    dark_mode: Boolean(prefs?.dark_mode),
-    notifications: {
-      email: prefs?.notifications?.email ?? USER_PREFS_DEFAULT.notifications.email,
-      push: prefs?.notifications?.push ?? USER_PREFS_DEFAULT.notifications.push,
-      stockAlerts: prefs?.notifications?.stockAlerts ?? USER_PREFS_DEFAULT.notifications.stockAlerts,
-      demandesAlerts: prefs?.notifications?.demandesAlerts ?? USER_PREFS_DEFAULT.notifications.demandesAlerts,
-    },
-  };
 }
 
 router.use(requireAuth);

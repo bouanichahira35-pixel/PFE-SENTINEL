@@ -1,3 +1,7 @@
+// BLOC 1 - Role du fichier.
+// Ce fichier sert de script de maintenance, seed, test ou migration pour generate-catalogue-etap-etendu.
+// Point de vigilance: ne pas lancer en production sans confirmer les variables .env et la base cible.
+
 const fs = require('fs');
 const path = require('path');
 const { HUMANIZED_PRODUCTS } = require('../data/humanizedCatalogue');

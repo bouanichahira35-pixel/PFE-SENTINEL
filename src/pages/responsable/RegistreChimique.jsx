@@ -1,22 +1,29 @@
+// BLOC 1 - Role du fichier.
+// Ce fichier affiche la page responsable du registre chimique.
+// Point de vigilance: les actions FDS doivent rester branchees sur les vrais endpoints fichiers/produits.
+
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import {
+  AlertCircle,
+  ChevronDown,
   Download,
+  Eye,
   FlaskConical,
+  Mail,
+  Plus,
   RefreshCw,
   Search,
-  X,
-  ChevronDown,
-  Mail,
-  AlertCircle,
+  Trash2,
   Upload,
-  Zap,
+  X,
 } from 'lucide-react';
 import SidebarResp from '../../components/responsable/SidebarResp';
 import HeaderPage from '../../components/shared/HeaderPage';
 import ProtectedPage from '../../components/shared/ProtectedPage';
 import LoadingSpinner from '../../components/shared/LoadingSpinner';
 import { useToast } from '../../components/shared/Toast';
-import { API_BASE, get, post } from '../../services/api';
+import { API_BASE, get, patch, put, uploadFile } from '../../services/api';
 import {
   CHEMICAL_CLASS_OPTIONS,
   FDS_FILTER_OPTIONS,
@@ -40,6 +47,10 @@ function formatDateLabel(value) {
   const d = new Date(value);
   if (Number.isNaN(d.getTime())) return '-';
   return d.toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit', year: 'numeric' });
+}
+
+function getProductId(row) {
+  return String(row?.product_id || row?._id || row?.id || '').trim();
 }
 
 function resolveAbsoluteUrl(path) {
@@ -69,7 +80,7 @@ async function tryRefreshAccessToken() {
 
 async function fetchProtectedBlob(fileUrl) {
   const absolute = resolveAbsoluteUrl(fileUrl);
-  if (!absolute) throw new Error("Fichier introuvable");
+  if (!absolute) throw new Error('Fichier introuvable');
 
   const doFetch = async (token) =>
     fetch(absolute, {
@@ -82,15 +93,11 @@ async function fetchProtectedBlob(fileUrl) {
   let res = await doFetch(token);
   if (res.status === 401) {
     const refreshed = await tryRefreshAccessToken();
-    if (refreshed) {
-      token = refreshed;
-      res = await doFetch(token);
-    }
+    if (refreshed) res = await doFetch(refreshed);
   }
 
   if (!res.ok) throw new Error("Impossible d'ouvrir la FDS");
-  const blob = await res.blob();
-  return blob;
+  return res.blob();
 }
 
 function downloadBlob(blob, filename) {
@@ -110,10 +117,9 @@ function openBlobInNewTab(blob) {
   setTimeout(() => URL.revokeObjectURL(url), 8000);
 }
 
-function toCsvValue(v) {
-  const raw = v == null ? '' : String(v);
-  const escaped = raw.replace(/"/g, '""');
-  return `"${escaped}"`;
+function toCsvValue(value) {
+  const raw = value == null ? '' : String(value);
+  return `"${raw.replace(/"/g, '""')}"`;
 }
 
 function buildCsv(rows, { year, month } = {}) {
@@ -121,21 +127,20 @@ function buildCsv(rows, { year, month } = {}) {
     'Code produit',
     'Produit',
     'Classe chimique',
-    'État physique',
-    'Quantité disponible',
-    'Unité',
+    'Etat physique',
+    'Quantite disponible',
+    'Unite',
     'Emplacement',
     'Fournisseur',
+    'Email fournisseur',
     'FDS',
     'Dernier mouvement',
     'Statut',
   ];
 
   const lines = [header.map(toCsvValue).join(',')];
-
   (rows || []).forEach((row) => {
     const sig = computeChemicalRegisterSignals(row);
-    const fdsLabel = sig.hasFds ? 'Disponible' : 'Manquante';
     lines.push(
       [
         row?.code_product || '-',
@@ -146,22 +151,44 @@ function buildCsv(rows, { year, month } = {}) {
         row?.unite || '-',
         row?.emplacement || '-',
         row?.fournisseur || '-',
-        fdsLabel,
+        row?.supplier_email || '-',
+        sig.hasFds ? 'Disponible' : 'Manquante',
         formatDateLabel(row?.last_movement_at),
         sig.status,
       ].map(toCsvValue).join(',')
     );
   });
 
-  const fileName = `registre_chimique_${year}_${pad2(month)}.csv`;
-  return { csv: lines.join('\n'), fileName };
+  return {
+    csv: lines.join('\n'),
+    fileName: `registre_chimique_${year}_${pad2(month)}.csv`,
+  };
+}
+
+function buildSupplierFdsMail(row) {
+  const subject = `[SENTINEL] Demande de FDS - ${row?.designation || 'Produit chimique'}`;
+  const body = [
+    'Madame, Monsieur,',
+    '',
+    'Dans le cadre du suivi de notre registre chimique, merci de nous transmettre la Fiche de Donnees de Securite (FDS) du produit suivant :',
+    '',
+    `Code produit : ${row?.code_product || '-'}`,
+    `Designation : ${row?.designation || '-'}`,
+    '',
+    'Ce document est necessaire pour maintenir notre conformite securite et completer le dossier produit.',
+    '',
+    'Cordialement,',
+    'Equipe SENTINEL',
+  ].join('\n');
+  return { subject, body };
 }
 
 function AnimatedKpi({ value }) {
   const [shown, setShown] = useState(0);
+
   useEffect(() => {
     const next = Math.max(0, Math.floor(Number(value || 0)));
-    if (!Number.isFinite(next)) return;
+    if (!Number.isFinite(next)) return undefined;
     let raf = 0;
     const started = performance.now();
     const from = shown;
@@ -169,173 +196,69 @@ function AnimatedKpi({ value }) {
     const tick = (now) => {
       const t = Math.min(1, (now - started) / duration);
       const eased = 1 - Math.pow(1 - t, 3);
-      const v = Math.round(from + (next - from) * eased);
-      setShown(v);
+      setShown(Math.round(from + (next - from) * eased));
       if (t < 1) raf = requestAnimationFrame(tick);
     };
     raf = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(raf);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [value]);
+
   return <span className="rc-kpi-value">{shown}</span>;
 }
 
-// Nouvelle composante : Modal IA pour générer les mails de relance
-function AiMailGeneratorModal({ products, onClose, onConfirm }) {
-  const [isGenerating, setIsGenerating] = useState(false);
-  const [generatedEmails, setGeneratedEmails] = useState([]);
-
-  const handleGenerateEmails = async () => {
-    setIsGenerating(true);
-    try {
-      // Simuler l'appel API pour générer les emails
-      // En production, cela appellerait un endpoint IA réel
-      const emails = products.map((product) => ({
-        supplier: product?.fournisseur || 'Fournisseur inconnu',
-        productCode: product?.code_product,
-        productName: product?.designation,
-        subject: `[SENTINEL] Demande de FDS - ${product?.designation || 'Produit inconnu'}`,
-        body: `Madame, Monsieur,\n\nDans le cadre de notre obligation de conformité réglementaire, nous vous demandons de transmettre la Fiche de Données de Sécurité (FDS) pour le produit suivant :\n\n• Code : ${product?.code_product}\n• Désignation : ${product?.designation}\n\nCette documentation est essentielle pour assurer la sécurité de notre personnel.\n\nMerci de nous faire parvenir ce document dans les plus brefs délais.\n\nCordialement,\nSystème SENTINEL`,
-      }));
-      await new Promise((r) => setTimeout(r, 800)); // Simulation d'attente
-      setGeneratedEmails(emails);
-    } catch (err) {
-      console.error('Erreur lors de la génération des emails', err);
-    } finally {
-      setIsGenerating(false);
-    }
-  };
-
-  return (
-    <div className="rc-modal-overlay" role="dialog" aria-modal="true" onClick={onClose}>
-      <div className="rc-modal rc-modal-lg" onClick={(e) => e.stopPropagation()}>
-        <div className="rc-modal-head">
-          <div className="rc-modal-title">
-            <Zap size={20} style={{ color: '#0284c7' }} />
-            <strong>Générateur IA de Mails de Relance</strong>
-          </div>
-          <button type="button" className="rc-modal-close" onClick={onClose} aria-label="Fermer">
-            <X size={18} />
-          </button>
-        </div>
-        <div className="rc-modal-body">
-          <p style={{ marginBottom: '1rem', color: '#475569', fontWeight: 700 }}>
-            {products.length} produit{products.length > 1 ? 's' : ''} sans FDS détecté{products.length > 1 ? 's' : ''}.
-          </p>
-
-          {!generatedEmails.length ? (
-            <div style={{ textAlign: 'center', padding: '1rem' }}>
-              <button
-                type="button"
-                className="btn btn-primary"
-                onClick={handleGenerateEmails}
-                disabled={isGenerating}
-              >
-                {isGenerating ? 'Génération en cours...' : '⚡ Générer les mails automatiquement'}
-              </button>
-            </div>
-          ) : (
-            <>
-              <div style={{ maxHeight: '400px', overflowY: 'auto', marginBottom: '1rem' }}>
-                {generatedEmails.map((email, idx) => (
-                  <details key={idx} style={{ marginBottom: '0.75rem', border: '1px solid #e2e8f0', borderRadius: '0.85rem', padding: '0.75rem' }}>
-                    <summary style={{ cursor: 'pointer', fontWeight: 700, color: '#0f172a' }}>
-                      📧 Fournisseur : {email.supplier} — {email.productCode}
-                    </summary>
-                    <div style={{ marginTop: '0.5rem', paddingTop: '0.5rem', borderTop: '1px solid #e2e8f0', fontSize: '0.9rem' }}>
-                      <p><strong>Objet :</strong> {email.subject}</p>
-                      <textarea
-                        style={{
-                          width: '100%',
-                          height: '120px',
-                          padding: '0.5rem',
-                          border: '1px solid #e2e8f0',
-                          borderRadius: '0.6rem',
-                          fontFamily: 'monospace',
-                          fontSize: '0.8rem',
-                          resize: 'none',
-                        }}
-                        readOnly
-                        value={email.body}
-                      />
-                    </div>
-                  </details>
-                ))}
-              </div>
-              <div style={{ display: 'flex', gap: '0.6rem', flexWrap: 'wrap' }}>
-                <button type="button" className="btn btn-primary btn-sm" onClick={() => onConfirm(generatedEmails)}>
-                  ✓ Envoyer les {generatedEmails.length} mails
-                </button>
-                <button
-                  type="button"
-                  className="btn btn-secondary btn-sm"
-                  onClick={() => setGeneratedEmails([])}
-                >
-                  ↻ Régénérer
-                </button>
-              </div>
-            </>
-          )}
-        </div>
-      </div>
-    </div>
-  );
-}
-
-// Nouvelle composante : Modal pour uploader une FDS avec drag-drop
 function FdsUploadModal({ product, onClose, onSuccess }) {
   const [isDragging, setIsDragging] = useState(false);
-  const [uploadedFile, setUploadedFile] = useState(null);
-  const [isProcessing, setIsProcessing] = useState(false);
-  const [extractedData, setExtractedData] = useState(null);
+  const [selectedFile, setSelectedFile] = useState(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const toast = useToast();
 
-  const handleDragOver = (e) => {
-    e.preventDefault();
-    setIsDragging(true);
-  };
-
-  const handleDragLeave = () => {
-    setIsDragging(false);
-  };
-
-  const handleDrop = async (e) => {
-    e.preventDefault();
-    setIsDragging(false);
-    const files = e.dataTransfer.files;
-    if (files.length > 0) {
-      const file = files[0];
-      if (!file.type.includes('pdf')) {
-        toast.error("Veuillez déposer un fichier PDF.");
+  const selectFile = useCallback(
+    (file) => {
+      const isPdf =
+        String(file?.type || '').toLowerCase().includes('pdf') ||
+        String(file?.name || '').toLowerCase().endsWith('.pdf');
+      if (!isPdf) {
+        toast.error('Veuillez choisir un fichier PDF.');
         return;
       }
-      await processFile(file);
-    }
+      setSelectedFile(file);
+    },
+    [toast]
+  );
+
+  const handleDrop = (e) => {
+    e.preventDefault();
+    setIsDragging(false);
+    const file = e.dataTransfer?.files?.[0];
+    if (file) selectFile(file);
   };
 
-  const handleFileSelect = async (e) => {
-    const files = e.target.files;
-    if (files.length > 0) {
-      await processFile(files[0]);
+  const handleSubmit = async () => {
+    const productId = getProductId(product);
+    if (!productId) {
+      toast.error('Produit introuvable pour enregistrer la FDS.');
+      return;
     }
-  };
+    if (!selectedFile) {
+      toast.warning('Choisissez une FDS au format PDF.');
+      return;
+    }
 
-  const processFile = async (file) => {
-    setUploadedFile(file);
-    setIsProcessing(true);
+    setIsSubmitting(true);
     try {
-      // Simuler un extraction OCR/IA
-      await new Promise((r) => setTimeout(r, 1200));
-      setExtractedData({
-        chemicalClass: 'À déterminer (OCR en attente)',
-        physicalState: 'Poudre / Liquide / Gaz',
-        confidence: 87,
-        fileName: file.name,
+      const uploaded = await uploadFile('/files/upload', selectedFile);
+      await put(`/products/${encodeURIComponent(productId)}`, {
+        fds_attachment: {
+          file_name: uploaded?.file_name || selectedFile.name,
+          file_url: uploaded?.file_url,
+        },
       });
+      onSuccess(uploaded);
     } catch (err) {
-      toast.error("Erreur lors du traitement du fichier.");
+      toast.error(err?.message || "Impossible d'enregistrer la FDS.");
     } finally {
-      setIsProcessing(false);
+      setIsSubmitting(false);
     }
   };
 
@@ -346,7 +269,7 @@ function FdsUploadModal({ product, onClose, onSuccess }) {
           <div className="rc-modal-title">
             <Upload size={20} style={{ color: '#0284c7' }} />
             <strong>Importer FDS</strong>
-            <span className="mono" style={{ fontSize: '0.85rem' }}>{product?.code_product}</span>
+            <span className="mono" style={{ fontSize: '0.85rem' }}>{product?.code_product || '-'}</span>
           </div>
           <button type="button" className="rc-modal-close" onClick={onClose} aria-label="Fermer">
             <X size={18} />
@@ -355,54 +278,202 @@ function FdsUploadModal({ product, onClose, onSuccess }) {
         <div className="rc-modal-body">
           <div
             className={`rc-dropzone ${isDragging ? 'dragging' : ''}`}
-            onDragOver={handleDragOver}
-            onDragLeave={handleDragLeave}
+            onDragOver={(e) => {
+              e.preventDefault();
+              setIsDragging(true);
+            }}
+            onDragLeave={() => setIsDragging(false)}
             onDrop={handleDrop}
           >
-            <Upload size={48} style={{ opacity: 0.5 }} />
+            <Upload size={44} style={{ opacity: 0.5 }} />
             <p style={{ marginTop: '0.5rem', fontWeight: 700, color: '#0f172a' }}>
-              Glissez-déposez un fichier PDF ici
+              Glissez-deposez un fichier PDF ici
             </p>
             <p style={{ fontSize: '0.85rem', color: '#64748b' }}>ou</p>
-            <label style={{ marginTop: '0.5rem' }}>
+            <label className="rc-file-picker">
               <input
                 type="file"
-                accept=".pdf"
-                onChange={handleFileSelect}
+                accept=".pdf,application/pdf"
+                onChange={(e) => {
+                  const file = e.target.files?.[0];
+                  if (file) selectFile(file);
+                }}
                 style={{ display: 'none' }}
               />
-              <button type="button" className="btn btn-secondary btn-sm">
-                Parcourir les fichiers
-              </button>
+              <span className="btn btn-secondary btn-sm">Parcourir les fichiers</span>
             </label>
           </div>
 
-          {isProcessing && (
-            <div style={{ marginTop: '1rem', textAlign: 'center' }}>
-              <p style={{ fontWeight: 700, color: '#0284c7' }}>⏳ Analyse du document en cours...</p>
+          {selectedFile && (
+            <div className="rc-upload-summary">
+              <span>Fichier selectionne</span>
+              <strong>{selectedFile.name}</strong>
             </div>
           )}
 
-          {extractedData && (
-            <div style={{ marginTop: '1rem', padding: '1rem', background: '#f0f9ff', border: '1px solid #bfdbfe', borderRadius: '0.85rem' }}>
-              <p style={{ fontWeight: 700, color: '#075985', marginBottom: '0.5rem' }}>
-                ✓ Données extraites (confiance : {extractedData.confidence}%)
-              </p>
-              <div style={{ fontSize: '0.9rem', color: '#0f172a' }}>
-                <p><strong>Fichier :</strong> {extractedData.fileName}</p>
-                <p><strong>Classe chimique :</strong> {extractedData.chemicalClass}</p>
-                <p><strong>État physique :</strong> {extractedData.physicalState}</p>
-              </div>
-              <div style={{ marginTop: '1rem', display: 'flex', gap: '0.6rem' }}>
-                <button type="button" className="btn btn-primary btn-sm" onClick={() => onSuccess(extractedData)}>
-                  ✓ Confirmer et enregistrer
-                </button>
-                <button type="button" className="btn btn-secondary btn-sm" onClick={() => setExtractedData(null)}>
-                  ↻ Charger un autre fichier
-                </button>
-              </div>
+          <div className="rc-modal-actions">
+            <button
+              type="button"
+              className="btn btn-primary btn-sm"
+              onClick={handleSubmit}
+              disabled={!selectedFile || isSubmitting}
+            >
+              {isSubmitting ? 'Enregistrement...' : 'Enregistrer la FDS'}
+            </button>
+            <button type="button" className="btn btn-secondary btn-sm" onClick={onClose} disabled={isSubmitting}>
+              Annuler
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function AddProductToRegisterModal({ products, loading, search, onSearch, onAdd, onClose }) {
+  const q = String(search || '').trim().toLowerCase();
+  const visible = (products || []).filter((product) => {
+    if (!q) return true;
+    return `${product?.code_product || ''} ${product?.name || ''} ${product?.family || ''}`.toLowerCase().includes(q);
+  });
+
+  return (
+    <div className="rc-modal-overlay" role="dialog" aria-modal="true" onClick={onClose}>
+      <div className="rc-modal rc-modal-lg" onClick={(e) => e.stopPropagation()}>
+        <div className="rc-modal-head">
+          <div className="rc-modal-title">
+            <Plus size={20} style={{ color: '#0284c7' }} />
+            <strong>Ajouter un produit au registre chimique</strong>
+          </div>
+          <button type="button" className="rc-modal-close" onClick={onClose} aria-label="Fermer">
+            <X size={18} />
+          </button>
+        </div>
+        <div className="rc-modal-body">
+          <label className="rc-filter wide">
+            <span>Produit existant</span>
+            <div className="rc-search">
+              <Search size={16} />
+              <input
+                type="text"
+                value={search}
+                onChange={(e) => onSearch(e.target.value)}
+                placeholder="Chercher dans la liste magasinier..."
+              />
             </div>
-          )}
+          </label>
+
+          <div className="rc-candidate-list">
+            {loading && <div className="rc-empty">Chargement des produits...</div>}
+            {!loading && visible.map((product) => (
+              <button
+                type="button"
+                key={String(product?._id)}
+                className="rc-candidate-row"
+                onClick={() => onAdd(product)}
+              >
+                <span className="mono">{product?.code_product || '-'}</span>
+                <strong>{product?.name || 'Produit'}</strong>
+                <small>{product?.family || '-'} - stock {Math.max(0, Math.floor(Number(product?.quantity_current || 0)))}</small>
+              </button>
+            ))}
+            {!loading && visible.length === 0 && (
+              <div className="rc-empty">Aucun produit disponible a ajouter.</div>
+            )}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function EditChemicalRowModal({ row, onClose, onSave }) {
+  const sig = computeChemicalRegisterSignals(row);
+  const [draft, setDraft] = useState(() => ({
+    chemical_class: sig.chemicalClass === 'Non renseignée' ? '' : sig.chemicalClass,
+    physical_state: sig.physicalState === 'Non renseigné' ? '' : sig.physicalState,
+    supplier_name: row?.fournisseur || '',
+    supplier_email: row?.supplier_email || '',
+  }));
+  const [saving, setSaving] = useState(false);
+
+  const submit = async () => {
+    setSaving(true);
+    try {
+      await onSave(draft);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div className="rc-modal-overlay" role="dialog" aria-modal="true" onClick={onClose}>
+      <div className="rc-modal" onClick={(e) => e.stopPropagation()}>
+        <div className="rc-modal-head">
+          <div className="rc-modal-title">
+            <strong>Modifier les infos HSE</strong>
+            <span className="mono">{row?.code_product || '-'}</span>
+          </div>
+          <button type="button" className="rc-modal-close" onClick={onClose} aria-label="Fermer">
+            <X size={18} />
+          </button>
+        </div>
+        <div className="rc-modal-body">
+          <div className="rc-edit-grid">
+            <label className="rc-filter">
+              <span>Classe chimique</span>
+              <select
+                value={draft.chemical_class}
+                onChange={(e) => setDraft((prev) => ({ ...prev, chemical_class: e.target.value }))}
+              >
+                <option value="">Non renseignée</option>
+                {CHEMICAL_CLASS_OPTIONS.filter((opt) => opt !== 'Tous' && !String(opt).startsWith('Non')).map((opt) => (
+                  <option key={opt} value={opt}>{opt}</option>
+                ))}
+              </select>
+            </label>
+            <label className="rc-filter">
+              <span>Etat physique</span>
+              <select
+                value={draft.physical_state}
+                onChange={(e) => setDraft((prev) => ({ ...prev, physical_state: e.target.value }))}
+              >
+                <option value="">Non renseigné</option>
+                {PHYSICAL_STATE_OPTIONS.filter((opt) => opt !== 'Tous' && !String(opt).startsWith('Non')).map((opt) => (
+                  <option key={opt} value={opt}>{opt}</option>
+                ))}
+              </select>
+            </label>
+            <label className="rc-filter">
+              <span>Fournisseur</span>
+              <input
+                type="text"
+                maxLength={140}
+                value={draft.supplier_name}
+                onChange={(e) => setDraft((prev) => ({ ...prev, supplier_name: e.target.value }))}
+                placeholder="Ex : Total Energies"
+              />
+            </label>
+            <label className="rc-filter">
+              <span>Email fournisseur</span>
+              <input
+                type="email"
+                maxLength={140}
+                value={draft.supplier_email}
+                onChange={(e) => setDraft((prev) => ({ ...prev, supplier_email: e.target.value }))}
+                placeholder="contact@fournisseur.com"
+              />
+            </label>
+          </div>
+
+          <div className="rc-modal-actions">
+            <button type="button" className="btn btn-primary btn-sm" onClick={submit} disabled={saving}>
+              {saving ? 'Enregistrement...' : 'Enregistrer'}
+            </button>
+            <button type="button" className="btn btn-secondary btn-sm" onClick={onClose} disabled={saving}>
+              Annuler
+            </button>
+          </div>
         </div>
       </div>
     </div>
@@ -410,6 +481,7 @@ function FdsUploadModal({ product, onClose, onSuccess }) {
 }
 
 export default function RegistreChimique({ userName, onLogout }) {
+  const navigate = useNavigate();
   const toast = useToast();
 
   const [sidebarCollapsed, setSidebarCollapsed] = useState(
@@ -430,9 +502,12 @@ export default function RegistreChimique({ userName, onLogout }) {
 
   const [rows, setRows] = useState([]);
   const [detailRow, setDetailRow] = useState(null);
-  const [aiMailModalOpen, setAiMailModalOpen] = useState(false);
-  const [fdsUploadModalOpen, setFdsUploadModalOpen] = useState(false);
   const [fdsUploadProduct, setFdsUploadProduct] = useState(null);
+  const [addModalOpen, setAddModalOpen] = useState(false);
+  const [catalogProducts, setCatalogProducts] = useState([]);
+  const [catalogLoading, setCatalogLoading] = useState(false);
+  const [catalogSearch, setCatalogSearch] = useState('');
+  const [editRow, setEditRow] = useState(null);
 
   const load = useCallback(async () => {
     setIsLoading(true);
@@ -443,7 +518,7 @@ export default function RegistreChimique({ userName, onLogout }) {
       setRows(Array.isArray(data?.rows) ? data.rows : []);
     } catch (err) {
       setRows([]);
-      toast.error(err?.message || "Impossible de charger le registre chimique. Veuillez réessayer.");
+      toast.error(err?.message || 'Impossible de charger le registre chimique. Veuillez reessayer.');
     } finally {
       setIsLoading(false);
     }
@@ -454,8 +529,23 @@ export default function RegistreChimique({ userName, onLogout }) {
   }, [load]);
 
   const prepared = useMemo(
-    () => rows.map((r) => ({ ...r, _sig: computeChemicalRegisterSignals(r) })),
+    () => rows.map((row) => ({ ...row, _sig: computeChemicalRegisterSignals(row) })),
     [rows]
+  );
+
+  const registeredProductIds = useMemo(
+    () => new Set(rows.map((row) => getProductId(row)).filter(Boolean)),
+    [rows]
+  );
+
+  const addCandidates = useMemo(
+    () => (catalogProducts || []).filter((product) => {
+      const id = getProductId(product);
+      if (!id || registeredProductIds.has(id)) return false;
+      if (String(product?.lifecycle_status || 'active') === 'archived') return false;
+      return true;
+    }),
+    [catalogProducts, registeredProductIds]
   );
 
   const filtered = useMemo(() => {
@@ -470,13 +560,10 @@ export default function RegistreChimique({ userName, onLogout }) {
       if (filterFds === 'Disponible' && !sig.hasFds) return false;
       if (filterFds === 'Manquante' && sig.hasFds) return false;
 
-      if (emp) {
-        const v = String(row?.emplacement || '').toLowerCase();
-        if (!v.includes(emp)) return false;
-      }
+      if (emp && !String(row?.emplacement || '').toLowerCase().includes(emp)) return false;
 
       if (q) {
-        const hay = `${row?.code_product || ''} ${row?.designation || ''}`.toLowerCase();
+        const hay = `${row?.code_product || ''} ${row?.designation || ''} ${row?.fournisseur || ''}`.toLowerCase();
         if (!hay.includes(q)) return false;
       }
 
@@ -484,77 +571,164 @@ export default function RegistreChimique({ userName, onLogout }) {
     });
   }, [filterChemicalClass, filterEmplacement, filterFds, filterPhysicalState, prepared, search]);
 
-  const points = useMemo(() => {
-    const sigs = filtered.map((r) => r._sig || computeChemicalRegisterSignals(r));
-    const withoutFds = sigs.filter((s) => s.missingFds).length;
-    const withoutClass = sigs.filter((s) => s.missingClass).length;
-    const sensitive = sigs.filter((s) => s.sensitive).length;
-    const expiringLots = filtered.reduce(
-      (acc, r) => acc + Math.max(0, Math.floor(Number(r?.lots_expiring_30d || 0))),
-      0
-    );
-    return { withoutFds, withoutClass, sensitive, expiringLots };
-  }, [filtered]);
-
   const kpis = useMemo(() => {
-    const total = filtered.length;
+    const sigs = filtered.map((row) => row._sig || computeChemicalRegisterSignals(row));
     return {
-      total,
-      fdsMissing: points.withoutFds,
-      classMissing: points.withoutClass,
-      expiringLots: points.expiringLots,
+      total: filtered.length,
+      fdsMissing: sigs.filter((sig) => sig.missingFds).length,
+      classMissing: sigs.filter((sig) => sig.missingClass).length,
+      expiringLots: filtered.reduce(
+        (acc, row) => acc + Math.max(0, Math.floor(Number(row?.lots_expiring_30d || 0))),
+        0
+      ),
     };
-  }, [filtered.length, points.expiringLots, points.withoutClass, points.withoutFds]);
-
-  // Récupérer les produits sans FDS pour l'IA mail generator
-  const productsWithoutFds = useMemo(() => {
-    return filtered.filter((r) => {
-      const sig = r._sig || computeChemicalRegisterSignals(r);
-      return sig.missingFds;
-    });
   }, [filtered]);
 
   const handleExport = useCallback(() => {
     if (!filtered.length) {
-      toast.warning("Aucune ligne à exporter.");
+      toast.warning('Aucune ligne a exporter.');
       return;
     }
     const { csv, fileName } = buildCsv(filtered, { year, month });
-    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
-    downloadBlob(blob, fileName);
+    downloadBlob(new Blob([csv], { type: 'text/csv;charset=utf-8' }), fileName);
   }, [filtered, month, toast, year]);
 
-  const handleOpenFds = useCallback(async (row, mode) => {
-    const fileUrl = row?.fds?.file_url;
-    if (!fileUrl) {
-      toast.warning("FDS manquante.");
-      return;
-    }
-    try {
-      const blob = await fetchProtectedBlob(fileUrl);
-      if (mode === 'download') {
-        const name = row?.fds?.file_name || `FDS_${row?.code_product || 'produit'}.pdf`;
-        downloadBlob(blob, name);
-      } else {
-        openBlobInNewTab(blob);
+  const handleOpenFds = useCallback(
+    async (row, mode) => {
+      const fileUrl = row?.fds?.file_url;
+      if (!fileUrl) {
+        toast.warning('FDS manquante.');
+        return;
       }
+      try {
+        const blob = await fetchProtectedBlob(fileUrl);
+        if (mode === 'download') {
+          downloadBlob(blob, row?.fds?.file_name || `FDS_${row?.code_product || 'produit'}.pdf`);
+        } else {
+          openBlobInNewTab(blob);
+        }
+      } catch (err) {
+        toast.error(err?.message || "Impossible d'ouvrir la FDS.");
+      }
+    },
+    [toast]
+  );
+
+  const handleMailSupplier = useCallback(
+    (row) => {
+      const email = String(row?.supplier_email || '').trim();
+      if (!email) {
+        toast.warning('Aucun email fournisseur disponible pour ce produit.');
+        return;
+      }
+      const { subject, body } = buildSupplierFdsMail(row);
+      window.location.href = `mailto:${encodeURIComponent(email)}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
+    },
+    [toast]
+  );
+
+  const loadCatalogProducts = useCallback(async () => {
+    setCatalogLoading(true);
+    try {
+      const data = await get('/products?include_archived=0');
+      setCatalogProducts(Array.isArray(data) ? data : []);
     } catch (err) {
-      toast.error(err?.message || "Impossible d'ouvrir la FDS");
+      setCatalogProducts([]);
+      toast.error(err?.message || 'Impossible de charger les produits du magasinier.');
+    } finally {
+      setCatalogLoading(false);
     }
   }, [toast]);
 
-  // Gestionnaire de clic KPI pour filtrer le tableau
-  const handleKpiClick = useCallback(
-    (type) => {
-      if (type === 'fds') {
-        setFilterFds('Manquante');
-      } else if (type === 'class') {
-        setFilterChemicalClass('Non renseignée');
+  const openAddModal = useCallback(() => {
+    setAddModalOpen(true);
+    setCatalogSearch('');
+    loadCatalogProducts();
+  }, [loadCatalogProducts]);
+
+  const handleAddProductToRegister = useCallback(
+    async (product) => {
+      const productId = getProductId(product);
+      if (!productId) {
+        toast.error('Produit introuvable.');
+        return;
       }
-      // Scroll vers le tableau
-      document.querySelector('.rc-table-wrap')?.scrollIntoView({ behavior: 'smooth' });
+      try {
+        await patch(`/products/${encodeURIComponent(productId)}/chemical-register`, {
+          included: true,
+          excluded: false,
+        });
+        toast.success('Produit ajoute au registre chimique.');
+        setAddModalOpen(false);
+        await load();
+      } catch (err) {
+        toast.error(err?.message || "Impossible d'ajouter le produit au registre.");
+      }
     },
-    []
+    [load, toast]
+  );
+
+  const handleRemoveFromRegister = useCallback(
+    async (row) => {
+      const productId = getProductId(row);
+      if (!productId) {
+        toast.error('Produit introuvable.');
+        return;
+      }
+      const ok = window.confirm(`Retirer ${row?.code_product || ''} - ${row?.designation || 'Produit'} du registre chimique ?`);
+      if (!ok) return;
+      try {
+        await patch(`/products/${encodeURIComponent(productId)}/chemical-register`, {
+          included: false,
+          excluded: true,
+        });
+        toast.success('Produit retire du registre chimique.');
+        load();
+      } catch (err) {
+        toast.error(err?.message || 'Impossible de retirer le produit du registre.');
+      }
+    },
+    [load, toast]
+  );
+
+  const handleSaveChemicalInfo = useCallback(
+    async (draft) => {
+      const productId = getProductId(editRow);
+      if (!productId) {
+        toast.error('Produit introuvable.');
+        return;
+      }
+      try {
+        await patch(`/products/${encodeURIComponent(productId)}/chemical-register`, {
+          included: true,
+          excluded: false,
+          chemical_class: draft.chemical_class || '',
+          physical_state: draft.physical_state || '',
+          supplier_name: draft.supplier_name || '',
+          supplier_email: draft.supplier_email || '',
+        });
+        toast.success('Informations HSE enregistrees.');
+        setEditRow(null);
+        await load();
+      } catch (err) {
+        toast.error(err?.message || 'Impossible de sauvegarder les informations HSE.');
+      }
+    },
+    [editRow, load, toast]
+  );
+
+  const handleKpiClick = useCallback((type) => {
+    if (type === 'fds') setFilterFds('Manquante');
+    if (type === 'class') setFilterChemicalClass('Non renseignée');
+    document.querySelector('.rc-table-wrap')?.scrollIntoView({ behavior: 'smooth' });
+  }, []);
+
+  const openProductManager = useCallback(
+    (row) => {
+      const q = row?.code_product || row?.designation || '';
+      navigate(`/responsable/produits${q ? `?q=${encodeURIComponent(q)}` : ''}`);
+    },
+    [navigate]
   );
 
   return (
@@ -575,7 +749,7 @@ export default function RegistreChimique({ userName, onLogout }) {
           <HeaderPage
             userName={userName}
             title="Registre chimique"
-            subtitle="Suivi des produits chimiques et des fiches de sécurité."
+            subtitle="Suivi des produits chimiques et des fiches de securite."
             showSearch={false}
             onRefresh={load}
             onMenuClick={() => setSidebarCollapsed((p) => !p)}
@@ -589,35 +763,23 @@ export default function RegistreChimique({ userName, onLogout }) {
                 <div className="rc-hero-left">
                   <div className="rc-hero-title">
                     <FlaskConical size={18} />
-                    <strong>Période</strong>
+                    <strong>Periode</strong>
                     <span className="rc-period">{formatMonthLabel(year, month)}</span>
                   </div>
                 </div>
                 <div className="rc-hero-actions">
-                  <button
-                    type="button"
-                    className="btn btn-secondary btn-sm"
-                    onClick={load}
-                    disabled={isLoading}
-                  >
+                  <button type="button" className="btn btn-secondary btn-sm" onClick={load} disabled={isLoading}>
                     <RefreshCw size={14} /> Actualiser
                   </button>
-                  {productsWithoutFds.length > 0 && (
-                    <button
-                      type="button"
-                      className="btn btn-primary btn-sm"
-                      onClick={() => setAiMailModalOpen(true)}
-                      title={`${productsWithoutFds.length} produit(s) sans FDS détecté(s)`}
-                    >
-                      <Zap size={14} /> Générer les mails IA
-                    </button>
-                  )}
+                  <button type="button" className="btn btn-secondary btn-sm" onClick={openAddModal}>
+                    <Plus size={14} /> Ajouter produit
+                  </button>
                   <button
                     type="button"
                     className="btn btn-primary btn-sm"
                     onClick={handleExport}
                     disabled={isLoading || filtered.length === 0}
-                    title={filtered.length === 0 ? 'Aucune ligne à exporter' : undefined}
+                    title={filtered.length === 0 ? 'Aucune ligne a exporter' : undefined}
                   >
                     <Download size={14} /> Exporter le registre
                   </button>
@@ -627,7 +789,7 @@ export default function RegistreChimique({ userName, onLogout }) {
               <section className="rc-filters" aria-label="Filtres">
                 <div className="rc-filter-row">
                   <label className="rc-filter">
-                    <span>Année</span>
+                    <span>Annee</span>
                     <input
                       type="number"
                       min="2020"
@@ -640,10 +802,7 @@ export default function RegistreChimique({ userName, onLogout }) {
                   </label>
                   <label className="rc-filter">
                     <span>Mois</span>
-                    <select
-                      value={month}
-                      onChange={(e) => setMonth(Number(e.target.value || now.getMonth() + 1))}
-                    >
+                    <select value={month} onChange={(e) => setMonth(Number(e.target.value || now.getMonth() + 1))}>
                       {Array.from({ length: 12 }).map((_, idx) => (
                         <option key={idx + 1} value={idx + 1}>
                           {pad2(idx + 1)}
@@ -658,7 +817,7 @@ export default function RegistreChimique({ userName, onLogout }) {
                       maxLength={80}
                       value={filterEmplacement}
                       onChange={(e) => setFilterEmplacement(e.target.value)}
-                      placeholder="Ex : Dépôt - Entretien"
+                      placeholder="Ex : Depot - Entretien"
                     />
                   </label>
                   <button
@@ -667,7 +826,7 @@ export default function RegistreChimique({ userName, onLogout }) {
                     onClick={() => setShowAdvancedFilters((p) => !p)}
                   >
                     <ChevronDown size={16} />
-                    <span>Filtres avancés</span>
+                    <span>Filtres avances</span>
                   </button>
                 </div>
 
@@ -675,10 +834,7 @@ export default function RegistreChimique({ userName, onLogout }) {
                   <div className="rc-filter-advanced">
                     <label className="rc-filter">
                       <span>Classe chimique</span>
-                      <select
-                        value={filterChemicalClass}
-                        onChange={(e) => setFilterChemicalClass(e.target.value)}
-                      >
+                      <select value={filterChemicalClass} onChange={(e) => setFilterChemicalClass(e.target.value)}>
                         {CHEMICAL_CLASS_OPTIONS.map((opt) => (
                           <option key={opt} value={opt}>
                             {opt}
@@ -687,11 +843,8 @@ export default function RegistreChimique({ userName, onLogout }) {
                       </select>
                     </label>
                     <label className="rc-filter">
-                      <span>État physique</span>
-                      <select
-                        value={filterPhysicalState}
-                        onChange={(e) => setFilterPhysicalState(e.target.value)}
-                      >
+                      <span>Etat physique</span>
+                      <select value={filterPhysicalState} onChange={(e) => setFilterPhysicalState(e.target.value)}>
                         {PHYSICAL_STATE_OPTIONS.map((opt) => (
                           <option key={opt} value={opt}>
                             {opt}
@@ -721,7 +874,7 @@ export default function RegistreChimique({ userName, onLogout }) {
                         type="text"
                         value={search}
                         onChange={(e) => setSearch(e.target.value)}
-                        placeholder="Code ou nom du produit..."
+                        placeholder="Code, nom ou fournisseur..."
                       />
                     </div>
                   </label>
@@ -729,19 +882,7 @@ export default function RegistreChimique({ userName, onLogout }) {
               </section>
 
               <section className="rc-kpis" aria-label="Indicateurs cliquables">
-                <article
-                  className="rc-kpi-card"
-                  role="button"
-                  tabIndex={0}
-                  onClick={() => {
-                    // Total products - no specific filter
-                  }}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter') {
-                      // Total products
-                    }
-                  }}
-                >
+                <article className="rc-kpi-card">
                   <span>Produits chimiques</span>
                   <AnimatedKpi value={kpis.total} />
                 </article>
@@ -757,9 +898,6 @@ export default function RegistreChimique({ userName, onLogout }) {
                 >
                   <span>FDS manquantes</span>
                   <AnimatedKpi value={kpis.fdsMissing} />
-                  <small style={{ fontSize: '0.7rem', color: '#64748b', marginTop: '0.2rem' }}>
-                    Cliquez pour filtrer
-                  </small>
                 </article>
                 <article
                   className={`rc-kpi-card ${kpis.classMissing > 0 ? 'warn' : 'ok'}`}
@@ -771,14 +909,11 @@ export default function RegistreChimique({ userName, onLogout }) {
                   }}
                   title="Cliquez pour filtrer"
                 >
-                  <span>Classes à compléter</span>
+                  <span>Classes a completer</span>
                   <AnimatedKpi value={kpis.classMissing} />
-                  <small style={{ fontSize: '0.7rem', color: '#64748b', marginTop: '0.2rem' }}>
-                    Cliquez pour filtrer
-                  </small>
                 </article>
                 <article className={`rc-kpi-card ${kpis.expiringLots > 0 ? 'warn' : 'ok'}`}>
-                  <span>Lots proches péremption</span>
+                  <span>Lots proches peremption</span>
                   <AnimatedKpi value={kpis.expiringLots} />
                 </article>
               </section>
@@ -790,9 +925,9 @@ export default function RegistreChimique({ userName, onLogout }) {
                       <th>Code produit</th>
                       <th>Produit</th>
                       <th>Classe chimique</th>
-                      <th>État physique</th>
-                      <th>Quantité</th>
-                      <th>Unité</th>
+                      <th>Etat physique</th>
+                      <th>Quantite</th>
+                      <th>Unite</th>
                       <th>Emplacement</th>
                       <th>Fournisseur</th>
                       <th>FDS</th>
@@ -804,8 +939,10 @@ export default function RegistreChimique({ userName, onLogout }) {
                   <tbody>
                     {filtered.map((row) => {
                       const sig = row._sig || computeChemicalRegisterSignals(row);
-                      const rowKey = String(row?.product_id || row?.code_product || row?.designation || '');
+                      const rowKey = String(getProductId(row) || row?.code_product || row?.designation || '');
                       const hasMissingSupplier = !row?.fournisseur || row?.fournisseur === '-';
+                      const supplierEmail = String(row?.supplier_email || '').trim();
+                      const quantity = Math.max(0, Math.floor(Number(row?.quantite_restante || 0)));
 
                       return (
                         <tr key={rowKey}>
@@ -815,12 +952,12 @@ export default function RegistreChimique({ userName, onLogout }) {
                           </td>
                           <td>
                             <span
-                              className={`rc-pill class-${
+                              className={`rc-pill ${
                                 sig.chemicalClass === 'Non renseignée'
                                   ? 'na'
                                   : sig.sensitive
-                                  ? 'danger'
-                                  : 'info'
+                                    ? 'status-danger'
+                                    : 'status-info'
                               }`}
                             >
                               {sig.chemicalClass}
@@ -831,50 +968,64 @@ export default function RegistreChimique({ userName, onLogout }) {
                               {sig.physicalState}
                             </span>
                           </td>
-                          <td className="num">{Math.max(0, Math.floor(Number(row?.quantite_restante || 0)))}</td>
+                          <td className="num">{quantity}</td>
                           <td>{row?.unite || '-'}</td>
                           <td>{row?.emplacement || '-'}</td>
                           <td>
                             {hasMissingSupplier ? (
-                              <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
-                                <AlertCircle size={14} style={{ color: '#ea580c' }} />
-                                <span style={{ fontSize: '0.75rem', color: '#9a3412', fontWeight: 700 }}>
-                                  Fournisseur manquant
-                                </span>
+                              <div className="rc-missing-supplier">
+                                <AlertCircle size={14} />
+                                <span>Fournisseur manquant</span>
                               </div>
                             ) : (
-                              <span>{row?.fournisseur}</span>
+                              <button
+                                type="button"
+                                className="rc-supplier-link"
+                                onClick={() =>
+                                  row?.supplier_id
+                                    ? navigate(`/responsable/fournisseurs/${encodeURIComponent(row.supplier_id)}`)
+                                    : openProductManager(row)
+                                }
+                              >
+                                {row?.fournisseur}
+                              </button>
                             )}
                           </td>
                           <td>
-                            {sig.hasFds ? (
-                              <div className="rc-fds-cell">
-                                <span className="rc-pill ok">Disponible</span>
-                                <button
-                                  type="button"
-                                  className="rc-link"
-                                  onClick={() => handleOpenFds(row, 'open')}
-                                >
-                                  Ouvrir FDS
-                                </button>
-                              </div>
-                            ) : (
-                              <div className="rc-fds-cell">
-                                <span className="rc-pill warn">Manquante</span>
-                              </div>
-                            )}
+                            <div className="rc-fds-cell">
+                              {sig.hasFds ? (
+                                <>
+                                  <span className="rc-pill ok">Disponible</span>
+                                  <button type="button" className="rc-icon-btn" onClick={() => handleOpenFds(row, 'open')} title="Voir le PDF FDS">
+                                    <Eye size={14} />
+                                    Voir PDF
+                                  </button>
+                                  <button type="button" className="rc-link" onClick={() => handleOpenFds(row, 'download')}>
+                                    Telecharger
+                                  </button>
+                                </>
+                              ) : (
+                                <>
+                                  <span className="rc-pill warn">Manquante</span>
+                                  <button type="button" className="rc-btn warn" onClick={() => setFdsUploadProduct(row)}>
+                                    <Upload size={14} />
+                                    Importer PDF
+                                  </button>
+                                </>
+                              )}
+                            </div>
                           </td>
-                          <td>{formatDateLabel(row?.last_movement_at)}</td>
+                          <td>{row?.last_movement_at ? formatDateLabel(row.last_movement_at) : 'Aucun mouvement'}</td>
                           <td>
                             <span
                               className={`rc-pill status-${
                                 sig.status === 'Conforme'
                                   ? 'ok'
                                   : sig.status === 'À compléter'
-                                  ? 'warn'
-                                  : sig.status === 'À surveiller'
-                                  ? 'info'
-                                  : 'danger'
+                                    ? 'warn'
+                                    : sig.status === 'À surveiller'
+                                      ? 'info'
+                                      : 'danger'
                               }`}
                             >
                               {sig.status}
@@ -882,27 +1033,31 @@ export default function RegistreChimique({ userName, onLogout }) {
                           </td>
                           <td>
                             <div className="rc-actions">
+                              <button type="button" className="rc-btn" onClick={() => setDetailRow(row)}>
+                                Détails
+                              </button>
+                              <button type="button" className="rc-btn" onClick={() => setEditRow(row)}>
+                                Modifier
+                              </button>
                               <button
                                 type="button"
-                                className={`rc-btn ${sig.missingFds || sig.missingClass ? 'warn' : ''}`}
-                                onClick={() => setDetailRow(row)}
-                                title={sig.missingFds ? 'Importer une FDS' : 'Consulter les détails'}
+                                className="rc-btn"
+                                onClick={() => handleMailSupplier(row)}
+                                disabled={!supplierEmail}
+                                title={supplierEmail ? `Ecrire a ${supplierEmail}` : 'Email fournisseur manquant'}
                               >
-                                {sig.missingFds ? '📄 Importer FDS' : 'Consulter'}
+                                <Mail size={14} />
+                                Mail FDS
                               </button>
-                              {sig.missingFds && (
-                                <button
-                                  type="button"
-                                  className="rc-btn"
-                                  onClick={() => {
-                                    setFdsUploadProduct(row);
-                                    setFdsUploadModalOpen(true);
-                                  }}
-                                  title="Drag-drop FDS"
-                                >
-                                  ⬆
-                                </button>
-                              )}
+                              <button
+                                type="button"
+                                className="rc-btn danger"
+                                onClick={() => handleRemoveFromRegister(row)}
+                                title="Retirer du registre chimique sans supprimer du catalogue"
+                              >
+                                <Trash2 size={14} />
+                                Retirer
+                              </button>
                             </div>
                           </td>
                         </tr>
@@ -912,7 +1067,7 @@ export default function RegistreChimique({ userName, onLogout }) {
                     {!filtered.length && (
                       <tr>
                         <td colSpan={12} className="rc-empty">
-                          Aucun produit chimique trouvé pour cette période.
+                          Aucun produit chimique trouve pour cette periode.
                         </td>
                       </tr>
                     )}
@@ -929,7 +1084,7 @@ export default function RegistreChimique({ userName, onLogout }) {
           className="rc-modal-overlay"
           role="dialog"
           aria-modal="true"
-          aria-label="Détail produit"
+          aria-label="Detail produit"
           onClick={() => setDetailRow(null)}
         >
           <div className="rc-modal" onClick={(e) => e.stopPropagation()}>
@@ -938,12 +1093,7 @@ export default function RegistreChimique({ userName, onLogout }) {
                 <strong>{detailRow?.designation || 'Produit'}</strong>
                 <span className="mono">{detailRow?.code_product || '-'}</span>
               </div>
-              <button
-                type="button"
-                className="rc-modal-close"
-                onClick={() => setDetailRow(null)}
-                aria-label="Fermer"
-              >
+              <button type="button" className="rc-modal-close" onClick={() => setDetailRow(null)} aria-label="Fermer">
                 <X size={18} />
               </button>
             </div>
@@ -958,14 +1108,13 @@ export default function RegistreChimique({ userName, onLogout }) {
                         <strong>{sig.chemicalClass}</strong>
                       </div>
                       <div className="rc-modal-item">
-                        <span>État</span>
+                        <span>Etat</span>
                         <strong>{sig.physicalState}</strong>
                       </div>
                       <div className="rc-modal-item">
-                        <span>Quantité</span>
+                        <span>Quantite</span>
                         <strong>
-                          {Math.max(0, Math.floor(Number(detailRow?.quantite_restante || 0)))}{' '}
-                          {detailRow?.unite || ''}
+                          {Math.max(0, Math.floor(Number(detailRow?.quantite_restante || 0)))} {detailRow?.unite || ''}
                         </strong>
                       </div>
                       <div className="rc-modal-item">
@@ -977,35 +1126,27 @@ export default function RegistreChimique({ userName, onLogout }) {
                         <strong>{detailRow?.fournisseur || '-'}</strong>
                       </div>
                       <div className="rc-modal-item">
+                        <span>Email fournisseur</span>
+                        <strong>{detailRow?.supplier_email || '-'}</strong>
+                      </div>
+                      <div className="rc-modal-item">
                         <span>Dernier mouvement</span>
-                        <strong>{formatDateLabel(detailRow?.last_movement_at)}</strong>
+                        <strong>{detailRow?.last_movement_at ? formatDateLabel(detailRow.last_movement_at) : 'Aucun mouvement'}</strong>
                       </div>
                       <div className="rc-modal-item">
-                        <span>Prochaine péremption</span>
+                        <span>Prochaine peremption</span>
                         <strong>{formatDateLabel(detailRow?.next_expiry_date)}</strong>
-                      </div>
-                      <div className="rc-modal-item">
-                        <span>Statut</span>
-                        <strong>{sig.status}</strong>
                       </div>
                     </div>
 
                     <div className="rc-modal-actions">
                       {sig.hasFds ? (
                         <>
-                          <button
-                            type="button"
-                            className="btn btn-primary btn-sm"
-                            onClick={() => handleOpenFds(detailRow, 'open')}
-                          >
+                          <button type="button" className="btn btn-primary btn-sm" onClick={() => handleOpenFds(detailRow, 'open')}>
                             Ouvrir FDS
                           </button>
-                          <button
-                            type="button"
-                            className="btn btn-secondary btn-sm"
-                            onClick={() => handleOpenFds(detailRow, 'download')}
-                          >
-                            Télécharger FDS
+                          <button type="button" className="btn btn-secondary btn-sm" onClick={() => handleOpenFds(detailRow, 'download')}>
+                            Telecharger FDS
                           </button>
                         </>
                       ) : (
@@ -1015,12 +1156,14 @@ export default function RegistreChimique({ userName, onLogout }) {
                           onClick={() => {
                             setDetailRow(null);
                             setFdsUploadProduct(detailRow);
-                            setFdsUploadModalOpen(true);
                           }}
                         >
-                          📤 Importer une FDS
+                          Importer une FDS
                         </button>
                       )}
+                      <button type="button" className="btn btn-secondary btn-sm" onClick={() => handleMailSupplier(detailRow)}>
+                        Demander au fournisseur
+                      </button>
                     </div>
                   </>
                 );
@@ -1030,29 +1173,32 @@ export default function RegistreChimique({ userName, onLogout }) {
         </div>
       )}
 
-      {aiMailModalOpen && (
-        <AiMailGeneratorModal
-          products={productsWithoutFds}
-          onClose={() => setAiMailModalOpen(false)}
-          onConfirm={(emails) => {
-            toast.success(`${emails.length} mail(s) de relance générés. Prêts à l'envoi.`);
-            setAiMailModalOpen(false);
-          }}
+      {addModalOpen && (
+        <AddProductToRegisterModal
+          products={addCandidates}
+          loading={catalogLoading}
+          search={catalogSearch}
+          onSearch={setCatalogSearch}
+          onAdd={handleAddProductToRegister}
+          onClose={() => setAddModalOpen(false)}
         />
       )}
 
-      {fdsUploadModalOpen && fdsUploadProduct && (
+      {editRow && (
+        <EditChemicalRowModal
+          row={editRow}
+          onClose={() => setEditRow(null)}
+          onSave={handleSaveChemicalInfo}
+        />
+      )}
+
+      {fdsUploadProduct && (
         <FdsUploadModal
           product={fdsUploadProduct}
-          onClose={() => {
-            setFdsUploadModalOpen(false);
+          onClose={() => setFdsUploadProduct(null)}
+          onSuccess={() => {
+            toast.success('FDS importee et rattachee au produit.');
             setFdsUploadProduct(null);
-          }}
-          onSuccess={(data) => {
-            toast.success(`FDS importée avec succès. Classe détectée : ${data.chemicalClass}`);
-            setFdsUploadModalOpen(false);
-            setFdsUploadProduct(null);
-            // Recharger les données
             load();
           }}
         />

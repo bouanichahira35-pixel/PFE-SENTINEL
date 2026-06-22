@@ -1,3 +1,7 @@
+// BLOC 1 - Role du fichier.
+// Ce fichier fournit un composant React specialise pour FournisseurRecommendationPanel.
+// Point de vigilance: garder les props, appels API et classes CSS synchronises avec les ecrans existants.
+
 import { useMemo, useState } from 'react';
 import { Brain, ShoppingCart } from 'lucide-react';
 import { recommendFournisseurs } from '../../services/fournisseurRecommendationService';

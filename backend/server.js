@@ -16,7 +16,6 @@ const idempotencyGuard = require('./middlewares/idempotencyGuard');
 const perfMonitor = require('./middlewares/perfMonitor');
 const { verifyMailer, isMailConfigured } = require('./services/mailerService');
 const { initMailQueue, getMailQueueHealth } = require('./services/mailQueueService');
-const { isTwilioSmsConfigured, isTwilioWhatsappConfigured } = require('./services/twilioService');
 const { startAiAutoTrainingJob } = require('./services/aiGovernanceService');
 const { rebuildAiAlerts } = require('./services/alertService');
 const { getQrSecretStatus } = require('./services/qrTokenService');
@@ -244,8 +243,6 @@ app.get('/api/health', async (req, res) => {
   }
 
   const smtpConfigured = isMailConfigured();
-  const twilioSmsConfigured = isTwilioSmsConfigured();
-  const twilioWhatsappConfigured = isTwilioWhatsappConfigured();
   const mongoConnected = readyState === 1;
   const smtpOk = smtpConfigured ? Boolean(smtp.ok) : true;
   const queueEnabled = Boolean(mailQueue?.enabled);
@@ -315,14 +312,6 @@ app.get('/api/health', async (req, res) => {
     queue: {
       ...mailQueue,
       critical: false,
-    },
-    messaging: {
-      twilio: {
-        configured: Boolean(twilioSmsConfigured || twilioWhatsappConfigured),
-        sms_configured: twilioSmsConfigured,
-        whatsapp_configured: twilioWhatsappConfigured,
-        critical: false,
-      },
     },
     security: {
       internal_bond_qr_secret: {
